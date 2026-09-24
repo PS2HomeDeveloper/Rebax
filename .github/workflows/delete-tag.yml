@@ -1,0 +1,23 @@
+name: Delete and Recreate Tag
+
+on:
+  workflow_dispatch:
+
+jobs:
+  delete_and_create_tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Delete old tag locally
+        run: git tag -d 0.0.1 || true
+
+      - name: Delete old tag from remote
+        run: git push origin :refs/tags/0.0.1 || true
+
+      - name: Create new tag v0.0.1
+        run: |
+          git tag v0.0.1
+          git push origin v0.0.1
