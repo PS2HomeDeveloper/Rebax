@@ -171,7 +171,7 @@ static void setup_step(void) {
     case SETUP_STATE_EXTRACT_PS2DEV:
         snprintf(archive,sizeof(archive),"%s/ps2dev.tar.xz",g_root_dir);
         printf("[rebax] extracting ps2dev toolchain...\n");
-        if(!write_blob(_binary_embedded_tools_ps2dev_tar_xz_start,embedded_ps2dev_size(),archive)) { printf("[rebax] FAILED: ps2dev archive is not embedded or cannot be written to %s\n", archive); g_setup_state=SETUP_STATE_FAILED; return; }
+        if(!write_blob(_binary_embedded_toolchains_ps2dev_tar_xz_start,embedded_ps2dev_size(),archive)) { printf("[rebax] FAILED: ps2dev archive is not embedded or cannot be written to %s\n", archive); g_setup_state=SETUP_STATE_FAILED; return; }
         /* الأرشيف يحتوي مجلداً علوياً اسمه ps2dev/؛ لذلك نفكه في
          * toolchains/ وليس في toolchains/ps2dev/، وإلا ينتج المسار
          * الخاطئ toolchains/ps2dev/ps2dev/. */
