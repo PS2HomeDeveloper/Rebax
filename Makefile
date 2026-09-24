@@ -19,6 +19,120 @@ ifeq ($(CC_TARGET),)
   $(error Could not determine the compiler target. Verify that the selected compiler supports "-dumpmachine")
 endif
 
+# -----------------------------------------------------------------------------
+# Rebax toolchains bootstrap
+#
+# The official source repository intentionally does not contain embedded/
+# toolchains because those binaries are platform-specific.  Each release asset
+# contains exactly two files at its root: ps2dev.tar.xz and make (make.exe on
+# Windows).  Keep TOOLCHAIN_ASSET_URLS in sync with the release whenever a new
+# supported compiler target or tool is added.
+# -----------------------------------------------------------------------------
+TOOLCHAIN_RELEASE_BASE := https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/download/1.0.0
+TOOLCHAINS_DIR         := embedded/toolchains
+TOOLCHAIN_REQUIRED     := ps2dev.tar.xz make
+
+ifneq ($(findstring android,$(CC_TARGET)),)
+  ifneq ($(findstring aarch64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-android-arm64-v8a.tar.xz
+  else ifneq ($(findstring armv7,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-android-armeabi-v7a.tar.xz
+  else ifneq ($(findstring arm,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-android-armeabi-v7a.tar.xz
+  else ifneq ($(findstring x86_64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-android-x86_64.tar.xz
+  else ifneq ($(findstring i686,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-android-x86.tar.xz
+  else ifneq ($(findstring x86,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-android-x86.tar.xz
+  endif
+else ifneq ($(findstring apple-ios,$(CC_TARGET)),)
+  ifneq ($(findstring arm64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-ios-arm64.tar.xz
+  else
+    TOOLCHAIN_ASSET := rebax-toolchains-ios-x86_64.tar.xz
+  endif
+else ifneq ($(findstring apple-darwin,$(CC_TARGET)),)
+  ifneq ($(findstring arm64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-macos-arm64.tar.xz
+  else
+    TOOLCHAIN_ASSET := rebax-toolchains-macos-x86_64.tar.xz
+  endif
+else ifneq ($(findstring mingw,$(CC_TARGET)),)
+  ifneq ($(findstring aarch64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-windows-arm64.tar.xz
+  else ifneq ($(findstring x86_64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-windows-x86_64.tar.xz
+  else
+    TOOLCHAIN_ASSET := rebax-toolchains-windows-x86.tar.xz
+  endif
+else ifneq ($(findstring windows,$(CC_TARGET)),)
+  ifneq ($(findstring aarch64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-windows-arm64.tar.xz
+  else ifneq ($(findstring x86_64,$(CC_TARGET)),)
+    TOOLCHAIN_ASSET := rebax-toolchains-windows-x86_64.tar.xz
+  else
+    TOOLCHAIN_ASSET := rebax-toolchains-windows-x86.tar.xz
+  endif
+else ifneq ($(findstring x86_64,$(CC_TARGET)),)
+  TOOLCHAIN_ASSET := rebax-toolchains-linux-x86_64.tar.xz
+else ifneq ($(findstring aarch64,$(CC_TARGET)),)
+  TOOLCHAIN_ASSET := rebax-toolchains-linux-arm64.tar.xz
+else ifneq ($(findstring i686,$(CC_TARGET)),)
+  TOOLCHAIN_ASSET := rebax-toolchains-linux-x86.tar.xz
+else ifneq ($(findstring x86,$(CC_TARGET)),)
+  TOOLCHAIN_ASSET := rebax-toolchains-linux-x86.tar.xz
+endif
+
+ifeq ($(strip $(TOOLCHAIN_ASSET)),)
+  $(error Unsupported compiler target '$(CC_TARGET)'; no Rebax toolchain release asset is defined for it)
+endif
+
+ifneq ($(findstring mingw,$(CC_TARGET)),)
+  TOOLCHAIN_REQUIRED := ps2dev.tar.xz make.exe
+else ifneq ($(findstring windows,$(CC_TARGET)),)
+  TOOLCHAIN_REQUIRED := ps2dev.tar.xz make.exe
+else
+  TOOLCHAIN_REQUIRED := ps2dev.tar.xz make
+endif
+
+TOOLCHAIN_ASSET_URL := $(TOOLCHAIN_RELEASE_BASE)/$(TOOLCHAIN_ASSET)
+
+# This runs while Make parses the file, before embedded resources are expanded.
+# That ordering is deliberate: the downloaded files must be visible to the
+# existing embedded-resource wildcard during this same first build.
+define ENSURE_TOOLCHAINS
+set -eu; \
+dir='$(TOOLCHAINS_DIR)'; \
+mkdir -p "$$dir"; \
+required_missing=0; \
+for f in $(TOOLCHAIN_REQUIRED); do \
+  test -f "$$dir/$$f" || required_missing=1; \
+done; \
+entry_count=$$(find "$$dir" -mindepth 1 -maxdepth 1 -print 2>/dev/null | wc -l); \
+if test "$$entry_count" -eq 0; then \
+  printf '\033[1;34m[toolchains]\033[0m missing or empty; downloading $(TOOLCHAIN_ASSET)...\n' >&2; \
+  tmp="$$dir/.$(TOOLCHAIN_ASSET).part"; \
+  rm -f "$$tmp"; \
+  if command -v curl >/dev/null 2>&1; then \
+    curl -fL --retry 3 --connect-timeout 15 -o "$$tmp" '$(TOOLCHAIN_ASSET_URL)'; \
+  elif command -v wget >/dev/null 2>&1; then \
+    wget -O "$$tmp" '$(TOOLCHAIN_ASSET_URL)'; \
+  else \
+    printf '%s\n' '[toolchains] ERROR: curl or wget is required for the first build.' >&2; exit 1; \
+  fi; \
+  tar -xJf "$$tmp" -C "$$dir"; \
+  rm -f "$$tmp"; \
+elif test "$$required_missing" -ne 0; then \
+  printf '\033[1;33m[toolchains] WARNING:\033[0m required toolchain files are missing, but the toolchains directory is not empty. Continuing...\n' >&2; \
+fi
+endef
+
+TOOLCHAIN_BOOTSTRAP := $(shell $(ENSURE_TOOLCHAINS); printf '__REBAX_TOOLCHAINS_OK__')
+ifeq ($(strip $(TOOLCHAIN_BOOTSTRAP)),)
+  $(error Could not prepare embedded/toolchains for compiler target '$(CC_TARGET)'; see the toolchains error above)
+endif
+
 ifneq ($(findstring mingw,$(CC_TARGET)),)
   OC_FORMAT := pe-x86-64
   OC_ARCH   := i386:x86-64
@@ -80,7 +194,7 @@ EXPORT_DIR             := $(EMBEDDED_DIR)/export
 NODE_SOURCES_ARCHIVE   := $(EXPORT_DIR)/node_sources.tar.xz
 NODE_SOURCES_ALL_FILES := $(sort $(wildcard $(NODE_SRC_DIR)/*.c) $(wildcard $(NODE_SRC_DIR)/*.h))
 
-PS2DEV_ARCHIVE := $(EMBEDDED_DIR)/tools/ps2dev.tar.xz
+PS2DEV_ARCHIVE := $(EMBEDDED_DIR)/toolchains/ps2dev.tar.xz
 
 rwildcard = $(filter-out $(patsubst %/,%,$(wildcard $1*/)),$(wildcard $1$2)) \
             $(foreach d,$(wildcard $1*/),$(call rwildcard,$d,$2))
