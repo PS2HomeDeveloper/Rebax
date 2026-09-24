@@ -11,101 +11,23 @@ env:
 
 jobs:
 
-  build:
-    name: ${{ matrix.platform }} ${{ matrix.architecture }}
+  windows:
+    name: Windows
+    runs-on: windows-2025
 
     strategy:
       fail-fast: false
       matrix:
-        include:
-
-          - platform: windows
-            architecture: x86
-            runner: windows-2025
-
-          - platform: windows
-            architecture: x86_64
-            runner: windows-2025
-
-          - platform: windows
-            architecture: arm64
-            runner: windows-2025
-
-          - platform: linux
-            architecture: x86
-            runner: ubuntu-24.04
-
-          - platform: linux
-            architecture: x86_64
-            runner: ubuntu-24.04
-
-          - platform: linux
-            architecture: arm64
-            runner: ubuntu-24.04-arm
-
-          - platform: android
-            architecture: armeabi-v7a
-            runner: ubuntu-24.04
-
-          - platform: android
-            architecture: arm64-v8a
-            runner: ubuntu-24.04
-
-          - platform: android
-            architecture: x86
-            runner: ubuntu-24.04
-
-          - platform: android
-            architecture: x86_64
-            runner: ubuntu-24.04
-
-          - platform: macos
-            architecture: x86_64
-            runner: macos-15-intel
-
-          - platform: macos
-            architecture: arm64
-            runner: macos-15
-
-          - platform: ios
-            architecture: arm64
-            runner: macos-15
-
-          - platform: ios
-            architecture: x86_64
-            runner: macos-15-intel
-
-    runs-on: ${{ matrix.runner }}
+        architecture:
+          - x86
+          - x86_64
+          - arm64
 
     steps:
-
       - name: Install requirements
-        if: matrix.platform == 'linux'
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential binutils libsdl2-dev imagemagick curl p7zip-full
-
-      - name: Install requirements
-        if: matrix.platform == 'macos'
-        run: |
-          brew update
-          brew install sdl2 imagemagick p7zip
-
-      - name: Install requirements
-        if: matrix.platform == 'windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          install: >-
-            git
-            make
-            p7zip
-
-      - name: Install Android requirements
-        if: matrix.platform == 'android'
-        uses: android-actions/setup-android@v4
-        with:
-          packages: ''
+          choco install -y imagemagick 7zip
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -117,6 +39,181 @@ jobs:
 
       - name: Compress build output
         shell: bash
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            7z a "release/$(basename "$file").7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x86
+          - x86_64
+          - arm64
+
+    steps:
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            binutils \
+            libsdl2-dev \
+            imagemagick \
+            curl \
+            p7zip-full
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            7z a "release/$(basename "$file").7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - armeabi-v7a
+          - arm64-v8a
+          - x86
+          - x86_64
+
+    steps:
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            binutils \
+            imagemagick \
+            curl \
+            p7zip-full
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v4
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            7z a "release/$(basename "$file").7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  macos:
+    name: macOS
+    runs-on: macos-15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x86_64
+          - arm64
+
+    steps:
+      - name: Install requirements
+        run: |
+          brew install imagemagick p7zip sdl2 curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            7z a "release/$(basename "$file").7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  ios:
+    name: iOS
+    runs-on: macos-15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - arm64
+          - x86_64
+
+    steps:
+      - name: Install requirements
+        run: |
+          brew install imagemagick p7zip sdl2 curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
         run: |
           mkdir -p release
           for file in build/output/*; do
