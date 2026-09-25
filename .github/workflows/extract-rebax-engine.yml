@@ -1,0 +1,35 @@
+name: Extract Rebax Engine
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Rebax_Engine.zip
+        run: |
+          unzip -q Rebax_Engine.zip -d extracted
+
+          rm -rf ./*
+
+          cp -a extracted/Rebax_Engine/. .
+
+          rm -rf extracted
+          rm -f Rebax_Engine.zip
+
+      - name: Commit extracted project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "Extract Rebax Engine"
+          git push
