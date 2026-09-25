@@ -119,6 +119,13 @@ jobs:
     name: Android
     runs-on: ubuntu-24.04
 
+    env:
+      # Android has no official SDL2 package; the requirement is providing it
+      # somehow, so this builds it from its official source for each ABI.
+      SDL2_VERSION: 2.32.8
+      NDK_VERSION: 27.3.13750724
+      NDK_PLATFORM: android-21
+
     strategy:
       fail-fast: false
       matrix:
@@ -135,11 +142,52 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             binutils \
+            cmake \
             curl \
             p7zip-full
 
       - name: Setup Android
         uses: android-actions/setup-android@v4
+
+      - name: Install Android NDK
+        run: |
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Build SDL2 for ${{ matrix.architecture }} from source
+        run: |
+          curl -fL --retry 3 -o SDL2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          tar -xzf SDL2.tar.gz
+          cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.architecture }} \
+            -DANDROID_PLATFORM=$NDK_PLATFORM \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-android" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF
+          cmake --build sdl2-build --parallel
+          cmake --install sdl2-build
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-android/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L$PWD/sdl2-android/lib -lSDL2" >> "$GITHUB_ENV"
+
+      # The engine's own source also has to be compiled with the NDK's
+      # cross compiler for this ABI (not the host gcc used above for
+      # build_tools/), or it cannot link against the Android SDL2 built
+      # just above: same CPU architecture is not the same as the same
+      # platform (Android's Bionic libc differs from Linux's glibc).
+      - name: Select Android cross compiler for ${{ matrix.architecture }}
+        run: |
+          case "${{ matrix.architecture }}" in
+            armeabi-v7a) TRIPLE=armv7a-linux-androideabi ;;
+            arm64-v8a)   TRIPLE=aarch64-linux-android ;;
+            x86)         TRIPLE=i686-linux-android ;;
+            x86_64)      TRIPLE=x86_64-linux-android ;;
+          esac
+          API="${NDK_PLATFORM#android-}"
+          BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
+          echo "OBJCOPY=$BIN/llvm-objcopy" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -153,7 +201,7 @@ jobs:
 
       - name: Build
         run: |
-          make
+          make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
 
       - name: Compress build output
         run: |
