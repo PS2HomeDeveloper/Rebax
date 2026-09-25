@@ -1724,6 +1724,10 @@ MY_HWCAP_CHECK_FUNC (SHA512)
 
 #ifdef __APPLE__
 
+/* sys/sysctl.h (via sys/proc.h) uses the legacy BSD types u_int/u_char/
+ * u_short without declaring them itself; sys/types.h must come first,
+ * and does not get pulled in automatically under -std=c11. */
+#include <sys/types.h>
 #include <sys/sysctl.h>
 
 int z7_sysctlbyname_Get(const char *name, void *buf, size_t *bufSize)
