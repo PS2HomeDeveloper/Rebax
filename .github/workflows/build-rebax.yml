@@ -1,0 +1,269 @@
+name: Build Rebax
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+
+  windows:
+    name: Windows
+    runs-on: windows-2025
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x86
+          - x86_64
+          - arm64
+
+    steps:
+      - name: Install requirements
+        shell: pwsh
+        run: |
+          choco install -y 7zip
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        shell: bash
+        run: |
+          make
+
+      - name: Compress build output
+        shell: bash
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            base="$(basename "$file")"
+            package="${base//_/-}"
+            7z a "release/${package}.7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x86
+          - x86_64
+          - arm64
+
+    steps:
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            binutils \
+            libsdl2-dev \
+            curl \
+            p7zip-full
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            base="$(basename "$file")"
+            package="${base//_/-}"
+            7z a "release/${package}.7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - armeabi-v7a
+          - arm64-v8a
+          - x86
+          - x86_64
+
+    steps:
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            binutils \
+            curl \
+            p7zip-full
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v4
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            base="$(basename "$file")"
+            package="${base//_/-}"
+            7z a "release/${package}.7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  macos:
+    name: macOS
+    runs-on: macos-15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x86_64
+          - arm64
+
+    steps:
+      - name: Install requirements
+        run: |
+          brew install p7zip sdl2 curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            base="$(basename "$file")"
+            package="${base//_/-}"
+            7z a "release/${package}.7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  ios:
+    name: iOS
+    runs-on: macos-15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - arm64
+          - x86_64
+
+    steps:
+      - name: Install requirements
+        run: |
+          brew install p7zip sdl2 curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          make
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            base="$(basename "$file")"
+            package="${base//_/-}"
+            7z a "release/${package}.7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
