@@ -1,4 +1,4 @@
-name: Build Rebax
+name: Extract Rebax Engine
 
 on:
   workflow_dispatch:
@@ -6,224 +6,30 @@ on:
 permissions:
   contents: write
 
-env:
-  RELEASE_TAG: v0.0.1
-
 jobs:
-
-  windows:
-    name: Windows
-    runs-on: windows-2025
-
-    strategy:
-      fail-fast: false
-      matrix:
-        architecture:
-          - x86
-          - x86_64
-          - arm64
+  extract:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Install requirements
-        shell: pwsh
-        run: |
-          choco install -y imagemagick 7zip
-
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build
-        shell: bash
+      - name: Extract Rebax_Engine.zip
         run: |
-          make
+          unzip -q Rebax_Engine.zip -d extracted
 
-      - name: Compress build output
-        shell: bash
+          rm -rf ./*
+
+          cp -a extracted/Rebax_Engine/. .
+
+          rm -rf extracted
+          rm -f Rebax_Engine.zip
+
+      - name: Commit extracted project
         run: |
-          mkdir -p release
-          for file in build/output/*; do
-            [ -f "$file" ] || continue
-            7z a "release/$(basename "$file").7z" "$file"
-          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: release/*.7z
-          fail_on_unmatched_files: true
-
-
-  linux:
-    name: Linux
-    runs-on: ubuntu-24.04
-
-    strategy:
-      fail-fast: false
-      matrix:
-        architecture:
-          - x86
-          - x86_64
-          - arm64
-
-    steps:
-      - name: Install requirements
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            binutils \
-            libsdl2-dev \
-            imagemagick \
-            curl \
-            p7zip-full
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build
-        run: |
-          make
-
-      - name: Compress build output
-        run: |
-          mkdir -p release
-          for file in build/output/*; do
-            [ -f "$file" ] || continue
-            7z a "release/$(basename "$file").7z" "$file"
-          done
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: release/*.7z
-          fail_on_unmatched_files: true
-
-
-  android:
-    name: Android
-    runs-on: ubuntu-24.04
-
-    strategy:
-      fail-fast: false
-      matrix:
-        architecture:
-          - armeabi-v7a
-          - arm64-v8a
-          - x86
-          - x86_64
-
-    steps:
-      - name: Install requirements
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            binutils \
-            imagemagick \
-            curl \
-            p7zip-full
-
-      - name: Setup Android
-        uses: android-actions/setup-android@v4
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build
-        run: |
-          make
-
-      - name: Compress build output
-        run: |
-          mkdir -p release
-          for file in build/output/*; do
-            [ -f "$file" ] || continue
-            7z a "release/$(basename "$file").7z" "$file"
-          done
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: release/*.7z
-          fail_on_unmatched_files: true
-
-
-  macos:
-    name: macOS
-    runs-on: macos-15
-
-    strategy:
-      fail-fast: false
-      matrix:
-        architecture:
-          - x86_64
-          - arm64
-
-    steps:
-      - name: Install requirements
-        run: |
-          brew install imagemagick p7zip sdl2 curl
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build
-        run: |
-          make
-
-      - name: Compress build output
-        run: |
-          mkdir -p release
-          for file in build/output/*; do
-            [ -f "$file" ] || continue
-            7z a "release/$(basename "$file").7z" "$file"
-          done
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: release/*.7z
-          fail_on_unmatched_files: true
-
-
-  ios:
-    name: iOS
-    runs-on: macos-15
-
-    strategy:
-      fail-fast: false
-      matrix:
-        architecture:
-          - arm64
-          - x86_64
-
-    steps:
-      - name: Install requirements
-        run: |
-          brew install imagemagick p7zip sdl2 curl
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build
-        run: |
-          make
-
-      - name: Compress build output
-        run: |
-          mkdir -p release
-          for file in build/output/*; do
-            [ -f "$file" ] || continue
-            7z a "release/$(basename "$file").7z" "$file"
-          done
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: release/*.7z
-          fail_on_unmatched_files: true
+          git add -A
+          git commit -m "Extract Rebax Engine"
+          git push
