@@ -14,13 +14,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Rebax_Engine.zip
+      - name: Extract Rebax Engine
         run: |
+          mkdir extracted
           unzip -q Rebax_Engine.zip -d extracted
 
-          rm -rf ./*
+          echo "Extracted files:"
+          find extracted -maxdepth 3 -print
 
-          cp -a extracted/Rebax_Engine/. .
+          SOURCE_DIR=$(find extracted -type d -name "Rebax_Engine" -print -quit)
+
+          if [ -z "$SOURCE_DIR" ]; then
+            echo "Error: Rebax_Engine directory was not found inside the ZIP."
+            exit 1
+          fi
+
+          echo "Source directory: $SOURCE_DIR"
+
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name '.git' \
+            ! -name '.github' \
+            -exec rm -rf {} +
+
+          cp -a "$SOURCE_DIR"/. .
 
           rm -rf extracted
           rm -f Rebax_Engine.zip
@@ -31,5 +47,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add -A
-          git commit -m "Extract Rebax Engine"
+          git commit -m "Extract Rebax Engine" || echo "Nothing to commit"
           git push
