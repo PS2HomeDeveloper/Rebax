@@ -16,16 +16,19 @@ jobs:
 
       - name: Extract Rebax Engine
         run: |
-          mkdir extracted
-          unzip -q Rebax_Engine.zip -d extracted
+          EXTRACT_DIR="$RUNNER_TEMP/rebax-extracted"
+
+          mkdir -p "$EXTRACT_DIR"
+
+          unzip -q Rebax_Engine.zip -d "$EXTRACT_DIR"
 
           echo "Extracted files:"
-          find extracted -maxdepth 3 -print
+          find "$EXTRACT_DIR" -maxdepth 3 -print
 
-          SOURCE_DIR="extracted/Rebax_Engine"
+          SOURCE_DIR="$EXTRACT_DIR/Rebax_Engine"
 
           if [ ! -d "$SOURCE_DIR" ]; then
-            echo "Error: $SOURCE_DIR was not found."
+            echo "Error: Rebax_Engine directory was not found."
             exit 1
           fi
 
@@ -38,7 +41,6 @@ jobs:
 
           rsync -a "$SOURCE_DIR/" ./
 
-          rm -rf extracted
           rm -f Rebax_Engine.zip
 
       - name: Commit extracted project
