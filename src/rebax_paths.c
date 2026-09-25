@@ -21,6 +21,10 @@
 #include "rebax_fs.h"
 #include "embedded_resources.h"
 
+#ifndef REBAX_EXPORT_TEMPLATE_EMBEDDED
+#define REBAX_EXPORT_TEMPLATE_EMBEDDED 1
+#endif
+
 /* -Wformat-truncation: نفس التبرير المذكور بـps2_exporter.c - كل
  * المسارات هنا قصيرة عملياً مقارنة بحجم المصفوفات */
 #pragma GCC diagnostic ignored "-Wformat-truncation"
@@ -69,7 +73,7 @@ static void compute_paths(void) {
     snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s\\Engine\\toolchains", g_root_dir);
     snprintf(g_toolchain_dir, sizeof(g_toolchain_dir), "%s\\ps2dev", g_toolchains_dir);
     snprintf(g_make_path, sizeof(g_make_path), "%s\\make.exe", g_toolchains_dir);
-    snprintf(g_node_sources_dir, sizeof(g_node_sources_dir), "%s\\Engine\\export_resources\node_sources", g_root_dir);
+    snprintf(g_node_sources_dir, sizeof(g_node_sources_dir), "%s\\Engine\\export_resources\\node_sources", g_root_dir);
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s\\Temp\\export", g_root_dir);
     snprintf(g_settings_dir, sizeof(g_settings_dir), "%s\\Settings", g_root_dir);
 
@@ -113,9 +117,11 @@ static void compute_paths(void) {
 
     mkdir_recursive(g_temp_export_dir);
     mkdir_recursive(g_settings_dir);
+#if REBAX_EXPORT_TEMPLATE_EMBEDDED
     mkdir_recursive(g_toolchains_dir);
     mkdir_recursive(g_toolchain_dir);
     mkdir_recursive(g_node_sources_dir);
+#endif
 
     g_paths_ready = 1;
 }
@@ -137,6 +143,7 @@ const char *rebax_settings_dir(void)     { compute_paths(); return g_settings_di
 typedef enum { SETUP_STATE_NONE, SETUP_STATE_EXTRACT_PS2DEV, SETUP_STATE_EXTRACT_MAKE, SETUP_STATE_EXTRACT_NODE_SOURCES, SETUP_STATE_DONE, SETUP_STATE_FAILED } setup_state_t;
 static volatile setup_state_t g_setup_state=SETUP_STATE_NONE;
 static SDL_Thread *g_setup_thread=NULL;
+#if REBAX_EXPORT_TEMPLATE_EMBEDDED
 static int write_blob(const unsigned char *start,size_t size,const char *path) {
     if (!start || !size) return 0;
     FILE *f=fopen(path,"wb");
@@ -147,7 +154,11 @@ static int write_blob(const unsigned char *start,size_t size,const char *path) {
 #endif
     return ok;
 }
+#endif
 int rebax_paths_is_setup_needed(void) {
+#if !REBAX_EXPORT_TEMPLATE_EMBEDDED
+    return 0;
+#else
     compute_paths(); struct stat st; char marker[REBAX_PATH_MAX];
     snprintf(marker,sizeof(marker),"%s/.extracted_ok",g_toolchain_dir);
     if(stat(marker,&st)!=0) return 1;
@@ -156,14 +167,21 @@ int rebax_paths_is_setup_needed(void) {
     if(embedded_make_size()==0 && stat(g_make_path,&st)!=0) return 1;
     snprintf(marker,sizeof(marker),"%s/.extracted_ok",g_node_sources_dir);
     return stat(marker,&st)!=0;
+#endif
 }
 void rebax_paths_setup_start(void) {
+#if !REBAX_EXPORT_TEMPLATE_EMBEDDED
+    g_setup_state=SETUP_STATE_DONE;
+    return;
+#else
     compute_paths();
     g_setup_thread=NULL;
     if(!rebax_paths_is_setup_needed()){g_setup_state=SETUP_STATE_DONE;return;}
     printf("[rebax] first run - extracting ps2dev, make and node sources...\n");
     g_setup_state=SETUP_STATE_EXTRACT_PS2DEV;
+#endif
 }
+#if REBAX_EXPORT_TEMPLATE_EMBEDDED
 static void setup_step(void) {
     char archive[REBAX_PATH_MAX], temp[REBAX_PATH_MAX], marker[REBAX_PATH_MAX];
     switch(g_setup_state) {
@@ -171,7 +189,7 @@ static void setup_step(void) {
     case SETUP_STATE_EXTRACT_PS2DEV:
         snprintf(archive,sizeof(archive),"%s/ps2dev.tar.xz",g_root_dir);
         printf("[rebax] extracting ps2dev toolchain...\n");
-        if(!write_blob(_binary_embedded_toolchains_ps2dev_tar_xz_start,embedded_ps2dev_size(),archive)) { printf("[rebax] FAILED: ps2dev archive is not embedded or cannot be written to %s\n", archive); g_setup_state=SETUP_STATE_FAILED; return; }
+        if(!write_blob(_binary_embedded_export_tools_ps2dev_tar_xz_start,embedded_ps2dev_size(),archive)) { printf("[rebax] FAILED: ps2dev archive is not embedded or cannot be written to %s\n", archive); g_setup_state=SETUP_STATE_FAILED; return; }
         /* الأرشيف يحتوي مجلداً علوياً اسمه ps2dev/؛ لذلك نفكه في
          * toolchains/ وليس في toolchains/ps2dev/، وإلا ينتج المسار
          * الخاطئ toolchains/ps2dev/ps2dev/. */
@@ -197,11 +215,16 @@ static void setup_step(void) {
     case SETUP_STATE_EXTRACT_NODE_SOURCES:
         printf("[rebax] extracting node sources...\n");
         snprintf(archive,sizeof(archive),"%s/node_sources.tar.xz",g_root_dir); snprintf(temp,sizeof(temp),"%s/.node_sources_extract",g_root_dir); rebax_fs_remove_recursive(temp);
-        if(!write_blob(_binary_embedded_export_node_sources_tar_xz_start,embedded_node_sources_size(),archive) || !rebax_fs_extract_tar_xz(archive,temp)) { printf("[rebax] FAILED: could not extract node sources.\n"); remove(archive); rebax_fs_remove_recursive(temp); g_setup_state=SETUP_STATE_FAILED; return; }
-        remove(archive); rebax_fs_remove_recursive(g_node_sources_dir); {char from[REBAX_PATH_MAX]; snprintf(from,sizeof(from),"%s/nodes",temp); if(!rebax_fs_move(from,g_node_sources_dir)){printf("[rebax] FAILED: could not place extracted node sources.\n");rebax_fs_remove_recursive(temp);g_setup_state=SETUP_STATE_FAILED;return;}}
+        if(!write_blob(_binary_embedded_export_resources_node_sources_tar_xz_start,embedded_node_sources_size(),archive) || !rebax_fs_extract_tar_xz(archive,temp)) { printf("[rebax] FAILED: could not extract node sources.\n"); remove(archive); rebax_fs_remove_recursive(temp); g_setup_state=SETUP_STATE_FAILED; return; }
+        remove(archive); rebax_fs_remove_recursive(g_node_sources_dir); {char from[REBAX_PATH_MAX]; snprintf(from,sizeof(from),"%s/node_sources",temp); if(!rebax_fs_move(from,g_node_sources_dir)){printf("[rebax] FAILED: could not place extracted node sources.\n");rebax_fs_remove_recursive(temp);g_setup_state=SETUP_STATE_FAILED;return;}}
         rebax_fs_remove_recursive(temp); snprintf(marker,sizeof(marker),"%s/.extracted_ok",g_node_sources_dir); {FILE *f=fopen(marker,"wb");if(f)fclose(f);} printf("[rebax] first-run setup complete.\n"); g_setup_state=SETUP_STATE_DONE; return;
     }
 }
+#else
+static void setup_step(void) {
+    g_setup_state=SETUP_STATE_DONE;
+}
+#endif
 
 static int setup_worker(void *unused) {
     (void)unused;

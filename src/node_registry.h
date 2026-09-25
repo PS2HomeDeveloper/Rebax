@@ -20,7 +20,7 @@
 #define NODE_REGISTRY_H
 
 #include "node_types.h"
-#include "nodes/node_interface.h" /* node_property_t وnode_property_type_t فقط - تعريفات C خام محايدة، بلا أي كود مترجم PS2 */
+#include "../embedded/export/resources/node_sources/node_interface.h" /* Shared node property types; node implementations remain embedded resources. */
 
 typedef struct {
     node_type_t type;

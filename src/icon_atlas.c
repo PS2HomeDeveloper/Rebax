@@ -31,7 +31,7 @@ int icon_atlas_init(void) {
 
     int w, h, channels;
     unsigned char *pixels = stbi_load_from_memory(
-        _binary_embedded_images_icons_icons_png_start,
+        _binary_embedded_engine_images_icons_icons_png_start,
         (int)embedded_icon_atlas_size(),
         &w, &h, &channels, 4
     );

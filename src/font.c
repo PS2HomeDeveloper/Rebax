@@ -32,13 +32,13 @@ int font_init(void) {
 
     int ok_regular = stbtt_InitFont(
         &g_font_regular,
-        _binary_embedded_fonts_SpaceGrotesk_Regular_ttf_start,
-        stbtt_GetFontOffsetForIndex(_binary_embedded_fonts_SpaceGrotesk_Regular_ttf_start, 0)
+        _binary_embedded_engine_fonts_SpaceGrotesk_Regular_ttf_start,
+        stbtt_GetFontOffsetForIndex(_binary_embedded_engine_fonts_SpaceGrotesk_Regular_ttf_start, 0)
     );
     int ok_bold = stbtt_InitFont(
         &g_font_bold,
-        _binary_embedded_fonts_SpaceGrotesk_Bold_ttf_start,
-        stbtt_GetFontOffsetForIndex(_binary_embedded_fonts_SpaceGrotesk_Bold_ttf_start, 0)
+        _binary_embedded_engine_fonts_SpaceGrotesk_Bold_ttf_start,
+        stbtt_GetFontOffsetForIndex(_binary_embedded_engine_fonts_SpaceGrotesk_Bold_ttf_start, 0)
     );
 
     if (!ok_regular || !ok_bold) {
