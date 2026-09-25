@@ -12,7 +12,7 @@
 # Change only this word when building the export-template mode:
 #   embedded = include export resources in the executable
 #   external = do not inspect, download, extract, or embed export resources
-EXPORT_TEMPLATE_MODE ?= external
+EXPORT_TEMPLATE_MODE ?= embedded
 ifeq ($(filter embedded external,$(EXPORT_TEMPLATE_MODE)),)
   $(error EXPORT_TEMPLATE_MODE must be embedded or external)
 endif
