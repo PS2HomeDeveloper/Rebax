@@ -6,11 +6,26 @@ on:
 permissions:
   contents: write
 
+env:
+  SDL2_VERSION: 2.32.8
+
 jobs:
 
+  # ===========================================================================
+  # Windows: x86, x86_64, arm64
+  # The make.exe already on this runner (C:\mingw64\bin\make.exe) crashes on
+  # almost any $(shell ...) call - it's built against a different MSYS/MinGW
+  # runtime than the git-bash shell running it. A clean, native make from
+  # Chocolatey is installed and called by its exact path instead.
+  # The runner's own compiler is x86_64-only, so all three architectures are
+  # cross-compiled with llvm-mingw (clang-based, one bundle covers all three).
+  # ===========================================================================
   windows:
     name: Windows
     runs-on: windows-2025
+
+    env:
+      LLVM_MINGW_TAG: 20260505
 
     strategy:
       fail-fast: false
@@ -24,7 +39,7 @@ jobs:
       - name: Install requirements
         shell: pwsh
         run: |
-          choco install -y 7zip make llvm
+          choco install -y 7zip make ninja cmake
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,13 +51,33 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
-      # Workaround for a real bug, not a build decision: the make.exe bundled
-      # on this runner (C:\mingw64\bin\make.exe) crashes (STATUS_STACK_OVERFLOW)
-      # when the Makefile tries to compile build_tools/ itself through
-      # $(shell ...) - redirecting its output first did not help, so the
-      # compiler is run here directly instead. Same command the Makefile
-      # itself would run; if build_tools/rebax-tool.exe already exists the
-      # Makefile skips building it and just uses this one.
+      - name: Install llvm-mingw (cross compiler for all 3 Windows architectures)
+        shell: bash
+        run: |
+          curl -fL --retry 3 -o llvm-mingw.zip \
+            "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_TAG}/llvm-mingw-${LLVM_MINGW_TAG}-ucrt-x86_64.zip"
+          7z x llvm-mingw.zip -ollvm-mingw-extracted > /dev/null
+          dir=$(ls -d llvm-mingw-extracted/*/)
+          echo "LLVM_MINGW=$PWD/${dir%/}" >> "$GITHUB_ENV"
+
+      - name: Select cross compiler for ${{ matrix.architecture }}
+        shell: bash
+        run: |
+          case "${{ matrix.architecture }}" in
+            x86)    TRIPLE=i686-w64-mingw32 ;;
+            x86_64) TRIPLE=x86_64-w64-mingw32 ;;
+            arm64)  TRIPLE=aarch64-w64-mingw32 ;;
+          esac
+          echo "TRIPLE=$TRIPLE" >> "$GITHUB_ENV"
+          echo "CC=$LLVM_MINGW/bin/$TRIPLE-clang.exe" >> "$GITHUB_ENV"
+          echo "OBJCOPY=$LLVM_MINGW/bin/llvm-objcopy.exe" >> "$GITHUB_ENV"
+
+      # Runs on the runner itself, so it must always use the runner's own
+      # native compiler (C:\mingw64\bin\gcc.exe), never the cross compiler
+      # selected above - regardless of which Windows architecture this job
+      # targets. -DZ7_ST/-D_7ZIP_ST/-D_POSIX_C_SOURCE=200809L: this vendored
+      # subset of the 7-Zip SDK never includes MtCoder.* (its multi-threaded
+      # block-coder) and calls posix_memalign unconditionally.
       - name: Pre-build build_tools/rebax-tool.exe
         shell: bash
         run: |
@@ -54,21 +89,32 @@ jobs:
             build_tools/src/lzma2_encoder.c \
             -lm
 
-      - name: Select Windows compiler
+      - name: Build SDL2 for ${{ matrix.architecture }} from source
         shell: bash
         run: |
-          case "${{ matrix.architecture }}" in
-            x86) CC="clang --target=i686-w64-windows-gnu" ;;
-            x86_64) CC="clang --target=x86_64-w64-windows-gnu" ;;
-            arm64) CC="clang --target=aarch64-w64-windows-gnu" ;;
-          esac
-          echo "CC=$CC" >> "$GITHUB_ENV"
-          echo "OBJCOPY=llvm-objcopy" >> "$GITHUB_ENV"
+          curl -fL --retry 3 -o SDL2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          tar -xzf SDL2.tar.gz
+          cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build -G "Ninja" \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.architecture }} \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CROSSCOMPILING=TRUE \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-windows" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF
+          cmake --build sdl2-build
+          cmake --install sdl2-build
+          echo "---- installed SDL2 files ----"
+          find "$PWD/sdl2-windows" -type f
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-windows/include -I$PWD/sdl2-windows/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L$PWD/sdl2-windows/lib -lSDL2" >> "$GITHUB_ENV"
 
       - name: Build
         shell: bash
         run: |
-          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" CC="$CC" OBJCOPY="$OBJCOPY"
+          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" \
+            CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
 
       - name: Compress build output
         shell: bash
@@ -89,6 +135,17 @@ jobs:
           fail_on_unmatched_files: true
 
 
+  # ===========================================================================
+  # Linux: x86, x86_64, arm64
+  # x86_64 uses the runner's own native gcc/SDL2 (already proven working).
+  # x86 and arm64 are real cross builds: a dedicated cross-gcc package for
+  # each (not just -m32, since that would leave $(CC) -dumpmachine still
+  # reporting x86_64 and make the Makefile pick the wrong target), and SDL2
+  # via Debian's multiarch dev packages for that architecture. SDL2_CFLAGS/
+  # SDL2_LIBS are set explicitly instead of trusting pkg-config to find the
+  # cross package, since headers are arch-independent but only the matching
+  # multiarch lib directory is correct for each architecture.
+  # ===========================================================================
   linux:
     name: Linux
     runs-on: ubuntu-24.04
@@ -108,148 +165,45 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             binutils \
-            gcc-i686-linux-gnu \
-            binutils-i686-linux-gnu \
-            gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu \
             libsdl2-dev \
-            cmake \
             curl \
             p7zip-full
+          case "${{ matrix.architecture }}" in
+            x86)
+              sudo dpkg --add-architecture i386
+              sudo apt-get update
+              sudo apt-get install -y gcc-i686-linux-gnu binutils-i686-linux-gnu libc6-dev-i386-cross libsdl2-dev:i386
+              ;;
+            arm64)
+              sudo dpkg --add-architecture arm64
+              sudo apt-get update
+              sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross libsdl2-dev:arm64
+              ;;
+          esac
 
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Read version
-        id: version
-        shell: bash
-        run: |
-          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
-          echo "tag=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Select Linux compiler
+      - name: Select compiler and SDL2 for ${{ matrix.architecture }}
         run: |
           case "${{ matrix.architecture }}" in
             x86)
               echo "CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
               echo "OBJCOPY=i686-linux-gnu-objcopy" >> "$GITHUB_ENV"
-              ;;
-            x86_64)
-              echo "CC=gcc" >> "$GITHUB_ENV"
-              echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
+              echo "SDL2_LIBS=-L/usr/lib/i386-linux-gnu -lSDL2" >> "$GITHUB_ENV"
               ;;
             arm64)
               echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
               echo "OBJCOPY=aarch64-linux-gnu-objcopy" >> "$GITHUB_ENV"
+              echo "SDL2_LIBS=-L/usr/lib/aarch64-linux-gnu -lSDL2" >> "$GITHUB_ENV"
+              ;;
+            x86_64)
+              echo "CC=gcc" >> "$GITHUB_ENV"
+              echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
+              echo "SDL2_LIBS=-L/usr/lib/x86_64-linux-gnu -lSDL2" >> "$GITHUB_ENV"
               ;;
           esac
+          echo "SDL2_CFLAGS=-I/usr/include/SDL2" >> "$GITHUB_ENV"
 
-      - name: Build
-        run: |
-          make CC="$CC" OBJCOPY="$OBJCOPY"
-
-      - name: Compress build output
-        run: |
-          mkdir -p release
-          for file in build/output/*; do
-            [ -f "$file" ] || continue
-            base="$(basename "$file")"
-            package="${base//_/-}"
-            7z a "release/${package}.7z" "$file"
-          done
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          files: release/*.7z
-          fail_on_unmatched_files: true
-
-
-  android:
-    name: Android
-    runs-on: ubuntu-24.04
-
-    env:
-      # Android has no official SDL2 package; the requirement is providing it
-      # somehow, so this builds it from its official source for each ABI.
-      SDL2_VERSION: 2.32.8
-      NDK_VERSION: 27.3.13750724
-      NDK_PLATFORM: android-21
-
-    strategy:
-      fail-fast: false
-      matrix:
-        architecture:
-          - armeabi-v7a
-          - arm64-v8a
-          - x86
-          - x86_64
-
-    steps:
-      - name: Install requirements
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            binutils \
-            cmake \
-            curl \
-            p7zip-full
-
-      - name: Setup Android
-        uses: android-actions/setup-android@v4
-
-      # actions/checkout deletes everything already in the workspace before
-      # checking out, so it must run before anything else writes into the
-      # workspace (like the SDL2 build below) - otherwise checkout wipes it.
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Android NDK
-        run: |
-          yes | sdkmanager --sdk_root="$ANDROID_HOME" "ndk;$NDK_VERSION" > /dev/null
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
-
-      - name: Build SDL2 for ${{ matrix.architecture }} from source
-        run: |
-          curl -fL --retry 3 -o SDL2.tar.gz \
-            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
-          tar -xzf SDL2.tar.gz
-          cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=${{ matrix.architecture }} \
-            -DANDROID_PLATFORM=$NDK_PLATFORM \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-android" \
-            -DSDL_SHARED=ON -DSDL_STATIC=OFF
-          cmake --build sdl2-build --parallel
-          cmake --install sdl2-build
-          echo "---- installed SDL2 files ----"
-          find "$PWD/sdl2-android" -type f
-          # Different SDL2 releases have installed SDL.h either directly under
-          # include/SDL2/ or under plain include/; add both search paths so
-          # <SDL.h> resolves either way instead of guessing which applies here.
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-android/include -I$PWD/sdl2-android/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L$PWD/sdl2-android/lib -lSDL2" >> "$GITHUB_ENV"
-
-      # The engine's own source also has to be compiled with the NDK's
-      # cross compiler for this ABI (not the host gcc used above for
-      # build_tools/), or it cannot link against the Android SDL2 built
-      # just above: same CPU architecture is not the same as the same
-      # platform (Android's Bionic libc differs from Linux's glibc).
-      - name: Select Android cross compiler for ${{ matrix.architecture }}
-        run: |
-          case "${{ matrix.architecture }}" in
-            armeabi-v7a) TRIPLE=armv7a-linux-androideabi ;;
-            arm64-v8a)   TRIPLE=aarch64-linux-android ;;
-            x86)         TRIPLE=i686-linux-android ;;
-            x86_64)      TRIPLE=x86_64-linux-android ;;
-          esac
-          API="${NDK_PLATFORM#android-}"
-          BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          echo "CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
-          echo "OBJCOPY=$BIN/llvm-objcopy" >> "$GITHUB_ENV"
 
       - name: Read version
         id: version
@@ -280,21 +234,81 @@ jobs:
           fail_on_unmatched_files: true
 
 
-  macos:
-    name: macOS
-    runs-on: macos-15
+  # ===========================================================================
+  # Android: armeabi-v7a, arm64-v8a, x86, x86_64
+  # ===========================================================================
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+
+    env:
+      NDK_VERSION: 27.3.13750724
+      NDK_PLATFORM: android-21
 
     strategy:
       fail-fast: false
       matrix:
         architecture:
+          - armeabi-v7a
+          - arm64-v8a
+          - x86
           - x86_64
-          - arm64
 
     steps:
       - name: Install requirements
         run: |
-          brew install p7zip sdl2 curl
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            binutils \
+            cmake \
+            curl \
+            p7zip-full
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android NDK
+        run: |
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Build SDL2 for ${{ matrix.architecture }} from source
+        run: |
+          curl -fL --retry 3 -o SDL2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          tar -xzf SDL2.tar.gz
+          cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.architecture }} \
+            -DANDROID_PLATFORM=$NDK_PLATFORM \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-android" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF
+          cmake --build sdl2-build --parallel
+          cmake --install sdl2-build
+          echo "---- installed SDL2 files ----"
+          find "$PWD/sdl2-android" -type f
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-android/include -I$PWD/sdl2-android/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L$PWD/sdl2-android/lib -lSDL2" >> "$GITHUB_ENV"
+
+      # The engine's own source also has to be compiled with the NDK's
+      # cross compiler for this ABI (not the host gcc used for build_tools/
+      # above), or it cannot link against the Android SDL2 built just above:
+      # same CPU architecture is not the same as the same platform (Android's
+      # Bionic libc differs from Linux's glibc).
+      - name: Select Android cross compiler for ${{ matrix.architecture }}
+        run: |
+          case "${{ matrix.architecture }}" in
+            armeabi-v7a) TRIPLE=armv7a-linux-androideabi ;;
+            arm64-v8a)   TRIPLE=aarch64-linux-android ;;
+            x86)         TRIPLE=i686-linux-android ;;
+            x86_64)      TRIPLE=x86_64-linux-android ;;
+          esac
+          API="${NDK_PLATFORM#android-}"
+          BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
+          echo "OBJCOPY=$BIN/llvm-objcopy" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -306,21 +320,9 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Select macOS compiler
-        run: |
-          case "${{ matrix.architecture }}" in
-            x86_64)
-              echo "CC=clang -target x86_64-apple-macos" >> "$GITHUB_ENV"
-              ;;
-            arm64)
-              echo "CC=clang -target arm64-apple-macos" >> "$GITHUB_ENV"
-              ;;
-          esac
-          echo "OBJCOPY=llvm-objcopy" >> "$GITHUB_ENV"
-
       - name: Build
         run: |
-          make CC="$CC" OBJCOPY="$OBJCOPY"
+          make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
 
       - name: Compress build output
         run: |
@@ -340,21 +342,26 @@ jobs:
           fail_on_unmatched_files: true
 
 
-  ios:
-    name: iOS
-    runs-on: macos-15
+  # ===========================================================================
+  # macOS: x86_64, arm64
+  # Xcode's toolchain has no objcopy at all, GNU or otherwise - llvm-objcopy
+  # from Homebrew's llvm package is used, since it understands Mach-O.
+  # ===========================================================================
+  macos:
+    name: macOS
+    runs-on: macos-14
 
     strategy:
       fail-fast: false
       matrix:
         architecture:
-          - arm64
           - x86_64
+          - arm64
 
     steps:
       - name: Install requirements
         run: |
-          brew install p7zip sdl2 curl
+          brew install cmake curl p7zip llvm
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -366,21 +373,119 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Select iOS compiler
+      - name: Select compiler for ${{ matrix.architecture }}
         run: |
-          case "${{ matrix.architecture }}" in
-            arm64)
-              echo "CC=clang -target arm64-apple-ios" >> "$GITHUB_ENV"
-              ;;
-            x86_64)
-              echo "CC=clang -target x86_64-apple-ios-simulator" >> "$GITHUB_ENV"
-              ;;
-          esac
-          echo "OBJCOPY=llvm-objcopy" >> "$GITHUB_ENV"
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "CC=clang -arch ${{ matrix.architecture }} -isysroot $SDKROOT -mmacosx-version-min=11.0" >> "$GITHUB_ENV"
+          echo "OBJCOPY=$(brew --prefix llvm)/bin/llvm-objcopy" >> "$GITHUB_ENV"
+
+      - name: Build SDL2 for ${{ matrix.architecture }} from source
+        run: |
+          curl -fL --retry 3 -o SDL2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          tar -xzf SDL2.tar.gz
+          cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.architecture }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-macos" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF
+          cmake --build sdl2-build --parallel
+          cmake --install sdl2-build
+          echo "---- installed SDL2 files ----"
+          find "$PWD/sdl2-macos" -type f
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-macos/include -I$PWD/sdl2-macos/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L$PWD/sdl2-macos/lib -lSDL2" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
-          make CC="$CC" OBJCOPY="$OBJCOPY"
+          make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
+
+      - name: Compress build output
+        run: |
+          mkdir -p release
+          for file in build/output/*; do
+            [ -f "$file" ] || continue
+            base="$(basename "$file")"
+            package="${base//_/-}"
+            7z a "release/${package}.7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+
+  # ===========================================================================
+  # iOS: arm64 (device), x86_64 (simulator - no x86_64 iOS device ever shipped)
+  # ===========================================================================
+  ios:
+    name: iOS
+    runs-on: macos-14
+
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - arm64
+          - x86_64
+
+    steps:
+      - name: Install requirements
+        run: |
+          brew install cmake curl p7zip llvm
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Select compiler for ${{ matrix.architecture }}
+        run: |
+          if [ "${{ matrix.architecture }}" = "arm64" ]; then
+            SDK=iphoneos
+            SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
+            echo "CC=clang -arch arm64 -isysroot $SDKROOT -mios-version-min=13.0" >> "$GITHUB_ENV"
+          else
+            SDK=iphonesimulator
+            SDKROOT="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+            echo "CC=clang -arch x86_64 -isysroot $SDKROOT -mios-simulator-version-min=13.0" >> "$GITHUB_ENV"
+          fi
+          echo "IOS_SDK=$SDK" >> "$GITHUB_ENV"
+          echo "IOS_SDKROOT=$SDKROOT" >> "$GITHUB_ENV"
+          echo "OBJCOPY=$(brew --prefix llvm)/bin/llvm-objcopy" >> "$GITHUB_ENV"
+
+      - name: Build SDL2 for ${{ matrix.architecture }} from source
+        run: |
+          curl -fL --retry 3 -o SDL2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          tar -xzf SDL2.tar.gz
+          cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT="$IOS_SDKROOT" \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.architecture }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-ios" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF
+          cmake --build sdl2-build --parallel
+          cmake --install sdl2-build
+          echo "---- installed SDL2 files ----"
+          find "$PWD/sdl2-ios" -type f
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-ios/include -I$PWD/sdl2-ios/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L$PWD/sdl2-ios/lib -lSDL2" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
 
       - name: Compress build output
         run: |
