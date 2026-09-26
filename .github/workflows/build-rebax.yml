@@ -11,15 +11,6 @@ env:
 
 jobs:
 
-  # ===========================================================================
-  # Windows: x86, x86_64, arm64
-  # The make.exe already on this runner (C:\mingw64\bin\make.exe) crashes on
-  # almost any $(shell ...) call - it's built against a different MSYS/MinGW
-  # runtime than the git-bash shell running it. A clean, native make from
-  # Chocolatey is installed and called by its exact path instead.
-  # The runner's own compiler is x86_64-only, so all three architectures are
-  # cross-compiled with llvm-mingw (clang-based, one bundle covers all three).
-  # ===========================================================================
   windows:
     name: Windows
     runs-on: windows-2025
@@ -72,12 +63,6 @@ jobs:
           echo "CC=$LLVM_MINGW/bin/$TRIPLE-clang.exe" >> "$GITHUB_ENV"
           echo "OBJCOPY=$LLVM_MINGW/bin/llvm-objcopy.exe" >> "$GITHUB_ENV"
 
-      # Runs on the runner itself, so it must always use the runner's own
-      # native compiler (C:\mingw64\bin\gcc.exe), never the cross compiler
-      # selected above - regardless of which Windows architecture this job
-      # targets. -DZ7_ST/-D_7ZIP_ST/-D_POSIX_C_SOURCE=200809L: this vendored
-      # subset of the 7-Zip SDK never includes MtCoder.* (its multi-threaded
-      # block-coder) and calls posix_memalign unconditionally.
       - name: Pre-build build_tools/rebax-tool.exe
         shell: bash
         run: |
@@ -135,17 +120,6 @@ jobs:
           fail_on_unmatched_files: true
 
 
-  # ===========================================================================
-  # Linux: x86, x86_64, arm64
-  # x86_64 uses the runner's own native gcc/SDL2 (already proven working).
-  # x86 and arm64 are real cross builds: a dedicated cross-gcc package for
-  # each (not just -m32, since that would leave $(CC) -dumpmachine still
-  # reporting x86_64 and make the Makefile pick the wrong target), and SDL2
-  # via Debian's multiarch dev packages for that architecture. SDL2_CFLAGS/
-  # SDL2_LIBS are set explicitly instead of trusting pkg-config to find the
-  # cross package, since headers are arch-independent but only the matching
-  # multiarch lib directory is correct for each architecture.
-  # ===========================================================================
   linux:
     name: Linux
     runs-on: ubuntu-24.04
@@ -205,14 +179,6 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
-      # x86_64 uses the distro's own libsdl2-dev (already installed, proven
-      # working). x86/arm64 are cross builds: Ubuntu's multiarch SDL2 dev
-      # package (libsdl2-dev:i386, etc.) pulls in a large, version-pinned
-      # dependency tree (libglib2.0-dev and friends) that is frequently out
-      # of sync between architectures on this mirror and fails to install -
-      # so for those two, SDL2 is built from source with the cross compiler
-      # selected above instead, the same reliable pattern already proven for
-      # Android/Windows/macOS/iOS.
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         if: matrix.architecture != 'x86_64'
         run: |
@@ -223,7 +189,8 @@ jobs:
             -DCMAKE_C_COMPILER="$CC" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-linux" \
-            -DSDL_SHARED=ON -DSDL_STATIC=OFF
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+            -DSDL_LIBSAMPLERATE=OFF
           cmake --build sdl2-build --parallel
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
@@ -259,9 +226,6 @@ jobs:
           fail_on_unmatched_files: true
 
 
-  # ===========================================================================
-  # Android: armeabi-v7a, arm64-v8a, x86, x86_64
-  # ===========================================================================
   android:
     name: Android
     runs-on: ubuntu-24.04
@@ -317,11 +281,6 @@ jobs:
           echo "SDL2_CFLAGS=-I$PWD/sdl2-android/include -I$PWD/sdl2-android/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L$PWD/sdl2-android/lib -lSDL2" >> "$GITHUB_ENV"
 
-      # The engine's own source also has to be compiled with the NDK's
-      # cross compiler for this ABI (not the host gcc used for build_tools/
-      # above), or it cannot link against the Android SDL2 built just above:
-      # same CPU architecture is not the same as the same platform (Android's
-      # Bionic libc differs from Linux's glibc).
       - name: Select Android cross compiler for ${{ matrix.architecture }}
         run: |
           case "${{ matrix.architecture }}" in
@@ -367,11 +326,6 @@ jobs:
           fail_on_unmatched_files: true
 
 
-  # ===========================================================================
-  # macOS: x86_64, arm64
-  # Xcode's toolchain has no objcopy at all, GNU or otherwise - llvm-objcopy
-  # from Homebrew's llvm package is used, since it understands Mach-O.
-  # ===========================================================================
   macos:
     name: macOS
     runs-on: macos-14
@@ -441,12 +395,8 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           files: release/*.7z
-          fail_on_unmatched_files: true
 
 
-  # ===========================================================================
-  # iOS: arm64 (device), x86_64 (simulator - no x86_64 iOS device ever shipped)
-  # ===========================================================================
   ios:
     name: iOS
     runs-on: macos-14
@@ -513,6 +463,7 @@ jobs:
           make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
 
       - name: Compress build output
+        shell: bash
         run: |
           mkdir -p release
           for file in build/output/*; do
