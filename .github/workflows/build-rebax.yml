@@ -54,6 +54,19 @@ jobs:
             build_tools/src/lzma2_encoder.c \
             -lm
 
+      # Temporary diagnostic: isolate whether rebax-tool.exe itself crashes,
+      # or whether it's specifically make's $(shell ...) wrapping around it,
+      # since "make" now crashes right where it first calls
+      # `build_tools/rebax-tool.exe which ...` for gcc/objcopy/pkg-config/curl.
+      - name: Diagnose rebax-tool.exe which
+        shell: bash
+        run: |
+          set -x
+          build_tools/rebax-tool.exe which gcc
+          build_tools/rebax-tool.exe which objcopy
+          build_tools/rebax-tool.exe which curl
+          echo "all three ran without crashing"
+
       - name: Build
         shell: bash
         run: |
