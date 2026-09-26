@@ -168,7 +168,12 @@ jobs:
             -DSDL_SHARED=ON -DSDL_STATIC=OFF
           cmake --build sdl2-build --parallel
           cmake --install sdl2-build
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-android/include/SDL2" >> "$GITHUB_ENV"
+          echo "---- installed SDL2 files ----"
+          find "$PWD/sdl2-android" -type f
+          # Different SDL2 releases have installed SDL.h either directly under
+          # include/SDL2/ or under plain include/; add both search paths so
+          # <SDL.h> resolves either way instead of guessing which applies here.
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-android/include -I$PWD/sdl2-android/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L$PWD/sdl2-android/lib -lSDL2" >> "$GITHUB_ENV"
 
       # The engine's own source also has to be compiled with the NDK's
