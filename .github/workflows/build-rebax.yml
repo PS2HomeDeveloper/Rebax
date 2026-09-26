@@ -149,6 +149,9 @@ jobs:
       - name: Setup Android
         uses: android-actions/setup-android@v4
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install Android NDK
         run: |
           yes | sdkmanager --sdk_root="$ANDROID_HOME" "ndk;$NDK_VERSION" > /dev/null
@@ -193,9 +196,6 @@ jobs:
           BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
           echo "OBJCOPY=$BIN/llvm-objcopy" >> "$GITHUB_ENV"
-
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Read version
         id: version
