@@ -120,6 +120,8 @@ else ifneq ($(findstring aarch64,$(CC_TARGET)),)
   TOOLCHAIN_ASSET := rebax-toolchains-linux-arm64.tar.xz
 else ifneq ($(findstring i686,$(CC_TARGET)),)
   TOOLCHAIN_ASSET := rebax-toolchains-linux-x86.tar.xz
+else ifneq ($(findstring x86_64,$(CC_TARGET)),)
+  TOOLCHAIN_ASSET := rebax-toolchains-linux-x86_64.tar.xz
 else ifneq ($(findstring x86,$(CC_TARGET)),)
   TOOLCHAIN_ASSET := rebax-toolchains-linux-x86.tar.xz
 else
