@@ -24,7 +24,7 @@ jobs:
       - name: Install requirements
         shell: pwsh
         run: |
-          choco install -y 7zip
+          choco install -y 7zip make
 
       - name: Checkout
         uses: actions/checkout@v4
