@@ -280,6 +280,12 @@ else ifneq ($(findstring aarch64,$(CC_TARGET)),)
 else ifneq ($(findstring arm64,$(CC_TARGET)),)
   OC_FORMAT := elf64-littleaarch64
   OC_ARCH   := aarch64
+else ifneq ($(findstring armv7,$(CC_TARGET)),)
+  OC_FORMAT := elf32-littlearm
+  OC_ARCH   := arm
+else ifneq ($(findstring i686,$(CC_TARGET)),)
+  OC_FORMAT := elf32-i386
+  OC_ARCH   := i386
 else
   $(warning Unknown objcopy format for compiler target ($(CC_TARGET)). Pass it manually with "make OC_FORMAT=... OC_ARCH=...")
 endif
