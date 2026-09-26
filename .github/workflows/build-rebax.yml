@@ -24,7 +24,7 @@ jobs:
       - name: Install requirements
         shell: pwsh
         run: |
-          choco install -y 7zip make
+          choco install -y 7zip make llvm
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,10 +54,21 @@ jobs:
             build_tools/src/lzma2_encoder.c \
             -lm
 
+      - name: Select Windows compiler
+        shell: bash
+        run: |
+          case "${{ matrix.architecture }}" in
+            x86) CC="clang --target=i686-w64-windows-gnu" ;;
+            x86_64) CC="clang --target=x86_64-w64-windows-gnu" ;;
+            arm64) CC="clang --target=aarch64-w64-windows-gnu" ;;
+          esac
+          echo "CC=$CC" >> "$GITHUB_ENV"
+          echo "OBJCOPY=llvm-objcopy" >> "$GITHUB_ENV"
+
       - name: Build
         shell: bash
         run: |
-          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe"
+          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" CC="$CC" OBJCOPY="$OBJCOPY"
 
       - name: Compress build output
         shell: bash
@@ -97,7 +108,12 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             binutils \
+            gcc-i686-linux-gnu \
+            binutils-i686-linux-gnu \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
             libsdl2-dev \
+            cmake \
             curl \
             p7zip-full
 
@@ -111,9 +127,26 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Select Linux compiler
+        run: |
+          case "${{ matrix.architecture }}" in
+            x86)
+              echo "CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
+              echo "OBJCOPY=i686-linux-gnu-objcopy" >> "$GITHUB_ENV"
+              ;;
+            x86_64)
+              echo "CC=gcc" >> "$GITHUB_ENV"
+              echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
+              ;;
+            arm64)
+              echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+              echo "OBJCOPY=aarch64-linux-gnu-objcopy" >> "$GITHUB_ENV"
+              ;;
+          esac
+
       - name: Build
         run: |
-          make
+          make CC="$CC" OBJCOPY="$OBJCOPY"
 
       - name: Compress build output
         run: |
@@ -273,9 +306,21 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Select macOS compiler
+        run: |
+          case "${{ matrix.architecture }}" in
+            x86_64)
+              echo "CC=clang -target x86_64-apple-macos" >> "$GITHUB_ENV"
+              ;;
+            arm64)
+              echo "CC=clang -target arm64-apple-macos" >> "$GITHUB_ENV"
+              ;;
+          esac
+          echo "OBJCOPY=llvm-objcopy" >> "$GITHUB_ENV"
+
       - name: Build
         run: |
-          make
+          make CC="$CC" OBJCOPY="$OBJCOPY"
 
       - name: Compress build output
         run: |
@@ -321,9 +366,21 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Select iOS compiler
+        run: |
+          case "${{ matrix.architecture }}" in
+            arm64)
+              echo "CC=clang -target arm64-apple-ios" >> "$GITHUB_ENV"
+              ;;
+            x86_64)
+              echo "CC=clang -target x86_64-apple-ios-simulator" >> "$GITHUB_ENV"
+              ;;
+          esac
+          echo "OBJCOPY=llvm-objcopy" >> "$GITHUB_ENV"
+
       - name: Build
         run: |
-          make
+          make CC="$CC" OBJCOPY="$OBJCOPY"
 
       - name: Compress build output
         run: |
