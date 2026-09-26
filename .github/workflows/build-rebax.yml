@@ -165,42 +165,35 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             binutils \
+            cmake \
             libsdl2-dev \
             curl \
             p7zip-full
           case "${{ matrix.architecture }}" in
             x86)
-              sudo dpkg --add-architecture i386
-              sudo apt-get update
-              sudo apt-get install -y gcc-i686-linux-gnu binutils-i686-linux-gnu libc6-dev-i386-cross libsdl2-dev:i386
+              sudo apt-get install -y gcc-i686-linux-gnu binutils-i686-linux-gnu libc6-dev-i386-cross
               ;;
             arm64)
-              sudo dpkg --add-architecture arm64
-              sudo apt-get update
-              sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross libsdl2-dev:arm64
+              sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
               ;;
           esac
 
-      - name: Select compiler and SDL2 for ${{ matrix.architecture }}
+      - name: Select compiler for ${{ matrix.architecture }}
         run: |
           case "${{ matrix.architecture }}" in
             x86)
               echo "CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
               echo "OBJCOPY=i686-linux-gnu-objcopy" >> "$GITHUB_ENV"
-              echo "SDL2_LIBS=-L/usr/lib/i386-linux-gnu -lSDL2" >> "$GITHUB_ENV"
               ;;
             arm64)
               echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
               echo "OBJCOPY=aarch64-linux-gnu-objcopy" >> "$GITHUB_ENV"
-              echo "SDL2_LIBS=-L/usr/lib/aarch64-linux-gnu -lSDL2" >> "$GITHUB_ENV"
               ;;
             x86_64)
               echo "CC=gcc" >> "$GITHUB_ENV"
               echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
-              echo "SDL2_LIBS=-L/usr/lib/x86_64-linux-gnu -lSDL2" >> "$GITHUB_ENV"
               ;;
           esac
-          echo "SDL2_CFLAGS=-I/usr/include/SDL2" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -211,6 +204,38 @@ jobs:
         run: |
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      # x86_64 uses the distro's own libsdl2-dev (already installed, proven
+      # working). x86/arm64 are cross builds: Ubuntu's multiarch SDL2 dev
+      # package (libsdl2-dev:i386, etc.) pulls in a large, version-pinned
+      # dependency tree (libglib2.0-dev and friends) that is frequently out
+      # of sync between architectures on this mirror and fails to install -
+      # so for those two, SDL2 is built from source with the cross compiler
+      # selected above instead, the same reliable pattern already proven for
+      # Android/Windows/macOS/iOS.
+      - name: Build SDL2 for ${{ matrix.architecture }} from source
+        if: matrix.architecture != 'x86_64'
+        run: |
+          curl -fL --retry 3 -o SDL2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          tar -xzf SDL2.tar.gz
+          cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-linux" \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF
+          cmake --build sdl2-build --parallel
+          cmake --install sdl2-build
+          echo "---- installed SDL2 files ----"
+          find "$PWD/sdl2-linux" -type f
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-linux/include -I$PWD/sdl2-linux/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L$PWD/sdl2-linux/lib -lSDL2" >> "$GITHUB_ENV"
+
+      - name: Use system SDL2
+        if: matrix.architecture == 'x86_64'
+        run: |
+          echo "SDL2_CFLAGS=-I/usr/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L/usr/lib/x86_64-linux-gnu -lSDL2" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
