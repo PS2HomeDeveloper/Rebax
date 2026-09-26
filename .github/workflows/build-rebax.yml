@@ -75,11 +75,17 @@ jobs:
     steps:
       - name: Install requirements
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
             binutils \
+            gcc-multilib \
+            g++-multilib \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
             libsdl2-dev \
+            libsdl2-dev:i386 \
             curl \
             p7zip-full
 
@@ -93,9 +99,33 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
+
+
+
+
+      - name: Select Linux cross compiler for ${{ matrix.architecture }}
+        run: |
+          case "${{ matrix.architecture }}" in
+            x86)
+              echo "CC=gcc -m32" >> "$GITHUB_ENV"
+              echo "CXX=g++ -m32" >> "$GITHUB_ENV"
+              echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
+              ;;
+            x86_64)
+              echo "CC=gcc" >> "$GITHUB_ENV"
+              echo "CXX=g++" >> "$GITHUB_ENV"
+              echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
+              ;;
+            arm64)
+              echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+              echo "CXX=aarch64-linux-gnu-g++" >> "$GITHUB_ENV"
+              echo "OBJCOPY=aarch64-linux-gnu-objcopy" >> "$GITHUB_ENV"
+              ;;
+          esac
+
       - name: Build
         run: |
-          make
+          make CC="$CC" OBJCOPY="$OBJCOPY"
 
       - name: Compress build output
         run: |
