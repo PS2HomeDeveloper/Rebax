@@ -53,10 +53,10 @@ ifeq ($(wildcard $(RTOOL)),)
     endif
   endif
   $(info [build_tools] building compression-capable $(RTOOL) with $(HOSTCC)...)
-  RTOOL_BUILD := $(shell $(HOSTCC) -std=c99 -O2 -D_POSIX_C_SOURCE=200809L -DZ7_ST -DZ7_NO_ASM -I$(RTOOL_SRC_DIR) -o $(RTOOL) $(RTOOL_SOURCES) -lm)
-  ifeq ($(wildcard $(RTOOL)),)
-    $(error Could not build $(RTOOL) from $(RTOOL_SRC_DIR); see the compiler errors above)
-  endif
+  RTOOL_BUILD := $(shell $(HOSTCC) -std=c99 -O2 -o $(RTOOL) $(RTOOL_SOURCES) -lm > $(RTOOL_DIR)/build.log 2>&1)
+ifeq ($(wildcard $(RTOOL)),)
+  $(error Could not build $(RTOOL) from $(RTOOL_SRC_DIR); see $(RTOOL_DIR)/build.log for the compiler output)
+endif
 endif
 
 # $(call have,NAME) returns NAME if that program is found in PATH, else nothing
