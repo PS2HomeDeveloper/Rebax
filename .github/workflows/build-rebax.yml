@@ -48,7 +48,18 @@ jobs:
           for file in build/output/*; do
             [ -f "$file" ] || continue
             base="$(basename "$file")"
-            package="${base//_/-  linux:
+            package="${base//_/-}"
+            7z a "release/${package}.7z" "$file"
+          done
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: release/*.7z
+          fail_on_unmatched_files: true
+
+  linux:
     name: Linux
     runs-on: ubuntu-24.04
 
@@ -63,13 +74,12 @@ jobs:
     steps:
       - name: Install requirements
         run: |
-          sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
             binutils \
-            gcc-multilib \
-            g++-multilib \
+            gcc-i686-linux-gnu \
+            g++-i686-linux-gnu \
             gcc-aarch64-linux-gnu \
             g++-aarch64-linux-gnu \
             cmake \
@@ -86,57 +96,13 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Build SDL2 for ${{ matrix.architecture }} from source
-        run: |
-          curl -fL --retry 3 -o SDL2.tar.gz \
-            "https://github.com/libsdl-org/SDL/releases/download/release-2.32.8/SDL2-2.32.8.tar.gz"
-          tar -xzf SDL2.tar.gz
-          case "${{ matrix.architecture }}" in
-            x86)
-              CC=gcc CXX=g++ \
-              cmake -S "SDL2-2.32.8" -B sdl2-build \
-                -DCMAKE_C_COMPILER=gcc \
-                -DCMAKE_CXX_COMPILER=g++ \
-                -DCMAKE_C_FLAGS="-m32" \
-                -DCMAKE_CXX_FLAGS="-m32" \
-                -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-$(echo '${{ matrix.architecture }}')" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DSDL_SHARED=ON \
-                -DSDL_STATIC=OFF
-              ;;
-            x86_64)
-              cmake -S "SDL2-2.32.8" -B sdl2-build \
-                -DCMAKE_C_COMPILER=gcc \
-                -DCMAKE_CXX_COMPILER=g++ \
-                -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-${{ matrix.architecture }}" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DSDL_SHARED=ON \
-                -DSDL_STATIC=OFF
-              ;;
-            arm64)
-              cmake -S "SDL2-2.32.8" -B sdl2-build \
-                -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-                -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-                -DCMAKE_SYSTEM_NAME=Linux \
-                -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-                -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-${{ matrix.architecture }}" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DSDL_SHARED=ON \
-                -DSDL_STATIC=OFF
-              ;;
-          esac
-          cmake --build sdl2-build --parallel
-          cmake --install sdl2-build
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-${{ matrix.architecture }}/include -I$PWD/sdl2-${{ matrix.architecture }}/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L$PWD/sdl2-${{ matrix.architecture }}/lib -lSDL2" >> "$GITHUB_ENV"
-
       - name: Select Linux cross compiler for ${{ matrix.architecture }}
         run: |
           case "${{ matrix.architecture }}" in
             x86)
-              echo "CC=gcc -m32" >> "$GITHUB_ENV"
-              echo "CXX=g++ -m32" >> "$GITHUB_ENV"
-              echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
+              echo "CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
+              echo "CXX=i686-linux-gnu-g++" >> "$GITHUB_ENV"
+              echo "OBJCOPY=i686-linux-gnu-objcopy" >> "$GITHUB_ENV"
               ;;
             x86_64)
               echo "CC=gcc" >> "$GITHUB_ENV"
@@ -149,6 +115,46 @@ jobs:
               echo "OBJCOPY=aarch64-linux-gnu-objcopy" >> "$GITHUB_ENV"
               ;;
           esac
+
+      - name: Build SDL2 for ${{ matrix.architecture }} from source
+        run: |
+          curl -fL --retry 3 -o SDL2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-2.32.8/SDL2-2.32.8.tar.gz"
+          tar -xzf SDL2.tar.gz
+          case "${{ matrix.architecture }}" in
+            x86)
+              PROCESSOR=i686
+              ;;
+            x86_64)
+              PROCESSOR=x86_64
+              ;;
+            arm64)
+              PROCESSOR=aarch64
+              ;;
+          esac
+          cat > linux-toolchain.cmake <<EOF
+          set(CMAKE_SYSTEM_NAME Linux)
+          set(CMAKE_SYSTEM_PROCESSOR $PROCESSOR)
+          set(CMAKE_C_COMPILER "$CC")
+          set(CMAKE_CXX_COMPILER "$CXX")
+          set(CMAKE_AR "${CC%-gcc}-ar")
+          set(CMAKE_RANLIB "${CC%-gcc}-ranlib")
+          set(CMAKE_STRIP "${CC%-gcc}-strip")
+          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+          EOF
+          cmake -S "SDL2-2.32.8" -B sdl2-build \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/linux-toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-${{ matrix.architecture }}" \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF
+          cmake --build sdl2-build --parallel
+          cmake --install sdl2-build
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-${{ matrix.architecture }}/include -I$PWD/sdl2-${{ matrix.architecture }}/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_LIBS=-L$PWD/sdl2-${{ matrix.architecture }}/lib -lSDL2" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
@@ -169,20 +175,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           files: release/*.7z
-          fail_on_unmatched_files: true}"
-            7z a "release/${package}.7z" "$file"
-          done
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          files: release/*.7z
           fail_on_unmatched_files: true
-
-
-  
-
 
   android:
     name: Android
@@ -294,7 +287,6 @@ jobs:
           files: release/*.7z
           fail_on_unmatched_files: true
 
-
   macos:
     name: macOS
     runs-on: macos-15
@@ -341,7 +333,6 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           files: release/*.7z
           fail_on_unmatched_files: true
-
 
   ios:
     name: iOS
