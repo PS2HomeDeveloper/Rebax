@@ -314,6 +314,20 @@ $(NODE_EDITOR_REGISTRY_GENERATED): $(NODE_EDITOR_SOURCE_FILES) | $(BUILD_DIR)
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_REGISTRY_GENERATED) $(NODE_EDITOR_REGISTRY_GENERATED)
 	@$(RTOOL) mkdir $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+# The bundled "make" binary is named "make" on POSIX and "make.exe" on
+# Windows (see TOOLCHAIN_REQUIRED above), but the C code only ever
+# declares one fixed symbol, _binary_embedded_toolchains_make_start (see
+# src/embedded_resources.h). This explicit rule overrides the generic
+# pattern rule below just for that one file, pinning the embedded symbol
+# name to "embedded/toolchains/make" regardless of which file backs it
+# on the current platform. An explicit rule always takes precedence over
+# a pattern rule for the same target, so this only affects this file.
+TOOLCHAIN_MAKE_BIN := $(word 2,$(TOOLCHAIN_REQUIRED))
+$(OBJ_DIR)/embedded/toolchains/$(TOOLCHAIN_MAKE_BIN).o: $(TOOLCHAINS_DIR)/$(TOOLCHAIN_MAKE_BIN)
+	@$(RTOOL) mkdir $(dir $@)
+	@$(RTOOL) embed-asm $@.S $< embedded/toolchains/make
+	$(CC) -c $@.S -o $@
+
 $(OBJ_DIR)/embedded/%.o: $(EMBEDDED_DIR)/%
 	@$(RTOOL) mkdir $(dir $@)
 	@$(RTOOL) embed-asm $@.S $<
