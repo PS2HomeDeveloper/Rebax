@@ -94,7 +94,7 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-windows" -type f
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-windows/include/SDL2" >> "$GITHUB_ENV"
+          echo "SDL2_CFLAGS=-I$PWD/sdl2-windows/include -I$PWD/sdl2-windows/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L$PWD/sdl2-windows/lib -lSDL2" >> "$GITHUB_ENV"
 
       - name: Build
