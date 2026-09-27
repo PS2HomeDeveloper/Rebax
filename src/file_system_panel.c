@@ -18,6 +18,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#if defined(_WIN32)
+#include <direct.h>
+#define REBAX_MKDIR(path, mode) _mkdir(path)
+#else
+#define REBAX_MKDIR(path, mode) mkdir(path, mode)
+#endif
+
 #include "file_system_panel.h"
 #include "window.h"
 #include "shape_provider.h"
@@ -169,7 +176,7 @@ static void rebuild_rows(void) {
 
     struct stat st;
     if (stat(assets_path, &st) != 0) {
-        mkdir(assets_path, 0755);
+        REBAX_MKDIR(assets_path, 0755);
     }
 
     fs_row_t *root = &g_rows[g_row_count++];
