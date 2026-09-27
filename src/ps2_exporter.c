@@ -63,6 +63,14 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <ctype.h>
+
+#if defined(_WIN32)
+#include <io.h>
+#define REBAX_SETENV(name, value) _putenv_s(name, value)
+#else
+#define REBAX_SETENV(name, value) setenv(name, value, 1)
+#endif
+
 #include <stdarg.h>
 
 #include "ps2_exporter.h"
@@ -149,8 +157,12 @@ static int shell_step_start(shell_step_t *step, const char *command) {
         return 0;
     }
     step->fd = fileno(step->pipe);
+    #if defined(_WIN32)
+    int flags = _setmode(step->fd, _O_BINARY);
+#else
     int flags = fcntl(step->fd, F_GETFL, 0);
     fcntl(step->fd, F_SETFL, flags | O_NONBLOCK);
+#endif
     step->active = 1;
     step->partial_len = 0;
     step->partial[0] = '\0';
@@ -1327,13 +1339,13 @@ void ps2_export_update(void) {
                  * تضمين مسار أدوات mips64r5900el-ps2-elf-* بـPATH، ثم make.
                  * scene_data.c الآن كود C عادي (بيانات نمطية، لا حاجة
                  * لأي objcopy خام - راجع تعليق التصميم بأعلى الملف) */
-                setenv("PS2DEV",g_ps2dev_root,1);
+                REBAX_SETENV("PS2DEV",g_ps2dev_root);
                 char sdk[1600],gskit[1600],pathv[3600];
                 snprintf(sdk,sizeof(sdk),"%s/ps2sdk",g_ps2dev_root);
                 snprintf(gskit,sizeof(gskit),"%s/gsKit",g_ps2dev_root);
-                setenv("PS2SDK",sdk,1); setenv("GSKIT",gskit,1);
+                REBAX_SETENV("PS2SDK",sdk); REBAX_SETENV("GSKIT",gskit);
                 snprintf(pathv,sizeof(pathv),"%s/bin:%s/ee/bin:%s/iop/bin:%s/bin:%s",g_ps2dev_root,g_ps2dev_root,g_ps2dev_root,sdk,getenv("PATH")?getenv("PATH"):"");
-                setenv("PATH",pathv,1);
+                REBAX_SETENV("PATH",pathv);
                 snprintf(cmd,sizeof(cmd),"cd '%s' && '%s' 2>&1",src_dir,rebax_make_path());
 
                 if (!shell_step_start(&g_step, cmd)) {
