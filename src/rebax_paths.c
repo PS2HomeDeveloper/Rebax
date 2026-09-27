@@ -4,6 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+#if defined(_WIN32)
+#include <direct.h>
+#define REBAX_MKDIR(path, mode) _mkdir(path)
+#else
+#define REBAX_MKDIR(path, mode) mkdir(path, mode)
+#endif
+
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
@@ -37,7 +45,7 @@ static void mkdir_recursive(const char *path) {
         if (*p == '/' || *p == '\\') {
             char sep = *p;
             *p = '\0';
-            mkdir(buf, 0755);
+            REBAX_MKDIR(buf, 0755);
             *p = sep;
         }
     }
