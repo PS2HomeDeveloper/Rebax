@@ -31,6 +31,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#if defined(_WIN32)
+#include <direct.h>
+#define REBAX_MKDIR(path, mode) _mkdir(path)
+#else
+#define REBAX_MKDIR(path, mode) mkdir(path, mode)
+#endif
+
 #include "nodes_editor/image_loader.h" /* يدعم كل صيغ الصور اللي محركنا يدعمها - stb_image داخلياً لـPNG/JPEG/BMP/TGA/TIFF، وفك تشفيرنا الخاص لـRAW/TIM2/TIM */
 
 #include "asset_browser.h"
@@ -515,7 +522,7 @@ static int open_common(asset_browser_root_t root, asset_browser_callback_t callb
         }
         snprintf(g_root_path, sizeof(g_root_path), "%s/Assets", project_path);
         struct stat st;
-        if (stat(g_root_path, &st) != 0) mkdir(g_root_path, 0755);
+        if (stat(g_root_path, &st) != 0) REBAX_MKDIR(g_root_path, 0755);
         strncpy(g_root_label, "Assets://", sizeof(g_root_label) - 1);
         g_root_label[sizeof(g_root_label) - 1] = '\0';
     } else {
