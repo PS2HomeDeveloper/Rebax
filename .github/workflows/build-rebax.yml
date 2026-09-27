@@ -62,6 +62,7 @@ jobs:
           echo "TRIPLE=$TRIPLE" >> "$GITHUB_ENV"
           echo "CC=$LLVM_MINGW/bin/$TRIPLE-clang.exe" >> "$GITHUB_ENV"
           echo "OBJCOPY=$LLVM_MINGW/bin/llvm-objcopy.exe" >> "$GITHUB_ENV"
+          echo "RC=$LLVM_MINGW/bin/$TRIPLE-windres.exe" >> "$GITHUB_ENV"
 
       - name: Pre-build build_tools/rebax-tool.exe
         shell: bash
@@ -84,6 +85,7 @@ jobs:
             -DCMAKE_SYSTEM_NAME=Windows \
             -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.architecture }} \
             -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_RC_COMPILER="$RC" \
             -DCMAKE_CROSSCOMPILING=TRUE \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-windows" \
