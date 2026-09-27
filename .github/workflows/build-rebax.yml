@@ -108,16 +108,7 @@ jobs:
           echo "OBJCOPY=$LLVM_MINGW/bin/llvm-objcopy.exe" >> "$GITHUB_ENV"
           echo "RC=$LLVM_MINGW/bin/$TRIPLE-windres.exe" >> "$GITHUB_ENV"
 
-      - name: Pre-build build_tools/rebax-tool.exe
-        shell: bash
-        run: |
-          gcc -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L \
-            -o build_tools/rebax-tool.exe \
-            build_tools/src/rebax_tool.c \
-            build_tools/src/rebax_fs.c \
-            build_tools/src/xz_embedded.c \
-            build_tools/src/lzma2_encoder.c \
-            -lm
+          
 
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         shell: bash
