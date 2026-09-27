@@ -52,14 +52,6 @@ jobs:
           echo "LLVM_MINGW=$PWD/${dir%/}" >> "$GITHUB_ENV"
 
 
-
-
-      - name: Check llvm-objcopy version
-        shell: bash
-        run: |
-          "$LLVM_MINGW/bin/llvm-objcopy.exe" --version
-
-
           
 
       - name: Select cross compiler for ${{ matrix.architecture }}
@@ -118,11 +110,18 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          for file in build/output/*; do
+          shopt -s nullglob
+          outputs=(build/output/*)
+          if [ ${#outputs[@]} -eq 0 ]; then
+            echo "::error::No file was produced in build/output; the Build step must have failed. Refusing to package or upload." >&2
+            exit 1
+          fi
+          repo_root="$PWD"
+          for file in "${outputs[@]}"; do
             [ -f "$file" ] || continue
             base="$(basename "$file")"
             package="${base//_/-}"
-            7z a "release/${package}.7z" "$file"
+            (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
           done
 
       - name: Upload release asset
@@ -224,11 +223,18 @@ jobs:
       - name: Compress build output
         run: |
           mkdir -p release
-          for file in build/output/*; do
+          shopt -s nullglob
+          outputs=(build/output/*)
+          if [ ${#outputs[@]} -eq 0 ]; then
+            echo "::error::No file was produced in build/output; the Build step must have failed. Refusing to package or upload." >&2
+            exit 1
+          fi
+          repo_root="$PWD"
+          for file in "${outputs[@]}"; do
             [ -f "$file" ] || continue
             base="$(basename "$file")"
             package="${base//_/-}"
-            7z a "release/${package}.7z" "$file"
+            (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
           done
 
       - name: Upload release asset
@@ -324,11 +330,18 @@ jobs:
       - name: Compress build output
         run: |
           mkdir -p release
-          for file in build/output/*; do
+          shopt -s nullglob
+          outputs=(build/output/*)
+          if [ ${#outputs[@]} -eq 0 ]; then
+            echo "::error::No file was produced in build/output; the Build step must have failed. Refusing to package or upload." >&2
+            exit 1
+          fi
+          repo_root="$PWD"
+          for file in "${outputs[@]}"; do
             [ -f "$file" ] || continue
             base="$(basename "$file")"
             package="${base//_/-}"
-            7z a "release/${package}.7z" "$file"
+            (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
           done
 
       - name: Upload release asset
@@ -396,11 +409,18 @@ jobs:
       - name: Compress build output
         run: |
           mkdir -p release
-          for file in build/output/*; do
+          shopt -s nullglob
+          outputs=(build/output/*)
+          if [ ${#outputs[@]} -eq 0 ]; then
+            echo "::error::No file was produced in build/output; the Build step must have failed. Refusing to package or upload." >&2
+            exit 1
+          fi
+          repo_root="$PWD"
+          for file in "${outputs[@]}"; do
             [ -f "$file" ] || continue
             base="$(basename "$file")"
             package="${base//_/-}"
-            7z a "release/${package}.7z" "$file"
+            (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
           done
 
       - name: Upload release asset
@@ -479,11 +499,18 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          for file in build/output/*; do
+          shopt -s nullglob
+          outputs=(build/output/*)
+          if [ ${#outputs[@]} -eq 0 ]; then
+            echo "::error::No file was produced in build/output; the Build step must have failed. Refusing to package or upload." >&2
+            exit 1
+          fi
+          repo_root="$PWD"
+          for file in "${outputs[@]}"; do
             [ -f "$file" ] || continue
             base="$(basename "$file")"
             package="${base//_/-}"
-            7z a "release/${package}.7z" "$file"
+            (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
           done
 
       - name: Upload release asset
