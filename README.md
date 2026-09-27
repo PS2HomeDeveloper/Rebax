@@ -52,3 +52,10 @@ Either **wget** or **curl** is required to download the prebuilt toolchain packa
 ## Usage
 
 ## License
+
+
+
+
+## License
+
+Rebax is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
