@@ -52,10 +52,12 @@ jobs:
           echo "LLVM_MINGW=$PWD/${dir%/}" >> "$GITHUB_ENV"
 
 
-      - name: Check llvm-objcopy targets
+
+
+      - name: Check llvm-objcopy version
         shell: bash
         run: |
-          "$LLVM_MINGW/bin/llvm-objcopy.exe" --info
+          "$LLVM_MINGW/bin/llvm-objcopy.exe" --version
 
 
           
