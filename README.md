@@ -51,8 +51,6 @@ Either **wget** or **curl** is required to download the prebuilt toolchain packa
 
 ## Usage
 
-## License
-
 
 
 
