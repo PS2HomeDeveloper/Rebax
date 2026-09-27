@@ -51,6 +51,11 @@ jobs:
           dir=$(ls -d llvm-mingw-extracted/*/)
           echo "LLVM_MINGW=$PWD/${dir%/}" >> "$GITHUB_ENV"
 
+      - name: Check llvm-objcopy formats
+        shell: bash
+        run: |
+          "$LLVM_MINGW/bin/llvm-objcopy.exe" --help | grep -A 30 "output-target"
+
       - name: Select cross compiler for ${{ matrix.architecture }}
         shell: bash
         run: |
