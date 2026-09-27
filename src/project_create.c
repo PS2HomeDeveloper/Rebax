@@ -8,6 +8,14 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#if defined(_WIN32)
+#include <direct.h>
+#define REBAX_MKDIR(path, mode) _mkdir(path)
+#else
+#define REBAX_MKDIR(path, mode) mkdir(path, mode)
+#endif
+
 #include <errno.h>
 
 #include "project_create.h"
@@ -19,7 +27,7 @@ static int ensure_dir(const char *path) {
     if (stat(path, &st) == 0) {
         return S_ISDIR(st.st_mode) ? 1 : 0; /* موجود لكنه ملف عادي مو مجلد -> فشل */
     }
-    if (mkdir(path, 0755) == 0) {
+    if (REBAX_MKDIR(path, 0755) == 0) {
         return 1;
     }
     return (errno == EEXIST) ? 1 : 0;
