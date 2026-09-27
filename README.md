@@ -1,6 +1,6 @@
 # Rebax
 
-A 2D and 3D game engine for creating games and applications that run on the **PlayStation 2**.
+**Rebax** is a 2D and 3D game engine designed for creating games and applications that run on the **PlayStation 2**.
 
 The project aims to bring together tools from the **PS2 Developer Community** and transform traditionally command-line-based workflows into an easy-to-use graphical application.
 
@@ -8,18 +8,18 @@ Rebax is designed to simplify the development process by providing a graphical i
 
 ## Export Formats
 
-Supports exporting projects in the following formats:
+Rebax supports exporting projects in the following formats:
 
 - **ISO**
 - **Raw ELF**
 
 ## Build Requirements
 
-The following requirements are needed to build the project.
+Before building Rebax, make sure the following requirements are available on your system.
 
 ### 1. Internet Connection
 
-Required to download the appropriate toolchain package during the build process.
+An active internet connection is required to download the appropriate toolchain package during the build process.
 
 ### 2. GCC or Clang
 
@@ -31,7 +31,7 @@ A C compiler such as **GCC** or **Clang** is required to compile the project's C
 
 ### 4. SDL2
 
-The **SDL2** library is required for the graphical interface, window management, input handling, and other platform-level functionality.
+The **SDL2** library is required for Rebax's graphical interface and windowing functionality, including handling the application window, input, rendering-related functionality, and other platform-level features.
 
 ### 5. wget or curl
 
