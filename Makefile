@@ -1,6 +1,6 @@
 # =============================================================================
 # Requirements installed on the machine (searched for by this Makefile):
-#   - a C compiler: gcc (or clang), which also provides objcopy through binutils
+#   - a C compiler: gcc (or clang)
 #   - make
 #   - curl (or wget), used once to download the toolchains
 #   - SDL2 (SDL.h and the library)
@@ -62,13 +62,6 @@ ifeq ($(origin CC),default)
   CC := $(DETECTED_CC)
 endif
 
-ifeq ($(origin OBJCOPY),undefined)
-  OBJCOPY := $(call have,objcopy)
-endif
-ifeq ($(OBJCOPY),)
-  $(error objcopy is not available on this system. Install binutils or pass it manually with "make OBJCOPY=<path>")
-endif
-
 CC_TARGET := $(shell $(CC) -dumpmachine)
 ifeq ($(CC_TARGET),)
   $(error Could not determine the compiler target. Verify that the selected compiler supports "-dumpmachine")
@@ -120,8 +113,6 @@ else ifneq ($(findstring aarch64,$(CC_TARGET)),)
   TOOLCHAIN_ASSET := rebax-toolchains-linux-arm64.tar.xz
 else ifneq ($(findstring i686,$(CC_TARGET)),)
   TOOLCHAIN_ASSET := rebax-toolchains-linux-x86.tar.xz
-else ifneq ($(findstring x86_64,$(CC_TARGET)),)
-  TOOLCHAIN_ASSET := rebax-toolchains-linux-x86_64.tar.xz
 else ifneq ($(findstring x86,$(CC_TARGET)),)
   TOOLCHAIN_ASSET := rebax-toolchains-linux-x86.tar.xz
 else
@@ -175,45 +166,6 @@ ifneq ($(TOOLCHAIN_MISSING),)
     $(error [toolchains] downloaded package did not provide required files: $(TOOLCHAIN_MISSING_AFTER))
   endif
 endif
-endif
-
-ifneq ($(findstring mingw,$(CC_TARGET)),)
-  OC_FORMAT := pe-x86-64
-  OC_ARCH   := i386:x86-64
-else ifneq ($(findstring windows,$(CC_TARGET)),)
-  OC_FORMAT := pe-x86-64
-  OC_ARCH   := i386:x86-64
-else ifneq ($(findstring apple-darwin,$(CC_TARGET)),)
-  ifneq ($(findstring arm64,$(CC_TARGET)),)
-    OC_FORMAT := mach-o-arm64
-    OC_ARCH   := aarch64
-  else ifneq ($(findstring aarch64,$(CC_TARGET)),)
-    OC_FORMAT := mach-o-arm64
-    OC_ARCH   := aarch64
-  else
-    OC_FORMAT := mach-o-x86-64
-    OC_ARCH   := i386:x86-64
-  endif
-else ifneq ($(findstring x86_64,$(CC_TARGET)),)
-  OC_FORMAT := elf64-x86-64
-  OC_ARCH   := i386:x86-64
-else ifneq ($(findstring amd64,$(CC_TARGET)),)
-  OC_FORMAT := elf64-x86-64
-  OC_ARCH   := i386:x86-64
-else ifneq ($(findstring aarch64,$(CC_TARGET)),)
-  OC_FORMAT := elf64-littleaarch64
-  OC_ARCH   := aarch64
-else ifneq ($(findstring arm64,$(CC_TARGET)),)
-  OC_FORMAT := elf64-littleaarch64
-  OC_ARCH   := aarch64
-else ifneq ($(findstring armv7,$(CC_TARGET)),)
-  OC_FORMAT := elf32-littlearm
-  OC_ARCH   := arm
-else ifneq ($(findstring i686,$(CC_TARGET)),)
-  OC_FORMAT := elf32-i386
-  OC_ARCH   := i386
-else
-  $(warning Unknown objcopy format for compiler target ($(CC_TARGET)). Pass it manually with "make OC_FORMAT=... OC_ARCH=...")
 endif
 
 ENGINE_VERSION := v0.0.1
@@ -364,7 +316,8 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_
 	$(CC) $(CFLAGS) -c $< -o $@
 $(OBJ_DIR)/embedded/%.o: $(EMBEDDED_DIR)/%
 	@$(RTOOL) mkdir $(dir $@)
-	$(OBJCOPY) -I binary -O $(OC_FORMAT) -B $(OC_ARCH) $< $@
+	@$(RTOOL) embed-asm $@.S $<
+	$(CC) -c $@.S -o $@
 clean:
 	@$(RTOOL) rm $(BUILD_DIR) $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_REGISTRY_GENERATED) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_ARCHIVE)
 run: all
