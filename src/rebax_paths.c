@@ -49,7 +49,7 @@ static void mkdir_recursive(const char *path) {
             *p = sep;
         }
     }
-    mkdir(buf, 0755);
+    REBAX_MKDIR(buf, 0755);
 }
 
 static void compute_paths(void) {
