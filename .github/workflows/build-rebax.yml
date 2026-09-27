@@ -39,42 +39,22 @@ jobs:
             echo "Release $tag does not exist yet; nothing to delete."
           fi
 
-  # تعمل مباشرة بعد الحذف، ولا تنتظر نجاح أي من عمليات البناء —
-  # تنتج نسخة محدثة من ملفي الكود المصدري (Source code zip/tar.gz)
-  # من الملفات الحالية الموجودة في المستودع عند الوسم RELEASE_TAG وترفعهما إلى الريليس
-  publish-source:
-    name: Publish updated source code archives
-    runs-on: ubuntu-24.04
-    needs: prepare-release
-
-    steps:
-      - name: Checkout at release tag
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
 
-      - name: Create source archives from current repository files
+      - name: Move the release tag to the latest commit
         run: |
-          mkdir -p source-release
-          # نزيل حرف v من بداية الوسم إن وجد (v0.0.1 -> 0.0.1)
-          version="${RELEASE_TAG#v}"
-          echo "SOURCE_VERSION=$version" >> "$GITHUB_ENV"
-          git archive --format=zip -o "source-release/Rebax-Source-${version}.zip" HEAD
-          git archive --format=tar.gz -o "source-release/Rebax-Source-${version}.tar.gz" HEAD
-
-      - name: Upload source archives to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            source-release/Rebax-Source-${{ env.SOURCE_VERSION }}.zip
-            source-release/Rebax-Source-${{ env.SOURCE_VERSION }}.tar.gz
-          fail_on_unmatched_files: true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "${{ env.RELEASE_TAG }}"
+          git push origin "${{ env.RELEASE_TAG }}" --force
 
   windows:
     name: Windows
     runs-on: windows-2025
-    needs: [prepare-release, publish-source]
+    needs: prepare-release
 
     env:
       LLVM_MINGW_TAG: 20260505
@@ -196,7 +176,7 @@ jobs:
   linux:
     name: Linux
     runs-on: ubuntu-24.04
-    needs: [prepare-release, publish-source]
+    needs: prepare-release
 
     strategy:
       fail-fast: false
@@ -310,7 +290,7 @@ jobs:
   android:
     name: Android
     runs-on: ubuntu-24.04
-    needs: [prepare-release, publish-source]
+    needs: prepare-release
 
     env:
       NDK_VERSION: 27.3.13750724
@@ -418,7 +398,7 @@ jobs:
   macos:
     name: macOS
     runs-on: macos-14
-    needs: [prepare-release, publish-source]
+    needs: prepare-release
 
     strategy:
       fail-fast: false
@@ -497,7 +477,7 @@ jobs:
   ios:
     name: iOS
     runs-on: macos-14
-    needs: [prepare-release, publish-source]
+    needs: prepare-release
 
     strategy:
       fail-fast: false
