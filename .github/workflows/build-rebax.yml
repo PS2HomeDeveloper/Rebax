@@ -439,7 +439,7 @@ jobs:
 
       - name: Build
         run: |
-          make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
+          make
 
       - name: Compress build output
         run: |
