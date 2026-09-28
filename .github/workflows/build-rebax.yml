@@ -132,14 +132,7 @@ jobs:
           echo "SDL2_CFLAGS=-I$PWD/sdl2-windows/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L$PWD/sdl2-windows/lib -lSDL2" >> "$GITHUB_ENV"
 
-      - name: Build (native x86_64 - plain make only)
-        if: matrix.architecture == 'x86_64'
-        shell: bash
-        run: |
-          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe"
-
       - name: Build
-        if: matrix.architecture != 'x86_64'
         shell: bash
         run: |
           "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" \
@@ -256,13 +249,7 @@ jobs:
           echo "SDL2_CFLAGS=-I/usr/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L/usr/lib/x86_64-linux-gnu -lSDL2" >> "$GITHUB_ENV"
 
-      - name: Build (native x86_64 - plain make only)
-        if: matrix.architecture == 'x86_64'
-        run: |
-          make
-
       - name: Build
-        if: matrix.architecture != 'x86_64'
         run: |
           make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
 
@@ -450,13 +437,7 @@ jobs:
           echo "SDL2_CFLAGS=-I$PWD/sdl2-macos/include -I$PWD/sdl2-macos/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L$PWD/sdl2-macos/lib -lSDL2" >> "$GITHUB_ENV"
 
-      - name: Build (native arm64 - plain make only)
-        if: matrix.architecture == 'arm64'
-        run: |
-          make
-
       - name: Build
-        if: matrix.architecture != 'arm64'
         run: |
           make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
 
