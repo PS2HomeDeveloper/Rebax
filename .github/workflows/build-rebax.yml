@@ -464,6 +464,20 @@ jobs:
           uname -m
           echo
 
+          
+      - name: Diagnose rebax_build_tool
+        run: |
+          echo "=== Building rebax_build_tool manually ==="
+
+          gcc -std=c99 -O2 \
+            -DZ7_ST \
+            -D_7ZIP_ST \
+            -D_POSIX_C_SOURCE=200809L \
+            -o /tmp/rebax_build_tool \
+            rebax_build_tool/src/*.c \
+            -lm
+
+            
       - name: Build
         run: |
           make
