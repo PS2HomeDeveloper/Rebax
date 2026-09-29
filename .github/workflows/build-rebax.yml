@@ -436,47 +436,6 @@ jobs:
           find "$PWD/sdl2-macos" -type f
           echo "SDL2_CFLAGS=-I$PWD/sdl2-macos/include -I$PWD/sdl2-macos/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L$PWD/sdl2-macos/lib -lSDL2" >> "$GITHUB_ENV"
-
-      - name: Diagnose macOS compiler
-        run: |
-          echo "=== System ==="
-          uname -a
-          echo
-
-          echo "=== gcc ==="
-          which gcc
-          gcc --version
-          gcc -dumpmachine
-          echo
-
-          echo "=== clang ==="
-          which clang
-          clang --version
-          clang -dumpmachine
-          echo
-
-          echo "=== SDK ==="
-          echo "SDKROOT=$SDKROOT"
-          xcrun --show-sdk-path
-          echo
-
-          echo "=== Architecture ==="
-          uname -m
-          echo
-
-          
-      - name: Diagnose rebax_build_tool
-        run: |
-          echo "=== Building rebax_build_tool manually ==="
-
-          gcc -std=c99 -O2 \
-            -DZ7_ST \
-            -D_7ZIP_ST \
-            -D_POSIX_C_SOURCE=200809L \
-            -o /tmp/rebax_build_tool \
-            rebax_build_tool/src/*.c \
-            -lm
-
             
       - name: Build
         run: |
