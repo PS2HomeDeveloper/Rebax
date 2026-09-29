@@ -44,7 +44,23 @@ else
 endif
 
 $(shell $(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) -o $(RTOOL) $(RTOOL_SOURCES) -lm)
+    ifeq ($(shell uname -s),Darwin)
+    RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
+  else
+    RTOOL_PLATFORM_CFLAGS :=
+  endif
+
+  $(info [rebax_build_tool] building $(RTOOL) with $(HOSTCC)...)
+  $(info [rebax_build_tool] platform flags: $(RTOOL_PLATFORM_CFLAGS))
+
+  RTOOL_BUILD_OUTPUT := $(shell $(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) -o $(RTOOL) $(RTOOL_SOURCES) -lm 2>&1)
+
+  $(info [rebax_build_tool] compiler output:)
+  $(info $(RTOOL_BUILD_OUTPUT))
+
   ifeq ($(wildcard $(RTOOL)),)
+    $(error Could not build $(RTOOL) from $(RTOOL_SRC_DIR))
+  endif
     $(error Could not build $(RTOOL) from $(RTOOL_SRC_DIR))
   endif
 endif
