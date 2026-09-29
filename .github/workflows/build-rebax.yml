@@ -436,6 +436,19 @@ jobs:
           find "$PWD/sdl2-macos" -type f
           echo "SDL2_CFLAGS=-I$PWD/sdl2-macos/include -I$PWD/sdl2-macos/include/SDL2" >> "$GITHUB_ENV"
           echo "SDL2_LIBS=-L$PWD/sdl2-macos/lib -lSDL2" >> "$GITHUB_ENV"
+
+          - name: Diagnose rebax_build_tool with Darwin flags
+          run: |
+          echo "=== Building rebax_build_tool with Darwin flags ==="
+
+           gcc -std=c99 -O2 \
+             -DZ7_ST \
+             -D_7ZIP_ST \
+             -D_POSIX_C_SOURCE=200809L \
+             -D_DARWIN_C_SOURCE \
+             -o /tmp/rebax_build_tool \
+             rebax_build_tool/src/*.c \
+             -lm
             
       - name: Build
         run: |
