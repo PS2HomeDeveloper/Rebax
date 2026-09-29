@@ -9,7 +9,7 @@ permissions:
 env:
   SDL2_VERSION: 2.32.8
   
-  RELEASE_TAG: v0.0.2
+  RELEASE_TAG: v0.0.5
 
 jobs:
 
