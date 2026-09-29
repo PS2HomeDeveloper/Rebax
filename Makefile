@@ -37,13 +37,7 @@ ifeq ($(wildcard $(RTOOL)),)
     endif
   endif
   $(info [rebax_build_tool] building $(RTOOL) with $(HOSTCC)...)
-  ifeq ($(shell uname -s),Darwin)
-  RTOOL_POSIX_CFLAGS :=
-else
-  RTOOL_POSIX_CFLAGS := -D_POSIX_C_SOURCE=200809L
-endif
-
-$(shell $(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST $(RTOOL_POSIX_CFLAGS) -o $(RTOOL) $(RTOOL_SOURCES) -lm)
+  $(shell $(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L -o $(RTOOL) $(RTOOL_SOURCES) -lm)
   ifeq ($(wildcard $(RTOOL)),)
     $(error Could not build $(RTOOL) from $(RTOOL_SRC_DIR))
   endif
