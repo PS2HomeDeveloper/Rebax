@@ -25,7 +25,7 @@ RTOOL_SOURCES := $(wildcard $(RTOOL_SRC_DIR)/*.c)
 
 # build_tool runs on the build host, so never fall back to the target compiler (CC).
 ifeq ($(wildcard $(RTOOL)),)
-    ifeq ($(strip $(HOSTCC)),)
+  ifeq ($(strip $(HOSTCC)),)
     ifeq ($(shell uname -s),Darwin)
       ifneq ($(strip $(shell clang -dumpmachine)),)
         HOSTCC := clang
@@ -58,14 +58,13 @@ ifeq ($(wildcard $(RTOOL)),)
   $(info [rebax_build_tool] building $(RTOOL) with $(HOSTCC)...)
   $(info [rebax_build_tool] platform flags: $(RTOOL_PLATFORM_CFLAGS))
 
-  RTOOL_BUILD_OUTPUT := $(shell $(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) -o $(RTOOL) $(RTOOL_SOURCES) -lm 2>&1)
+  $(RTOOL): $(RTOOL_SOURCES)
+	@mkdir -p $(RTOOL_DIR)
+	@echo "==> Building $(RTOOL)"
+	$(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) -o $@ $(RTOOL_SOURCES) -lm
 
-  $(info [rebax_build_tool] compiler output:)
-  $(info $(RTOOL_BUILD_OUTPUT))
-
-  ifeq ($(wildcard $(RTOOL)),)
-    $(error Could not build $(RTOOL) from $(RTOOL_SRC_DIR))
-  endif
+  .PHONY: rebax-build-tool
+  rebax-build-tool: $(RTOOL)
 endif
 
 # $(call have,NAME) returns NAME if that program is found in PATH, else nothing
