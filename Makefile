@@ -156,30 +156,28 @@ endif
 TOOLCHAIN_REQUIRED := $(TOOLCHAINS_DIR)/ps2dev.tar.xz $(TOOLCHAINS_DIR)/$(TOOLCHAIN_MAKE_BIN)
 TOOLCHAIN_ASSET_URL := $(TOOLCHAIN_RELEASE_BASE)/$(TOOLCHAIN_ASSET)
 TOOLCHAIN_TMP := $(BUILD_DIR)/.$(TOOLCHAIN_ASSET).part
-TOOLCHAIN_STAMP := $(TOOLCHAINS_DIR)/.rebax-$(TARGET_PLATFORM)-$(TARGET_ARCH).ready
-DOWNLOAD_CURL := $(strip $(shell curl --version 2>/dev/null))
-DOWNLOAD_WGET := $(strip $(shell wget --version 2>/dev/null))
 
-$(TOOLCHAIN_STAMP): $(RTOOL) | $(BUILD_DIR)
-	@echo "==> Preparing PS2 toolchain $(TOOLCHAIN_ASSET)"
-	@$(RTOOL) mkdir $(TOOLCHAINS_DIR)
-	@$(RTOOL) rm $(TOOLCHAIN_TMP)
-ifeq ($(DOWNLOAD_CURL),)
-ifneq ($(DOWNLOAD_WGET),)
-	@wget -O $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL)
-else
-	@echo "curl or wget is required" && false
-endif
-else
-	@curl -fL --retry 3 --connect-timeout 15 -o $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL)
-endif
-	@$(RTOOL) extract $(TOOLCHAIN_TMP) $(TOOLCHAINS_DIR)
-	@$(RTOOL) rm $(TOOLCHAIN_TMP)
-	@$(RTOOL) exists $(word 1,$(TOOLCHAIN_REQUIRED))
-	@$(RTOOL) exists $(word 2,$(TOOLCHAIN_REQUIRED))
-	@$(RTOOL) cp $(word 1,$(TOOLCHAIN_REQUIRED)) $@
+.PHONY: prepare-toolchain
+prepare-toolchain: $(RTOOL) | $(BUILD_DIR)
+	@if $(RTOOL) exists "$(word 1,$(TOOLCHAIN_REQUIRED))" && $(RTOOL) exists "$(word 2,$(TOOLCHAIN_REQUIRED))"; then \
+		exit 0; \
+	fi; \
+	echo "==> Preparing PS2 toolchain $(TOOLCHAIN_ASSET)"; \
+	$(RTOOL) mkdir $(TOOLCHAINS_DIR); \
+	$(RTOOL) rm $(TOOLCHAIN_TMP); \
+	if curl --version >/dev/null 2>&1; then \
+		curl -fL --retry 3 --connect-timeout 15 -o $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL); \
+	elif wget --version >/dev/null 2>&1; then \
+		wget -O $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL); \
+	else \
+		echo "curl or wget is required"; exit 1; \
+	fi; \
+	$(RTOOL) extract $(TOOLCHAIN_TMP) $(TOOLCHAINS_DIR); \
+	$(RTOOL) rm $(TOOLCHAIN_TMP); \
+	$(RTOOL) exists $(word 1,$(TOOLCHAIN_REQUIRED)); \
+	$(RTOOL) exists $(word 2,$(TOOLCHAIN_REQUIRED))
 
-$(TOOLCHAIN_REQUIRED): $(TOOLCHAIN_STAMP)
+$(TOOLCHAIN_REQUIRED): prepare-toolchain
 
 SRC_DIR := src
 EMBEDDED_DIR := embedded
