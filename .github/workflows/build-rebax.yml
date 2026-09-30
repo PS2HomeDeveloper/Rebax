@@ -246,10 +246,6 @@ jobs:
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-linux" -type f
 
-      - name: Use system SDL2
-        if: matrix.architecture == 'x86_64'
-        run: |
-
       - name: Build
         run: |
           make
