@@ -159,7 +159,15 @@ TOOLCHAIN_TMP := $(BUILD_DIR)/.$(TOOLCHAIN_ASSET).part
 
 .PHONY: prepare-toolchain
 prepare-toolchain: $(RTOOL) | $(BUILD_DIR)
-	@if $(RTOOL) exists "$(word 1,$(TOOLCHAIN_REQUIRED))" && $(RTOOL) exists "$(word 2,$(TOOLCHAIN_REQUIRED))"; then \
+	@dir_exists=$$($(RTOOL) exists $(TOOLCHAINS_DIR)); \
+	dir_empty=$$($(RTOOL) dir-empty $(TOOLCHAINS_DIR)); \
+	first_exists=$$($(RTOOL) exists $(word 1,$(TOOLCHAIN_REQUIRED))); \
+	second_exists=$$($(RTOOL) exists $(word 2,$(TOOLCHAIN_REQUIRED))); \
+	if [ "$$dir_exists" = 1 ] && [ "$$dir_empty" = 0 ]; then \
+		if [ "$$first_exists" = 1 ] && [ "$$second_exists" = 1 ]; then \
+			exit 0; \
+		fi; \
+		echo "Warning: PS2 toolchain directory is not empty but required files are missing."; \
 		exit 0; \
 	fi; \
 	echo "==> Preparing PS2 toolchain $(TOOLCHAIN_ASSET)"; \
@@ -174,8 +182,9 @@ prepare-toolchain: $(RTOOL) | $(BUILD_DIR)
 	fi; \
 	$(RTOOL) extract $(TOOLCHAIN_TMP) $(TOOLCHAINS_DIR); \
 	$(RTOOL) rm $(TOOLCHAIN_TMP); \
-	$(RTOOL) exists $(word 1,$(TOOLCHAIN_REQUIRED)); \
-	$(RTOOL) exists $(word 2,$(TOOLCHAIN_REQUIRED))
+	if [ "$$($(RTOOL) exists $(word 1,$(TOOLCHAIN_REQUIRED)))" != 1 ] || [ "$$($(RTOOL) exists $(word 2,$(TOOLCHAIN_REQUIRED)))" != 1 ]; then \
+		echo "Warning: downloaded PS2 toolchain is missing required files."; \
+	fi
 
 $(TOOLCHAIN_REQUIRED): prepare-toolchain
 
