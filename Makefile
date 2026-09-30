@@ -10,52 +10,103 @@ else
   RTOOL_EXE :=
 endif
 RTOOL := $(RTOOL_DIR)/build_tool$(RTOOL_EXE)
-RTOOL_SOURCES := $(wildcard $(RTOOL_SRC_DIR)/*.c)
+RTOOL_C_SOURCES := $(wildcard $(RTOOL_SRC_DIR)/*.c)
+RTOOL_SOURCES := $(RTOOL_C_SOURCES) $(wildcard $(RTOOL_SRC_DIR)/*.h)
+HOSTCC := cc
+HOST_TRIPLE := $(shell $(HOSTCC) -dumpmachine 2>/dev/null)
 
-HOSTCC ?= cc
-ifeq ($(origin CC),default)
-  CC := gcc
+TARGET_CONFIG := $(if $(wildcard .rebax-target),$(file <.rebax-target),)
+TARGET_PLATFORM := $(patsubst platform=%,%,$(filter platform=%,$(TARGET_CONFIG)))
+TARGET_ARCH := $(patsubst arch=%,%,$(filter arch=%,$(TARGET_CONFIG)))
+ifeq ($(strip $(TARGET_PLATFORM)),)
+  ifeq ($(OS),Windows_NT)
+    TARGET_PLATFORM := windows
+  else ifneq ($(findstring apple-ios,$(HOST_TRIPLE)),)
+    TARGET_PLATFORM := ios
+  else ifneq ($(findstring apple-darwin,$(HOST_TRIPLE)),)
+    TARGET_PLATFORM := macos
+  else
+    TARGET_PLATFORM := linux
+  endif
 endif
-ifneq ($(strip $(REBAX_CC)),)
-  CC := $(REBAX_CC)
-endif
-
-RTOOL_PLATFORM_CFLAGS :=
-ifeq ($(REBAX_TARGET_PLATFORM),macos)
-  RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
-else ifeq ($(REBAX_TARGET_PLATFORM),ios)
-  RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
-endif
-
-$(RTOOL): $(RTOOL_SOURCES)
-	@echo "==> Building $(RTOOL) with $(HOSTCC)"
-	$(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) -o $@ $(RTOOL_SOURCES) -lm
-
-.PHONY: rebax-build-tool
-rebax-build-tool: $(RTOOL)
-
-ENGINE_VERSION := v0.0.1
-TARGET_PLATFORM ?= linux
-TARGET_ARCH ?= x86_64
-ifneq ($(strip $(REBAX_TARGET_PLATFORM)),)
-  TARGET_PLATFORM := $(REBAX_TARGET_PLATFORM)
-endif
-ifneq ($(strip $(REBAX_TARGET_ARCH)),)
-  TARGET_ARCH := $(REBAX_TARGET_ARCH)
-endif
-
-ifeq ($(TARGET_PLATFORM),android)
-  ifeq ($(TARGET_ARCH),arm64)
-    TARGET_ARCH := arm64-v8a
+ifeq ($(strip $(TARGET_ARCH)),)
+  ifneq ($(findstring aarch64,$(HOST_TRIPLE)),)
+    TARGET_ARCH := arm64
+  else ifneq ($(findstring arm64,$(HOST_TRIPLE)),)
+    TARGET_ARCH := arm64
+  else ifneq ($(findstring armv7,$(HOST_TRIPLE)),)
+    TARGET_ARCH := armeabi-v7a
+  else ifneq ($(findstring x86_64,$(HOST_TRIPLE)),)
+    TARGET_ARCH := x86_64
+  else ifneq ($(findstring amd64,$(HOST_TRIPLE)),)
+    TARGET_ARCH := x86_64
+  else
+    TARGET_ARCH := x86
   endif
 endif
 
+ENGINE_VERSION := v0.0.1
 TARGET_SUFFIX := $(TARGET_PLATFORM)_$(TARGET_ARCH)
 TARGET_NAME := Rebax_Engine_$(ENGINE_VERSION)_$(TARGET_SUFFIX)
 ifeq ($(TARGET_PLATFORM),windows)
   TARGET_NAME := $(TARGET_NAME).exe
 endif
 TARGET := $(OUTPUT_DIR)/$(TARGET_NAME)
+
+ifeq ($(TARGET_PLATFORM),linux)
+  ifeq ($(TARGET_ARCH),x86)
+    TARGET_CC := i686-linux-gnu-gcc
+  else ifeq ($(TARGET_ARCH),arm64)
+    TARGET_CC := aarch64-linux-gnu-gcc
+  else
+    TARGET_CC := gcc
+  endif
+else ifeq ($(TARGET_PLATFORM),windows)
+  ifeq ($(TARGET_ARCH),x86)
+    TARGET_TRIPLE := i686-w64-mingw32
+  else ifeq ($(TARGET_ARCH),x86_64)
+    TARGET_TRIPLE := x86_64-w64-mingw32
+  else
+    TARGET_TRIPLE := aarch64-w64-mingw32
+  endif
+  LLVM_MINGW_ROOT := $(firstword $(wildcard llvm-mingw-extracted/*))
+  TARGET_CC := $(LLVM_MINGW_ROOT)/bin/$(TARGET_TRIPLE)-clang.exe
+else ifeq ($(TARGET_PLATFORM),android)
+  ifeq ($(TARGET_ARCH),armeabi-v7a)
+    TARGET_TRIPLE := armv7a-linux-androideabi
+  else ifeq ($(TARGET_ARCH),arm64-v8a)
+    TARGET_TRIPLE := aarch64-linux-android
+  else ifeq ($(TARGET_ARCH),x86)
+    TARGET_TRIPLE := i686-linux-android
+  else
+    TARGET_TRIPLE := x86_64-linux-android
+  endif
+  ANDROID_NDK_ROOT := $(if $(ANDROID_NDK_HOME),$(ANDROID_NDK_HOME),$(firstword $(wildcard $(ANDROID_HOME)/ndk/*)))
+  ANDROID_NDK_BIN := $(firstword $(wildcard $(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/*/bin))
+  TARGET_CC := $(ANDROID_NDK_BIN)/$(TARGET_TRIPLE)21-clang
+else ifeq ($(TARGET_PLATFORM),macos)
+  TARGET_CC := clang -arch $(TARGET_ARCH) -isysroot $(shell xcrun --sdk macosx --show-sdk-path 2>/dev/null) -mmacosx-version-min=11.0
+else
+  ifeq ($(TARGET_ARCH),arm64)
+    TARGET_CC := clang -arch arm64 -isysroot $(shell xcrun --sdk iphoneos --show-sdk-path 2>/dev/null) -mios-version-min=13.0
+  else
+    TARGET_CC := clang -arch x86_64 -isysroot $(shell xcrun --sdk iphonesimulator --show-sdk-path 2>/dev/null) -mios-simulator-version-min=13.0
+  endif
+endif
+
+RTOOL_PLATFORM_CFLAGS :=
+ifeq ($(TARGET_PLATFORM),macos)
+  RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
+else ifeq ($(TARGET_PLATFORM),ios)
+  RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
+endif
+
+$(RTOOL): $(RTOOL_SOURCES)
+	@echo "==> Building $(RTOOL) with $(HOSTCC)"
+	$(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) -o $@ $(RTOOL_C_SOURCES) -lm
+
+.PHONY: rebax-build-tool
+rebax-build-tool: $(RTOOL)
 
 TOOLCHAIN_RELEASE_BASE := https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/download/1.0.0
 TOOLCHAINS_DIR := embedded/toolchains
@@ -96,24 +147,35 @@ else ifeq ($(TARGET_ARCH),x86)
 else
   TOOLCHAIN_ASSET := rebax-toolchains-linux-x86_64.tar.xz
 endif
-
 ifeq ($(TARGET_PLATFORM),windows)
   TOOLCHAIN_MAKE_BIN := make.exe
 else
   TOOLCHAIN_MAKE_BIN := make
 endif
 TOOLCHAIN_REQUIRED := $(TOOLCHAINS_DIR)/ps2dev.tar.xz $(TOOLCHAINS_DIR)/$(TOOLCHAIN_MAKE_BIN)
-TOOLCHAIN_STAMP := $(TOOLCHAINS_DIR)/.rebax-$(TARGET_PLATFORM)-$(TARGET_ARCH).ready
-TOOLCHAIN_TMP := $(BUILD_DIR)/.$(TOOLCHAIN_ASSET).part
 TOOLCHAIN_ASSET_URL := $(TOOLCHAIN_RELEASE_BASE)/$(TOOLCHAIN_ASSET)
+TOOLCHAIN_TMP := $(BUILD_DIR)/.$(TOOLCHAIN_ASSET).part
+TOOLCHAIN_STAMP := $(TOOLCHAINS_DIR)/.rebax-$(TARGET_PLATFORM)-$(TARGET_ARCH).ready
+DOWNLOAD_CURL := $(strip $(shell curl --version 2>/dev/null))
+DOWNLOAD_WGET := $(strip $(shell wget --version 2>/dev/null))
 
 $(TOOLCHAIN_STAMP): $(RTOOL) | $(BUILD_DIR)
 	@echo "==> Preparing PS2 toolchain $(TOOLCHAIN_ASSET)"
 	@$(RTOOL) mkdir $(TOOLCHAINS_DIR)
 	@$(RTOOL) rm $(TOOLCHAIN_TMP)
-	@curl -fL --retry 3 --connect-timeout 15 -o $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL) || wget -O $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL)
+ifeq ($(DOWNLOAD_CURL),)
+ifneq ($(DOWNLOAD_WGET),)
+	@wget -O $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL)
+else
+	@echo "curl or wget is required" && false
+endif
+else
+	@curl -fL --retry 3 --connect-timeout 15 -o $(TOOLCHAIN_TMP) $(TOOLCHAIN_ASSET_URL)
+endif
 	@$(RTOOL) extract $(TOOLCHAIN_TMP) $(TOOLCHAINS_DIR)
 	@$(RTOOL) rm $(TOOLCHAIN_TMP)
+	@$(RTOOL) exists $(word 1,$(TOOLCHAIN_REQUIRED))
+	@$(RTOOL) exists $(word 2,$(TOOLCHAIN_REQUIRED))
 	@$(RTOOL) cp $(word 1,$(TOOLCHAIN_REQUIRED)) $@
 
 $(TOOLCHAIN_REQUIRED): $(TOOLCHAIN_STAMP)
@@ -124,7 +186,6 @@ ICON_SRC_DIR := $(EMBEDDED_DIR)/resources/images/icons/icons_src
 ICON_ATLAS_PNG := $(EMBEDDED_DIR)/resources/images/icons/icons.png
 ICON_NAMES_HEADER := $(SRC_DIR)/icon_names.h
 ICON_SOURCE_FILES := $(sort $(wildcard $(ICON_SRC_DIR)/*.png))
-
 rwildcard = $(filter-out $(patsubst %/,%,$(wildcard $1*/)),$(wildcard $1$2)) $(foreach d,$(wildcard $1*/),$(call rwildcard,$d,$2))
 NODE_SRC_DIR := $(EMBEDDED_DIR)/nodes
 NODE_EDITOR_SRC_DIR := $(SRC_DIR)/nodes_editor
@@ -135,7 +196,6 @@ NODE_REGISTRY_GENERATED := $(SRC_DIR)/node_registry_generated.h
 NODE_EDITOR_REGISTRY_GENERATED := $(SRC_DIR)/node_editor_registry_generated.h
 NODE_TYPES_HEADER := $(SRC_DIR)/node_types.h
 NODE_ARCHIVE := $(EMBEDDED_DIR)/nodes.tar.xz
-
 SRCS := $(call rwildcard,$(SRC_DIR)/,*.c)
 SRC_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
 EMBEDDED_RESOURCE_FILES := $(sort $(call rwildcard,$(EMBEDDED_DIR)/resources/,*))
@@ -144,44 +204,39 @@ EMBEDDED_OBJS := $(patsubst $(EMBEDDED_DIR)/%,$(OBJ_DIR)/embedded/%.o,$(EMBEDDED
 OBJS := $(SRC_OBJS) $(EMBEDDED_OBJS)
 DEPS := $(SRC_OBJS:.o=.d)
 
-SDL2_ROOT ?=
-ifneq ($(strip $(SDL2_ROOT)),)
-  SDL2_CFLAGS := -I$(SDL2_ROOT)/include -I$(SDL2_ROOT)/include/SDL2
-  SDL2_LIBS := -L$(SDL2_ROOT)/lib -lSDL2
-else
-  SDL2_CFLAGS := -I/usr/include/SDL2
-  SDL2_LIBS := -lSDL2
+SDL2_PREFIX := $(firstword $(patsubst %/include/SDL.h,%,$(wildcard sdl2-$(TARGET_PLATFORM)/include/SDL.h sdl2-$(TARGET_PLATFORM)/include/SDL2/SDL.h /usr/include/SDL2/SDL.h /usr/local/include/SDL2/SDL.h /opt/homebrew/include/SDL2/SDL.h)) )
+ifeq ($(strip $(SDL2_PREFIX)),)
+  SDL2_PREFIX := /usr
 endif
+SDL2_INCLUDE_DIR := $(firstword $(wildcard $(SDL2_PREFIX)/include/SDL2 $(SDL2_PREFIX)/include))
+SDL2_LIB_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/lib $(SDL2_PREFIX)/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu))
+SDL2_CFLAGS := -I$(SDL2_INCLUDE_DIR) -I$(SDL2_INCLUDE_DIR)/SDL2
+SDL2_LIBS := -L$(SDL2_LIB_DIR) -lSDL2
 
 CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) -MMD -MP $(SDL2_CFLAGS) $(ARCHIVE_CFLAGS)
 $(OBJ_DIR)/xz_embedded.o: CFLAGS += -O3
 $(OBJ_DIR)/rebax_fs.o: CFLAGS += -O2
 LDLIBS := -lm $(SDL2_LIBS)
 
-WINDOWS_RUNTIME_LIBS := SDL2.dll
-ANDROID_RUNTIME_LIBS := libSDL2.so
-LINUX_RUNTIME_LIBS := libSDL2-2.0.so.0
-MACOS_RUNTIME_LIBS := libSDL2-2.0.0.dylib
 ifeq ($(TARGET_PLATFORM),windows)
-  RUNTIME_LIBS := $(WINDOWS_RUNTIME_LIBS)
+  RUNTIME_LIBS := SDL2.dll
+  RUNTIME_DIRS := sdl2-windows/bin sdl2-windows/lib
 else ifeq ($(TARGET_PLATFORM),android)
-  RUNTIME_LIBS := $(ANDROID_RUNTIME_LIBS)
+  RUNTIME_LIBS := libSDL2.so
+  RUNTIME_DIRS := sdl2-android/lib
 else ifeq ($(TARGET_PLATFORM),linux)
-  RUNTIME_LIBS := $(LINUX_RUNTIME_LIBS)
+  RUNTIME_LIBS := libSDL2-2.0.so.0
+  RUNTIME_DIRS := sdl2-linux/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu
 else ifeq ($(TARGET_PLATFORM),macos)
-  RUNTIME_LIBS := $(MACOS_RUNTIME_LIBS)
+  RUNTIME_LIBS := libSDL2-2.0.0.dylib
+  RUNTIME_DIRS := sdl2-macos/lib /opt/homebrew/lib /usr/local/lib
 else
   RUNTIME_LIBS :=
-endif
-ifeq ($(TARGET_PLATFORM),windows)
-  SDL2_RUNTIME_DIR ?= $(SDL2_ROOT)/bin
-else
-  SDL2_RUNTIME_DIR ?= $(SDL2_ROOT)/lib
+  RUNTIME_DIRS :=
 endif
 
 .PHONY: all clean run generate bundle-runtime-libs gen-icons gen-node-registry gen-node-editor-registry gen-node-archive
 all: $(RTOOL) $(TOOLCHAIN_REQUIRED) generate $(TARGET) bundle-runtime-libs
-
 generate: gen-icons gen-node-registry gen-node-editor-registry gen-node-archive
 gen-icons: $(ICON_NAMES_HEADER) $(ICON_ATLAS_PNG)
 gen-node-registry: $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER)
@@ -194,52 +249,34 @@ $(ICON_ATLAS_PNG): $(ICON_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) icon-atlas $@ $(ICON_SOURCE_FILES)
 $(NODE_ARCHIVE): $(NODE_SOURCE_ALL_FILES) | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) pack $@ $(EMBEDDED_DIR) nodes
-
 $(TARGET): $(OBJS) | $(RTOOL) $(OUTPUT_DIR)
-	$(CC) $(OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
+	$(TARGET_CC) $(OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
 
 bundle-runtime-libs: $(TARGET) | $(RTOOL)
 	@$(RTOOL) mkdir $(OUTPUT_DIR)/libs
-	@for lib in $(RUNTIME_LIBS); do \
-		if $(RTOOL) exists "$(SDL2_RUNTIME_DIR)/$$lib"; then \
-			echo "==> Copying $$lib"; \
-			$(RTOOL) cp "$(SDL2_RUNTIME_DIR)/$$lib" "$(OUTPUT_DIR)/libs/$$lib"; \
-		elif $(RTOOL) exists "$(SDL2_ROOT)/$$lib"; then \
-			echo "==> Copying $$lib"; \
-			$(RTOOL) cp "$(SDL2_ROOT)/$$lib" "$(OUTPUT_DIR)/libs/$$lib"; \
-		else \
-			echo "Warning: runtime library not found: $$lib"; \
-		fi; \
-	done
+	@for lib in $(RUNTIME_LIBS); do for dir in $(RUNTIME_DIRS); do if $(RTOOL) exists "$$dir/$$lib"; then $(RTOOL) cp "$$dir/$$lib" "$(OUTPUT_DIR)/libs/$$lib"; break; fi; done; done
 
 $(BUILD_DIR): | $(RTOOL)
 	@$(RTOOL) mkdir $@
 $(OUTPUT_DIR): | $(RTOOL)
 	@$(RTOOL) mkdir $@
-
 $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER): $(NODE_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) node-registry $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(NODE_SOURCE_FILES)
 $(NODE_EDITOR_REGISTRY_GENERATED): $(NODE_EDITOR_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) node-editor-registry $@ $(NODE_EDITOR_SOURCE_FILES)
-
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_REGISTRY_GENERATED) $(NODE_EDITOR_REGISTRY_GENERATED) | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
+	$(TARGET_CC) $(CFLAGS) -c $< -o $@
 $(OBJ_DIR)/embedded/toolchains/$(TOOLCHAIN_MAKE_BIN).o: $(TOOLCHAINS_DIR)/$(TOOLCHAIN_MAKE_BIN) | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
 	@$(RTOOL) embed-asm $@.S $< embedded/toolchains/make
-	$(CC) -c $@.S -o $@
-
+	$(TARGET_CC) -c $@.S -o $@
 $(OBJ_DIR)/embedded/%.o: $(EMBEDDED_DIR)/% | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
 	@$(RTOOL) embed-asm $@.S $<
-	$(CC) -c $@.S -o $@
-
+	$(TARGET_CC) -c $@.S -o $@
 clean: | $(RTOOL)
-	@$(RTOOL) rm $(BUILD_DIR) $(NODE_ARCHIVE) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(ICON_NAMES_HEADER)
-	@$(RTOOL) rm-dir $(EMBEDDED_DIR)/resources/images/icons
+	@$(RTOOL) rm $(BUILD_DIR) $(NODE_ARCHIVE) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(ICON_NAMES_HEADER) .rebax-target
 run: all
 	$(TARGET)
-
 -include $(DEPS)
