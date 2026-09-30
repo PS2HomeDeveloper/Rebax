@@ -103,8 +103,9 @@ jobs:
             arm64)  TRIPLE=aarch64-w64-mingw32 ;;
           esac
           echo "TRIPLE=$TRIPLE" >> "$GITHUB_ENV"
-          echo "CC=$LLVM_MINGW/bin/$TRIPLE-clang.exe" >> "$GITHUB_ENV"
-          echo "OBJCOPY=$LLVM_MINGW/bin/llvm-objcopy.exe" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_PLATFORM=windows" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
+          echo "REBAX_CC=$LLVM_MINGW/bin/$TRIPLE-clang.exe" >> "$GITHUB_ENV"
           echo "RC=$LLVM_MINGW/bin/$TRIPLE-windres.exe" >> "$GITHUB_ENV"
 
           
@@ -118,7 +119,7 @@ jobs:
           cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build -G "Ninja" \
             -DCMAKE_SYSTEM_NAME=Windows \
             -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.architecture }} \
-            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_C_COMPILER="$REBAX_CC" \
             -DCMAKE_RC_COMPILER="$RC" \
             -DCMAKE_CROSSCOMPILING=TRUE \
             -DCMAKE_BUILD_TYPE=Release \
@@ -128,14 +129,12 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-windows" -type f
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-windows/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L$PWD/sdl2-windows/lib -lSDL2" >> "$GITHUB_ENV"
+          echo "SDL2_ROOT=$PWD/sdl2-windows" >> "$GITHUB_ENV"
 
       - name: Build
         shell: bash
         run: |
-          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" \
-            CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
+          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe"
 
       - name: Compress build output
         shell: bash
@@ -200,16 +199,19 @@ jobs:
         run: |
           case "${{ matrix.architecture }}" in
             x86)
-              echo "CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
-              echo "OBJCOPY=i686-linux-gnu-objcopy" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_PLATFORM=linux" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_ARCH=x86" >> "$GITHUB_ENV"
+              echo "REBAX_CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
               ;;
             arm64)
-              echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
-              echo "OBJCOPY=aarch64-linux-gnu-objcopy" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_PLATFORM=linux" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_ARCH=arm64" >> "$GITHUB_ENV"
+              echo "REBAX_CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
               ;;
             x86_64)
-              echo "CC=gcc" >> "$GITHUB_ENV"
-              echo "OBJCOPY=objcopy" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_PLATFORM=linux" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_ARCH=x86_64" >> "$GITHUB_ENV"
+              echo "REBAX_CC=gcc" >> "$GITHUB_ENV"
               ;;
           esac
 
@@ -230,7 +232,7 @@ jobs:
             "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
           tar -xzf SDL2.tar.gz
           cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
-            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_C_COMPILER="$REBAX_CC" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-linux" \
             -DSDL_SHARED=ON -DSDL_STATIC=OFF \
@@ -239,14 +241,13 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-linux" -type f
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-linux/include -I$PWD/sdl2-linux/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L$PWD/sdl2-linux/lib -lSDL2" >> "$GITHUB_ENV"
+          echo "SDL2_ROOT=$PWD/sdl2-linux" >> "$GITHUB_ENV"
 
       - name: Use system SDL2
         if: matrix.architecture == 'x86_64'
         run: |
-          echo "SDL2_CFLAGS=-I/usr/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L/usr/lib/x86_64-linux-gnu -lSDL2" >> "$GITHUB_ENV"
+          echo "SDL2_ROOT=/usr" >> "$GITHUB_ENV"
+          echo "SDL2_RUNTIME_DIR=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
@@ -330,8 +331,7 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-android" -type f
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-android/include -I$PWD/sdl2-android/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L$PWD/sdl2-android/lib -lSDL2" >> "$GITHUB_ENV"
+          echo "SDL2_ROOT=$PWD/sdl2-android" >> "$GITHUB_ENV"
 
       - name: Select Android cross compiler for ${{ matrix.architecture }}
         run: |
@@ -343,8 +343,9 @@ jobs:
           esac
           API="${NDK_PLATFORM#android-}"
           BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          echo "CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
-          echo "OBJCOPY=$BIN/llvm-objcopy" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_PLATFORM=android" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
+          echo "REBAX_CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -358,7 +359,7 @@ jobs:
 
       - name: Build
         run: |
-          make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
+          make
 
       - name: Compress build output
         run: |
@@ -415,8 +416,9 @@ jobs:
       - name: Select compiler for ${{ matrix.architecture }}
         run: |
           SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
-          echo "CC=clang -arch ${{ matrix.architecture }} -isysroot $SDKROOT -mmacosx-version-min=11.0" >> "$GITHUB_ENV"
-          echo "OBJCOPY=$(brew --prefix llvm)/bin/llvm-objcopy" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_PLATFORM=macos" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
+          echo "REBAX_CC=clang -arch ${{ matrix.architecture }} -isysroot $SDKROOT -mmacosx-version-min=11.0" >> "$GITHUB_ENV"
 
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         run: |
@@ -433,34 +435,7 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-macos" -type f
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-macos/include -I$PWD/sdl2-macos/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L$PWD/sdl2-macos/lib -lSDL2" >> "$GITHUB_ENV"
-
-      - name: Diagnose rebax_build_tool with Darwin flags
-        run: |
-          echo "=== Building rebax_build_tool with Darwin flags ==="
-
-          gcc -std=c99 -O2 \
-            -DZ7_ST \
-            -D_7ZIP_ST \
-            -D_POSIX_C_SOURCE=200809L \
-            -D_DARWIN_C_SOURCE \
-            -o /tmp/rebax_build_tool \
-            rebax_build_tool/src/*.c \
-            -lm
-
-      - name: Diagnose rebax_build_tool with clang
-        run: |
-          echo "=== Building rebax_build_tool with clang ==="
-
-          clang -std=c99 -O2 \
-            -DZ7_ST \
-            -D_7ZIP_ST \
-            -D_POSIX_C_SOURCE=200809L \
-            -D_DARWIN_C_SOURCE \
-            -o /tmp/rebax_build_tool \
-            rebax_build_tool/src/*.c \
-            -lm
+          echo "SDL2_ROOT=$PWD/sdl2-macos" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
@@ -522,15 +497,18 @@ jobs:
           if [ "${{ matrix.architecture }}" = "arm64" ]; then
             SDK=iphoneos
             SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
-            echo "CC=clang -arch arm64 -isysroot $SDKROOT -mios-version-min=13.0" >> "$GITHUB_ENV"
+            echo "REBAX_TARGET_PLATFORM=ios" >> "$GITHUB_ENV"
+            echo "REBAX_TARGET_ARCH=arm64" >> "$GITHUB_ENV"
+            echo "REBAX_CC=clang -arch arm64 -isysroot $SDKROOT -mios-version-min=13.0" >> "$GITHUB_ENV"
           else
             SDK=iphonesimulator
             SDKROOT="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-            echo "CC=clang -arch x86_64 -isysroot $SDKROOT -mios-simulator-version-min=13.0" >> "$GITHUB_ENV"
+            echo "REBAX_TARGET_PLATFORM=ios" >> "$GITHUB_ENV"
+            echo "REBAX_TARGET_ARCH=x86_64" >> "$GITHUB_ENV"
+            echo "REBAX_CC=clang -arch x86_64 -isysroot $SDKROOT -mios-simulator-version-min=13.0" >> "$GITHUB_ENV"
           fi
           echo "IOS_SDK=$SDK" >> "$GITHUB_ENV"
           echo "IOS_SDKROOT=$SDKROOT" >> "$GITHUB_ENV"
-          echo "OBJCOPY=$(brew --prefix llvm)/bin/llvm-objcopy" >> "$GITHUB_ENV"
 
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         run: |
@@ -549,12 +527,11 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-ios" -type f
-          echo "SDL2_CFLAGS=-I$PWD/sdl2-ios/include -I$PWD/sdl2-ios/include/SDL2" >> "$GITHUB_ENV"
-          echo "SDL2_LIBS=-L$PWD/sdl2-ios/lib -lSDL2" >> "$GITHUB_ENV"
+          echo "SDL2_ROOT=$PWD/sdl2-ios" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
-          make CC="$CC" OBJCOPY="$OBJCOPY" SDL2_CFLAGS="$SDL2_CFLAGS" SDL2_LIBS="$SDL2_LIBS"
+          make
 
       - name: Compress build output
         shell: bash
@@ -580,4 +557,3 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           files: release/*.7z
           fail_on_unmatched_files: true
-
