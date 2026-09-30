@@ -448,6 +448,17 @@ jobs:
             -o /tmp/rebax_build_tool \
             rebax_build_tool/src/*.c \
             -lm
+      - name: Diagnose rebax_build_tool with clang
+         run: |
+         echo "=== Building rebax_build_tool with clang ==="
+         clang -std=c99 -O2 \
+         -DZ7_ST \
+         -D_7ZIP_ST \
+         -D_POSIX_C_SOURCE=200809L \
+         -D_DARWIN_C_SOURCE \
+         -o /tmp/rebax_build_tool \
+         rebax_build_tool/src/*.c \
+         -lm
 
       - name: Build
         run: |
