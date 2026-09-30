@@ -84,6 +84,16 @@ static void compute_paths(void) {
     snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "%s/Engine/resources/nodes", g_root_dir);
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
     snprintf(g_settings_dir, sizeof(g_settings_dir), "%s/Settings", g_root_dir);
+#elif defined(__APPLE__) && defined(__MACH__)
+    const char *home = getenv("HOME");
+    if (!home) home = ".";
+    snprintf(g_root_dir, sizeof(g_root_dir), "%s/Library/Application Support/Rebax", home);
+    snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s/Engine/toolchains", g_root_dir);
+    snprintf(g_toolchain_dir, sizeof(g_toolchain_dir), "%s/ps2dev", g_toolchains_dir);
+    snprintf(g_make_path, sizeof(g_make_path), "%s/make", g_toolchains_dir);
+    snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "%s/Engine/resources/nodes", g_root_dir);
+    snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
+    snprintf(g_settings_dir, sizeof(g_settings_dir), "%s/Settings", g_root_dir);
 #else
 #error "Unsupported operating system"
 #endif
