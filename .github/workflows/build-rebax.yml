@@ -399,7 +399,8 @@ jobs:
     steps:
       - name: Install requirements
         run: |
-          brew install cmake curl p7zip llvm
+          brew install cmake curl make p7zip llvm
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -479,7 +480,8 @@ jobs:
     steps:
       - name: Install requirements
         run: |
-          brew install cmake curl p7zip llvm
+          brew install cmake curl make p7zip llvm
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
 
       - name: Checkout
         uses: actions/checkout@v4
