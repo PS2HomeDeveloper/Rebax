@@ -205,13 +205,15 @@ EMBEDDED_OBJS := $(patsubst $(EMBEDDED_DIR)/%,$(OBJ_DIR)/embedded/%.o,$(EMBEDDED
 OBJS := $(SRC_OBJS) $(EMBEDDED_OBJS)
 DEPS := $(SRC_OBJS:.o=.d)
 
-SDL2_PREFIX := $(firstword $(patsubst %/include/SDL.h,%,$(wildcard sdl2-$(TARGET_PLATFORM)/include/SDL.h sdl2-$(TARGET_PLATFORM)/include/SDL2/SDL.h /usr/include/SDL2/SDL.h /usr/local/include/SDL2/SDL.h /opt/homebrew/include/SDL2/SDL.h)) )
-ifeq ($(strip $(SDL2_PREFIX)),)
-  SDL2_PREFIX := /usr
+SDL2_INCLUDE_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/include/SDL2 sdl2-$(TARGET_PLATFORM)/include /usr/include/SDL2 /usr/local/include/SDL2 /opt/homebrew/include/SDL2))
+ifeq ($(strip $(SDL2_INCLUDE_DIR)),)
+  SDL2_INCLUDE_DIR := /usr/include/SDL2
 endif
-SDL2_INCLUDE_DIR := $(firstword $(wildcard $(SDL2_PREFIX)/include/SDL2 $(SDL2_PREFIX)/include))
-SDL2_LIB_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/lib $(SDL2_PREFIX)/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu))
-SDL2_CFLAGS := -I$(SDL2_INCLUDE_DIR) -I$(SDL2_INCLUDE_DIR)/SDL2
+SDL2_LIB_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu /usr/lib /usr/local/lib /opt/homebrew/lib))
+ifeq ($(strip $(SDL2_LIB_DIR)),)
+  SDL2_LIB_DIR := /usr/lib
+endif
+SDL2_CFLAGS := -I$(SDL2_INCLUDE_DIR)
 SDL2_LIBS := -L$(SDL2_LIB_DIR) -lSDL2
 
 CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) -MMD -MP $(SDL2_CFLAGS) $(ARCHIVE_CFLAGS)
