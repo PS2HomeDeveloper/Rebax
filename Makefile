@@ -1,4 +1,5 @@
 BUILD_DIR := build
+.DEFAULT_GOAL := all
 OBJ_DIR := $(BUILD_DIR)/obj
 OUTPUT_DIR := $(BUILD_DIR)/output
 
