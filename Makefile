@@ -25,15 +25,27 @@ RTOOL_SOURCES := $(wildcard $(RTOOL_SRC_DIR)/*.c)
 
 # build_tool runs on the build host, so never fall back to the target compiler (CC).
 ifeq ($(wildcard $(RTOOL)),)
-  ifeq ($(strip $(HOSTCC)),)
-    ifneq ($(strip $(shell gcc -dumpmachine)),)
-      HOSTCC := gcc
-    else ifneq ($(strip $(shell clang -dumpmachine)),)
-      HOSTCC := clang
-    else ifneq ($(strip $(shell cc -dumpmachine)),)
-      HOSTCC := cc
+    ifeq ($(strip $(HOSTCC)),)
+    ifeq ($(shell uname -s),Darwin)
+      ifneq ($(strip $(shell clang -dumpmachine)),)
+        HOSTCC := clang
+      else ifneq ($(strip $(shell gcc -dumpmachine)),)
+        HOSTCC := gcc
+      else ifneq ($(strip $(shell cc -dumpmachine)),)
+        HOSTCC := cc
+      else
+        $(error No C compiler is available (neither GCC nor Clang). Install one or pass it manually with "make HOSTCC=<compiler-path>")
+      endif
     else
-      $(error No C compiler is available (neither GCC nor Clang). Install one or pass it manually with "make HOSTCC=<compiler-path>")
+      ifneq ($(strip $(shell gcc -dumpmachine)),)
+        HOSTCC := gcc
+      else ifneq ($(strip $(shell clang -dumpmachine)),)
+        HOSTCC := clang
+      else ifneq ($(strip $(shell cc -dumpmachine)),)
+        HOSTCC := cc
+      else
+        $(error No C compiler is available (neither GCC nor Clang). Install one or pass it manually with "make HOSTCC=<compiler-path>")
+      endif
     endif
   endif
 
