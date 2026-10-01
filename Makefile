@@ -16,10 +16,52 @@ RTOOL_SOURCES := $(RTOOL_C_SOURCES) $(wildcard $(RTOOL_SRC_DIR)/*.h)
 HOSTCC := cc
 HOST_TRIPLE := $(shell $(HOSTCC) -dumpmachine 2>/dev/null)
 
-TARGET_CONFIG := $(if $(wildcard .rebax-target),$(file <.rebax-target),)
-TARGET_PLATFORM := $(patsubst platform=%,%,$(filter platform=%,$(TARGET_CONFIG)))
-TARGET_ARCH := $(patsubst arch=%,%,$(filter arch=%,$(TARGET_CONFIG)))
-ifeq ($(strip $(TARGET_PLATFORM)),)
+TARGET_PLATFORM :=
+TARGET_ARCH :=
+ifneq ($(filter android-arm64 android-arm64-v8a,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := android
+  TARGET_ARCH := arm64-v8a
+else ifneq ($(filter android-armeabi-v7a,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := android
+  TARGET_ARCH := armeabi-v7a
+else ifneq ($(filter android-x86,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := android
+  TARGET_ARCH := x86
+else ifneq ($(filter android-x86_64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := android
+  TARGET_ARCH := x86_64
+else ifneq ($(filter macos-arm64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := macos
+  TARGET_ARCH := arm64
+else ifneq ($(filter macos-x86_64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := macos
+  TARGET_ARCH := x86_64
+else ifneq ($(filter ios-arm64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := ios
+  TARGET_ARCH := arm64
+else ifneq ($(filter ios-x86_64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := ios
+  TARGET_ARCH := x86_64
+else ifneq ($(filter linux-arm64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := linux
+  TARGET_ARCH := arm64
+else ifneq ($(filter linux-x86,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := linux
+  TARGET_ARCH := x86
+else ifneq ($(filter linux-x86_64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := linux
+  TARGET_ARCH := x86_64
+else ifneq ($(filter windows-arm64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := windows
+  TARGET_ARCH := arm64
+else ifneq ($(filter windows-x86,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := windows
+  TARGET_ARCH := x86
+else ifneq ($(filter windows-x86_64,$(MAKECMDGOALS)),)
+  TARGET_PLATFORM := windows
+  TARGET_ARCH := x86_64
+else
+  HOST_TRIPLE := $(shell $(HOSTCC) -dumpmachine 2>/dev/null)
   ifeq ($(OS),Windows_NT)
     TARGET_PLATFORM := windows
   else ifneq ($(findstring apple-ios,$(HOST_TRIPLE)),)
@@ -29,8 +71,6 @@ ifeq ($(strip $(TARGET_PLATFORM)),)
   else
     TARGET_PLATFORM := linux
   endif
-endif
-ifeq ($(strip $(TARGET_ARCH)),)
   ifneq ($(findstring aarch64,$(HOST_TRIPLE)),)
     TARGET_ARCH := arm64
   else ifneq ($(findstring arm64,$(HOST_TRIPLE)),)
@@ -265,9 +305,15 @@ else
   RUNTIME_DIRS :=
 endif
 
-.PHONY: all clean run generate bundle-runtime-libs gen-icons gen-node-registry gen-node-editor-registry gen-node-archive
-all: $(RTOOL) $(TOOLCHAIN_REQUIRED) generate
-	+$(MAKE) --no-print-directory $(TARGET) bundle-runtime-libs
+.PHONY: all clean run generate bundle-runtime-libs gen-icons gen-node-registry gen-node-editor-registry gen-node-archive \
+  android-arm64 android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 \
+  macos-arm64 macos-x86_64 ios-arm64 ios-x86_64 \
+  linux-arm64 linux-x86 linux-x86_64 windows-arm64 windows-x86 windows-x86_64
+all: $(RTOOL) $(TOOLCHAIN_REQUIRED) generate $(TARGET) bundle-runtime-libs
+
+android-arm64 android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 \
+macos-arm64 macos-x86_64 ios-arm64 ios-x86_64 \
+linux-arm64 linux-x86 linux-x86_64 windows-arm64 windows-x86 windows-x86_64: all
 generate: gen-icons gen-node-registry gen-node-editor-registry gen-node-archive
 gen-icons: | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) icon-names $(ICON_NAMES_HEADER) $(ICON_SOURCE_FILES)
@@ -307,7 +353,7 @@ $(OBJ_DIR)/embedded/%.o: $(EMBEDDED_DIR)/% | $(RTOOL)
 	@$(RTOOL) embed-asm $@.S $<
 	$(TARGET_CC) -c $@.S -o $@
 clean: | $(RTOOL)
-	@$(RTOOL) rm $(BUILD_DIR) $(NODE_ARCHIVE) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(ICON_NAMES_HEADER) $(ICON_ATLAS_HEADER) .rebax-target
+	@$(RTOOL) rm $(BUILD_DIR) $(NODE_ARCHIVE) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(ICON_NAMES_HEADER) $(ICON_ATLAS_HEADER)
 	@for atlas in $(ICON_ATLAS_DIR)/icons[0-9]*.png; do if [ -f "$$atlas" ]; then $(RTOOL) rm "$$atlas"; fi; done
 run: all
 	$(TARGET)
