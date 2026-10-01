@@ -95,6 +95,13 @@ else
   endif
 endif
 
+TARGET_LDFLAGS :=
+ifeq ($(TARGET_PLATFORM),macos)
+  ifeq ($(TARGET_ARCH),arm64)
+    TARGET_LDFLAGS := -Wl,-ld_classic
+  endif
+endif
+
 RTOOL_PLATFORM_CFLAGS :=
 ifeq ($(TARGET_PLATFORM),macos)
   RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
@@ -263,7 +270,7 @@ $(ICON_NAMES_HEADER): $(ICON_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
 $(NODE_ARCHIVE): $(NODE_SOURCE_ALL_FILES) | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) pack $@ $(EMBEDDED_DIR) nodes
 $(TARGET): $(OBJS) | $(RTOOL) $(OUTPUT_DIR)
-	$(TARGET_CC) $(OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
+	$(TARGET_CC) $(OBJS) -o $@ $(TARGET_LDFLAGS) $(LDFLAGS) $(LDLIBS)
 
 bundle-runtime-libs: $(TARGET) | $(RTOOL)
 	@$(RTOOL) mkdir $(OUTPUT_DIR)/libs
