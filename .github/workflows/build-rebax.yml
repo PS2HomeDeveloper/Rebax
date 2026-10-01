@@ -436,11 +436,7 @@ jobs:
 
       - name: Build
         run: |
-          if [ "${{ matrix.architecture }}" = "x86_64" ]; then
-            make
-          else
-            make macos-${{ matrix.architecture }}
-          fi
+          make macos-${{ matrix.architecture }}
 
       - name: Compress build output
         run: |
