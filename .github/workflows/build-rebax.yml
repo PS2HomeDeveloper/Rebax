@@ -386,7 +386,7 @@ jobs:
 
   macos:
     name: macOS
-    runs-on: macos-13
+    runs-on: macos-14
     needs: prepare-release
 
     strategy:
