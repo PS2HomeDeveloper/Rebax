@@ -94,10 +94,10 @@ ifeq ($(TARGET_PLATFORM),windows)
 endif
 TARGET := $(OUTPUT_DIR)/$(TARGET_NAME)
 
-EMBED_ASM_FORMAT := default
+EMBED_ASM_FIXUP := :
 ifeq ($(TARGET_PLATFORM),windows)
   ifeq ($(TARGET_ARCH),x86)
-    EMBED_ASM_FORMAT := coff-i386
+    EMBED_ASM_FIXUP := sed -i -e 's/^    \.global _binary/    .global binary/' -e 's/^_binary/binary/'
   endif
 endif
 
@@ -357,11 +357,13 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_
 	$(TARGET_CC) $(CFLAGS) -c $< -o $@
 $(OBJ_DIR)/embedded/toolchains/$(TOOLCHAIN_MAKE_BIN).o: $(TOOLCHAINS_DIR)/$(TOOLCHAIN_MAKE_BIN) | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
-	@$(RTOOL) embed-asm $@.S $< embedded/toolchains/make $(EMBED_ASM_FORMAT)
+	@$(RTOOL) embed-asm $@.S $< embedded/toolchains/make
+	@$(EMBED_ASM_FIXUP) $@.S
 	$(TARGET_CC) -c $@.S -o $@
 $(OBJ_DIR)/embedded/%.o: $(EMBEDDED_DIR)/% | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
-	@$(RTOOL) embed-asm $@.S $< $< $(EMBED_ASM_FORMAT)
+	@$(RTOOL) embed-asm $@.S $<
+	@$(EMBED_ASM_FIXUP) $@.S
 	$(TARGET_CC) -c $@.S -o $@
 clean: | $(RTOOL)
 	@$(RTOOL) rm $(BUILD_DIR) $(NODE_ARCHIVE) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(ICON_NAMES_HEADER) $(ICON_ATLAS_HEADER)
