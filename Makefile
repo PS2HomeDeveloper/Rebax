@@ -221,13 +221,24 @@ EMBEDDED_OBJS := $(patsubst $(EMBEDDED_DIR)/%,$(OBJ_DIR)/embedded/%.o,$(EMBEDDED
 OBJS := $(SRC_OBJS) $(EMBEDDED_OBJS)
 DEPS := $(SRC_OBJS:.o=.d)
 
-SDL2_INCLUDE_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/include/SDL2 sdl2-$(TARGET_PLATFORM)/include /usr/include/SDL2 /usr/local/include/SDL2 /opt/homebrew/include/SDL2))
-ifeq ($(strip $(SDL2_INCLUDE_DIR)),)
-  SDL2_INCLUDE_DIR := /usr/include/SDL2
-endif
-SDL2_LIB_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu /usr/lib /usr/local/lib /opt/homebrew/lib))
-ifeq ($(strip $(SDL2_LIB_DIR)),)
-  SDL2_LIB_DIR := /usr/lib
+ifeq ($(TARGET_PLATFORM),android)
+  SDL2_INCLUDE_DIR := $(firstword $(wildcard sdl2-android/include/SDL2 sdl2-android/include))
+  SDL2_LIB_DIR := $(firstword $(wildcard sdl2-android/lib))
+  ifeq ($(strip $(SDL2_INCLUDE_DIR)),)
+    $(error Android SDL2 headers not found in sdl2-android; build SDL2 before make)
+  endif
+  ifeq ($(strip $(SDL2_LIB_DIR)),)
+    $(error Android SDL2 libraries not found in sdl2-android; build SDL2 before make)
+  endif
+else
+  SDL2_INCLUDE_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/include/SDL2 sdl2-$(TARGET_PLATFORM)/include /usr/include/SDL2 /usr/local/include/SDL2 /opt/homebrew/include/SDL2))
+  ifeq ($(strip $(SDL2_INCLUDE_DIR)),)
+    SDL2_INCLUDE_DIR := /usr/include/SDL2
+  endif
+  SDL2_LIB_DIR := $(firstword $(wildcard sdl2-$(TARGET_PLATFORM)/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu /usr/lib /usr/local/lib /opt/homebrew/lib))
+  ifeq ($(strip $(SDL2_LIB_DIR)),)
+    SDL2_LIB_DIR := /usr/lib
+  endif
 endif
 SDL2_CFLAGS := -I$(SDL2_INCLUDE_DIR)
 SDL2_LIBS := -L$(SDL2_LIB_DIR) -lSDL2
