@@ -306,10 +306,14 @@ else
 endif
 
 .PHONY: all clean run generate bundle-runtime-libs gen-icons gen-node-registry gen-node-editor-registry gen-node-archive \
+  build-selected \
   android-arm64 android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 \
   macos-arm64 macos-x86_64 ios-arm64 ios-x86_64 \
   linux-arm64 linux-x86 linux-x86_64 windows-arm64 windows-x86 windows-x86_64
-all: $(RTOOL) $(TOOLCHAIN_REQUIRED) generate $(TARGET) bundle-runtime-libs
+all: $(RTOOL) $(TOOLCHAIN_REQUIRED) generate
+	+$(MAKE) --no-print-directory TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) build-selected
+
+build-selected: $(TARGET) bundle-runtime-libs
 
 android-arm64 android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 \
 macos-arm64 macos-x86_64 ios-arm64 ios-x86_64 \
