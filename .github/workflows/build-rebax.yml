@@ -75,15 +75,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create CI target file
-        run: |
-          printf 'platform=windows\narch=${{ matrix.architecture }}\n' > .rebax-target
-
-
-
-
-
-
       - name: Read version
         id: version
         shell: bash
@@ -112,7 +103,9 @@ jobs:
             arm64)  TRIPLE=aarch64-w64-mingw32 ;;
           esac
           echo "TRIPLE=$TRIPLE" >> "$GITHUB_ENV"
-          echo "CC=$LLVM_MINGW/bin/$TRIPLE-clang.exe" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_PLATFORM=windows" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
+          echo "REBAX_CC=$LLVM_MINGW/bin/$TRIPLE-clang.exe" >> "$GITHUB_ENV"
           echo "RC=$LLVM_MINGW/bin/$TRIPLE-windres.exe" >> "$GITHUB_ENV"
 
           
@@ -126,7 +119,7 @@ jobs:
           cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build -G "Ninja" \
             -DCMAKE_SYSTEM_NAME=Windows \
             -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.architecture }} \
-            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_C_COMPILER="$REBAX_CC" \
             -DCMAKE_RC_COMPILER="$RC" \
             -DCMAKE_CROSSCOMPILING=TRUE \
             -DCMAKE_BUILD_TYPE=Release \
@@ -136,6 +129,7 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-windows" -type f
+          echo "SDL2_ROOT=$PWD/sdl2-windows" >> "$GITHUB_ENV"
 
       - name: Build
         shell: bash
@@ -205,22 +199,24 @@ jobs:
         run: |
           case "${{ matrix.architecture }}" in
             x86)
-              echo "CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_PLATFORM=linux" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_ARCH=x86" >> "$GITHUB_ENV"
+              echo "REBAX_CC=i686-linux-gnu-gcc" >> "$GITHUB_ENV"
               ;;
             arm64)
-              echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_PLATFORM=linux" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_ARCH=arm64" >> "$GITHUB_ENV"
+              echo "REBAX_CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
               ;;
             x86_64)
-              echo "CC=gcc" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_PLATFORM=linux" >> "$GITHUB_ENV"
+              echo "REBAX_TARGET_ARCH=x86_64" >> "$GITHUB_ENV"
+              echo "REBAX_CC=gcc" >> "$GITHUB_ENV"
               ;;
           esac
 
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Create CI target file
-        run: |
-          printf 'platform=linux\narch=${{ matrix.architecture }}\n' > .rebax-target
 
       - name: Read version
         id: version
@@ -236,7 +232,7 @@ jobs:
             "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
           tar -xzf SDL2.tar.gz
           cmake -S "SDL2-$SDL2_VERSION" -B sdl2-build \
-            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_C_COMPILER="$REBAX_CC" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-linux" \
             -DSDL_SHARED=ON -DSDL_STATIC=OFF \
@@ -245,6 +241,13 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-linux" -type f
+          echo "SDL2_ROOT=$PWD/sdl2-linux" >> "$GITHUB_ENV"
+
+      - name: Use system SDL2
+        if: matrix.architecture == 'x86_64'
+        run: |
+          echo "SDL2_ROOT=/usr" >> "$GITHUB_ENV"
+          echo "SDL2_RUNTIME_DIR=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
@@ -294,6 +297,9 @@ jobs:
           - x86_64
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install requirements
         run: |
           sudo apt-get update
@@ -328,6 +334,7 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-android" -type f
+          echo "SDL2_ROOT=$PWD/sdl2-android" >> "$GITHUB_ENV"
 
       - name: Select Android cross compiler for ${{ matrix.architecture }}
         run: |
@@ -339,14 +346,9 @@ jobs:
           esac
           API="${NDK_PLATFORM#android-}"
           BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          echo "CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create CI target file
-        run: |
-          printf 'platform=android\narch=${{ matrix.architecture }}\n' > .rebax-target
+          echo "REBAX_TARGET_PLATFORM=android" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
+          echo "REBAX_CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
 
       - name: Read version
         id: version
@@ -399,15 +401,10 @@ jobs:
     steps:
       - name: Install requirements
         run: |
-          brew install cmake curl make p7zip llvm
-          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+          brew install cmake curl p7zip llvm
 
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Create CI target file
-        run: |
-          printf 'platform=macos\narch=${{ matrix.architecture }}\n' > .rebax-target
 
       - name: Read version
         id: version
@@ -419,7 +416,9 @@ jobs:
       - name: Select compiler for ${{ matrix.architecture }}
         run: |
           SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
-          echo "CC=clang -arch ${{ matrix.architecture }} -isysroot $SDKROOT -mmacosx-version-min=11.0" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_PLATFORM=macos" >> "$GITHUB_ENV"
+          echo "REBAX_TARGET_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
+          echo "REBAX_CC=clang -arch ${{ matrix.architecture }} -isysroot $SDKROOT -mmacosx-version-min=11.0" >> "$GITHUB_ENV"
 
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         run: |
@@ -436,6 +435,7 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-macos" -type f
+          echo "SDL2_ROOT=$PWD/sdl2-macos" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
@@ -480,15 +480,10 @@ jobs:
     steps:
       - name: Install requirements
         run: |
-          brew install cmake curl make p7zip llvm
-          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+          brew install cmake curl p7zip llvm
 
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Create CI target file
-        run: |
-          printf 'platform=ios\narch=${{ matrix.architecture }}\n' > .rebax-target
 
       - name: Read version
         id: version
@@ -502,12 +497,16 @@ jobs:
           if [ "${{ matrix.architecture }}" = "arm64" ]; then
             SDK=iphoneos
             SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
-            echo "CC=clang -arch arm64 -isysroot $SDKROOT -mios-version-min=13.0" >> "$GITHUB_ENV"
-              else
+            echo "REBAX_TARGET_PLATFORM=ios" >> "$GITHUB_ENV"
+            echo "REBAX_TARGET_ARCH=arm64" >> "$GITHUB_ENV"
+            echo "REBAX_CC=clang -arch arm64 -isysroot $SDKROOT -mios-version-min=13.0" >> "$GITHUB_ENV"
+          else
             SDK=iphonesimulator
             SDKROOT="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-            echo "CC=clang -arch x86_64 -isysroot $SDKROOT -mios-simulator-version-min=13.0" >> "$GITHUB_ENV"
-              fi
+            echo "REBAX_TARGET_PLATFORM=ios" >> "$GITHUB_ENV"
+            echo "REBAX_TARGET_ARCH=x86_64" >> "$GITHUB_ENV"
+            echo "REBAX_CC=clang -arch x86_64 -isysroot $SDKROOT -mios-simulator-version-min=13.0" >> "$GITHUB_ENV"
+          fi
           echo "IOS_SDK=$SDK" >> "$GITHUB_ENV"
           echo "IOS_SDKROOT=$SDKROOT" >> "$GITHUB_ENV"
 
@@ -528,6 +527,7 @@ jobs:
           cmake --install sdl2-build
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-ios" -type f
+          echo "SDL2_ROOT=$PWD/sdl2-ios" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
