@@ -95,6 +95,11 @@ endif
 TARGET := $(OUTPUT_DIR)/$(TARGET_NAME)
 
 EMBED_ASM_FIXUP := :
+ifeq ($(TARGET_PLATFORM),windows)
+  ifeq ($(TARGET_ARCH),x86)
+    EMBED_ASM_FIXUP := sed -i 's/_binary/__binary/g'
+  endif
+endif
 
 ifeq ($(TARGET_PLATFORM),linux)
   ifeq ($(TARGET_ARCH),x86)
