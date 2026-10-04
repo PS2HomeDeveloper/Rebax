@@ -67,15 +67,14 @@ jobs:
         run: |
           set -e
 
-          git add -A -f
-
-          if git diff --cached --quiet; then
-            echo "Error: No changes were staged."
-            exit 1
-          fi
+          git rm -r --cached --ignore-unmatch .
+          git add -f .github
+          git add -f .
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git commit -m "Extract Rebax Engine"
+          git status --short
+
+          git commit -m "Replace repository with extracted Rebax Engine"
           git push
