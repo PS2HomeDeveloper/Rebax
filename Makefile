@@ -359,6 +359,11 @@ endif
 SDL2_LIB_FILE := $(firstword $(foreach d,$(SDL2_LIB_CANDIDATES),$(foreach n,$(SDL2_LIB_NAMES),$(if $(wildcard $(d)/$(n)),$(if $(filter $(SDL2_EXPECT_ARCH) unknown,$(call rbx_file_arch,$(d)/$(n))),$(d)/$(n))))))
 SDL2_LIB_DIR := $(patsubst %/,%,$(dir $(SDL2_LIB_FILE)))
 SDL2_LIBS := $(if $(SDL2_PKG_LIBS),$(SDL2_PKG_LIBS),$(if $(SDL2_LIB_FILE),$(if $(filter $(notdir $(SDL2_LIB_FILE)),$(SDL2_LINK_NAMES)),-L$(SDL2_LIB_DIR) -lSDL2,$(SDL2_LIB_FILE))))
+ICONV_LIB_NAMES := libiconv.so libiconv.so.2 libiconv.so.3
+ICONV_LIB_CANDIDATES := $(SDL2_LIB_DIR) $(SDL2_LIB_CANDIDATES)
+ICONV_LIB_FILE := $(firstword $(foreach d,$(ICONV_LIB_CANDIDATES),$(foreach n,$(ICONV_LIB_NAMES),$(if $(wildcard $(d)/$(n)),$(if $(filter $(SDL2_EXPECT_ARCH) unknown,$(call rbx_file_arch,$(d)/$(n))),$(d)/$(n))))))
+CXX_SHARED_LIB_CANDIDATES := $(SDL2_LIB_DIR) $(SDL2_LIB_CANDIDATES) $(foreach d,$(wildcard $(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/*/sysroot/usr/lib/$(ANDROID_TRIPLE)),$d) $(TERMUX_PREFIX)/lib
+CXX_SHARED_LIB_FILE := $(firstword $(foreach d,$(CXX_SHARED_LIB_CANDIDATES),$(if $(wildcard $(d)/libc++_shared.so),$(if $(filter $(SDL2_EXPECT_ARCH) unknown,$(call rbx_file_arch,$(d)/libc++_shared.so)),$(d)/libc++_shared.so))))
 
 ifeq ($(CC_NEEDED),1)
   ifeq ($(strip $(TARGET_CC)),)
@@ -601,8 +606,16 @@ clean: | $(RTOOL)
 run: all
 	$(TARGET)
 -include $(DEPS)
-ANDROID_PAYLOAD_LIBS := -llog -landroid -lGLESv1_CM -lGLESv2 -lOpenSLES
-SDL2_JAVA_SOURCES := $(filter %/org/libsdl/app/%.java,$(call rwildcard,sdl2-android/,*.java))
+ANDROID_PAYLOAD_LIBS := -llog -landroid -lOpenSLES
+SDL2_JAVA_SOURCE_ROOTS := $(strip $(SDL2_ANDROID_JAVA_DIR) $(SDL2_JAVA_DIR) $(SDL2_SOURCE_DIR) $(SDL2_SRC_DIR) $(SDL2_ANDROID_PROJECT) $(SDL2_ROOT) $(SDL2_DIR) $(SDL2_PREFIX) $(SDL2_INSTALL_PREFIX) $(CURDIR) $(wildcard SDL2-*) $(wildcard sdl2-*) $(wildcard third_party/SDL2*) $(wildcard external/SDL2*) $(wildcard vendor/SDL2*) $(wildcard $(HOME)/.local/SDL2*) $(wildcard $(HOME)/src/SDL2*) $(wildcard $(HOME)/SDL2*) $(wildcard $(TERMUX_PREFIX)/opt/SDL2*) $(wildcard $(TERMUX_PREFIX)/share/SDL2*) $(wildcard /usr/local/src/SDL2*) $(wildcard /usr/local/SDL2*) $(wildcard /opt/SDL2*))
+define rbx_sdl2_java_files
+$(foreach file,$(call rwildcard,$(1)/,*),$(if $(findstring /org/libsdl/app/,$(file)),$(if $(filter %.java,$(file)),$(file))))
+endef
+ifneq ($(strip $(SDL2_JAVA_SOURCES)),)
+  SDL2_JAVA_SOURCES := $(sort $(SDL2_JAVA_SOURCES))
+else
+  SDL2_JAVA_SOURCES := $(sort $(foreach root,$(SDL2_JAVA_SOURCE_ROOTS),$(if $(wildcard $(root)/.),$(call rbx_sdl2_java_files,$(root)))))
+endif
 
 ifeq ($(WANT_APK),1)
   AAPT2 := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/aapt2 $(ANDROID_BUILD_TOOLS)/aapt2.exe $(ANDROID_BUILD_TOOLS)/aapt2.bat) $(shell command -v aapt2 2>/dev/null))
@@ -627,18 +640,25 @@ apk-package: $(TARGET) bundle-runtime-libs
 	abi="$(TARGET_ARCH)"; \
 	$(RTOOL) mkdir $(APK_DIR) $(OUTPUT_DIR); \
 	$(RTOOL) rm "$$stage"; \
-	$(RTOOL) mkdir "$$stage" "$$stage/lib/$$abi" "$$stage/assets/rebax" "$$stage/classes" "$$stage/dex"; \
+	$(RTOOL) mkdir "$$stage" "$$stage/lib/$$abi" "$$stage/classes" "$$stage/dex"; \
 	echo "==> Packaging $(APK_OUT)"; \
 	if [ "$(SDL2_LIB_FILE)" = "" ]; then echo "ERROR: no SDL2 shared library matching $$abi was found; build SDL2 for Android first"; exit 1; fi; \
 	if [ "$(call rbx_file_arch,$(SDL2_LIB_FILE))" != "unknown" ] && [ "$(call rbx_file_arch,$(SDL2_LIB_FILE))" != "$(SDL2_EXPECT_ARCH)" ]; then echo "ERROR: $(SDL2_LIB_FILE) is $(call rbx_file_arch,$(SDL2_LIB_FILE)) but the target is $(TARGET_ARCH)"; exit 1; fi; \
 	if [ "$$($(RTOOL) exists "$(SDL2_LIB_FILE)")" != "1" ]; then echo "ERROR: $(SDL2_LIB_FILE) was not found on disk; nothing was packaged"; exit 1; fi; \
+	if [ "$(ICONV_LIB_FILE)" = "" ]; then echo "ERROR: libiconv.so was not found for $(TARGET_ARCH); build or provide libiconv for Android"; exit 1; fi; \
+	if [ "$(call rbx_file_arch,$(ICONV_LIB_FILE))" != "unknown" ] && [ "$(call rbx_file_arch,$(ICONV_LIB_FILE))" != "$(SDL2_EXPECT_ARCH)" ]; then echo "ERROR: $(ICONV_LIB_FILE) is $(call rbx_file_arch,$(ICONV_LIB_FILE)) but the target is $(TARGET_ARCH)"; exit 1; fi; \
+	if [ "$$($(RTOOL) exists "$(ICONV_LIB_FILE)")" != "1" ]; then echo "ERROR: $(ICONV_LIB_FILE) was not found on disk; nothing was packaged"; exit 1; fi; \
+	if [ "$(CXX_SHARED_LIB_FILE)" = "" ]; then echo "ERROR: libc++_shared.so was not found for $(TARGET_ARCH); provide the Android NDK C++ shared runtime"; exit 1; fi; \
+	if [ "$(call rbx_file_arch,$(CXX_SHARED_LIB_FILE))" != "unknown" ] && [ "$(call rbx_file_arch,$(CXX_SHARED_LIB_FILE))" != "$(SDL2_EXPECT_ARCH)" ]; then echo "ERROR: $(CXX_SHARED_LIB_FILE) is $(call rbx_file_arch,$(CXX_SHARED_LIB_FILE)) but the target is $(TARGET_ARCH)"; exit 1; fi; \
+	if [ "$$($(RTOOL) exists "$(CXX_SHARED_LIB_FILE)")" != "1" ]; then echo "ERROR: $(CXX_SHARED_LIB_FILE) was not found on disk; nothing was packaged"; exit 1; fi; \
 	$(RTOOL) cp "$(SDL2_LIB_FILE)" "$$stage/lib/$$abi/libSDL2.so"; \
-	$(RTOOL) cp "$(TARGET)" "$$stage/assets/rebax/$(TARGET_NAME)"; \
+	$(RTOOL) cp "$(ICONV_LIB_FILE)" "$$stage/lib/$$abi/libiconv.so"; \
+	$(RTOOL) cp "$(CXX_SHARED_LIB_FILE)" "$$stage/lib/$$abi/libc++_shared.so"; \
 	echo "==> Linking $$stage/lib/$$abi/libmain.so"; \
 	printf 'extern int main(void);\nint SDL_main(int argc, char **argv) { (void)argc; (void)argv; return main(); }\n' > $(APK_DIR)/rebax_android_entry.c; \
 	$(TARGET_CC) $(TARGET_CC_FLAGS) -fPIC -c $(APK_DIR)/rebax_android_entry.c -o $(APK_DIR)/rebax_android_entry.o; \
 	$(TARGET_CC) $(TARGET_CC_FLAGS) -shared -o "$$stage/lib/$$abi/libmain.so" $(OBJS) $(APK_DIR)/rebax_android_entry.o $(TARGET_LDFLAGS) $(LDLIBS) $(ANDROID_PAYLOAD_LIBS); \
-	if [ "$(SDL2_JAVA_SOURCES)" = "" ]; then echo "ERROR: the SDL2 Android Java sources under sdl2-android (org/libsdl/app/*.java) were not found; the APK cannot be assembled"; exit 1; fi; \
+	if [ "$(SDL2_JAVA_SOURCES)" = "" ]; then echo "ERROR: SDL2 Android Java sources (org/libsdl/app/*.java) were not found automatically in the project, SDL2 source, or standard SDL2 roots; provide SDL2_SOURCE_DIR or SDL2_JAVA_SOURCES only if the SDL2 source is stored in a non-standard location"; exit 1; fi; \
 	if [ "$(JAVAC)" = "" ]; then echo "ERROR: javac was not found; install a JDK to build the APK"; exit 1; fi; \
 	if [ "$(ANDROID_JAR)" = "" ] || [ ! -f "$(ANDROID_JAR)" ]; then echo "ERROR: android.jar was not found; install an Android SDK platform to build the APK"; exit 1; fi; \
 	echo "==> Compiling the Android Java layer"; \
@@ -661,18 +681,27 @@ apk-package: $(TARGET) bundle-runtime-libs
 	printf '%s' '<meta-data android:name="android.app.lib_name" android:value="main"/>' >> "$$stage/AndroidManifest.xml"; \
 	printf '%s' '</activity></application></manifest>' >> "$$stage/AndroidManifest.xml"; \
 	echo "==> Linking resources"; \
-	if [ "$(AAPT2)" != "" ]; then "$(AAPT2)" link -o "$$stage/base.apk" --manifest "$$stage/AndroidManifest.xml" -I "$(ANDROID_JAR)" -A "$$stage/assets" --min-sdk-version 21 --target-sdk-version $(APK_TARGET_SDK) --auto-add-overlay; \
-	elif [ "$(AAPT)" != "" ]; then "$(AAPT)" package -f -M "$$stage/AndroidManifest.xml" -I "$(ANDROID_JAR)" -A "$$stage/assets" -F "$$stage/base.apk"; \
+	if [ "$(AAPT2)" != "" ]; then "$(AAPT2)" link -o "$$stage/base.apk" --manifest "$$stage/AndroidManifest.xml" -I "$(ANDROID_JAR)" --min-sdk-version 21 --target-sdk-version $(APK_TARGET_SDK) --auto-add-overlay; \
+	elif [ "$(AAPT)" != "" ]; then "$(AAPT)" package -f -M "$$stage/AndroidManifest.xml" -I "$(ANDROID_JAR)" -F "$$stage/base.apk"; \
 	else echo "ERROR: neither aapt2 nor aapt was found; install the Android SDK build-tools"; exit 1; fi; \
 	echo "==> Adding classes.dex and the native libraries"; \
-	if [ "$(ZIP)" != "" ]; then ( cd "$$stage" && "$(ZIP)" -q -X base.apk classes.dex "lib/$$abi/libmain.so" "lib/$$abi/libSDL2.so" ); \
-	elif [ "$(JAR)" != "" ]; then "$(JAR)" uf "$$stage/base.apk" -C "$$stage" classes.dex -C "$$stage" "lib/$$abi/libmain.so" -C "$$stage" "lib/$$abi/libSDL2.so"; \
-	elif [ "$(PYTHON)" != "" ]; then "$(PYTHON)" -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],'a',zipfile.ZIP_DEFLATED); [z.write(p,p) for p in sys.argv[2:]]; z.close()" "$$stage/base.apk" "$$stage/classes.dex" "$$stage/lib/$$abi/libmain.so" "$$stage/lib/$$abi/libSDL2.so"; \
+	if [ "$(ZIP)" != "" ]; then ( cd "$$stage" && "$(ZIP)" -q -X base.apk classes.dex "lib/$$abi/libmain.so" "lib/$$abi/libSDL2.so" "lib/$$abi/libiconv.so" "lib/$$abi/libc++_shared.so" ); \
+	elif [ "$(JAR)" != "" ]; then "$(JAR)" uf "$$stage/base.apk" -C "$$stage" classes.dex -C "$$stage" "lib/$$abi/libmain.so" -C "$$stage" "lib/$$abi/libSDL2.so" -C "$$stage" "lib/$$abi/libiconv.so" -C "$$stage" "lib/$$abi/libc++_shared.so"; \
+	elif [ "$(PYTHON)" != "" ]; then "$(PYTHON)" -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],'a',zipfile.ZIP_DEFLATED); [z.write(p,p) for p in sys.argv[2:]]; z.close()" "$$stage/base.apk" "$$stage/classes.dex" "$$stage/lib/$$abi/libmain.so" "$$stage/lib/$$abi/libSDL2.so" "$$stage/lib/$$abi/libiconv.so" "$$stage/lib/$$abi/libc++_shared.so"; \
 	else echo "ERROR: no zip, jar or python tool was found to place files inside the APK"; exit 1; fi; \
 	echo "==> Aligning"; \
 	if [ "$(ZIPALIGN)" != "" ]; then "$(ZIPALIGN)" -f 4 "$$stage/base.apk" "$$stage/aligned.apk"; else $(RTOOL) cp "$$stage/base.apk" "$$stage/aligned.apk"; fi; \
 	echo "==> Signing"; \
-	ks="$(APK_DIR)/rebax-debug.keystore"; \
+	ks="$(CURDIR)/rebax-debug.keystore"; \
+if [ ! -f "$$ks" ]; then \
+    "$(KEYTOOL)" -genkeypair \
+        -keystore "$$ks" \
+        -storepass android \
+        -alias rebax \
+        -keypass android \
+        -keyalg RSA -keysize 2048 -validity 10000 \
+        -dname "CN=Rebax,O=Rebax,C=US"; \
+fi; \
 	if [ "$(KEYTOOL)" != "" ] && [ ! -f "$$ks" ]; then "$(KEYTOOL)" -genkeypair -keystore "$$ks" -storepass android -alias rebax -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Rebax,O=Rebax,C=US"; fi; \
 	if [ "$(APKSIGNER)" != "" ] && [ -f "$$ks" ]; then "$(APKSIGNER)" sign --ks "$$ks" --ks-pass pass:android --key-pass pass:android --ks-key-alias rebax --out "$$stage/final.apk" "$$stage/aligned.apk"; \
 	elif [ "$(JARSIGNER)" != "" ] && [ -f "$$ks" ]; then $(RTOOL) cp "$$stage/aligned.apk" "$$stage/final.apk"; "$(JARSIGNER)" -keystore "$$ks" -storepass android -keypass android -sigalg SHA256withRSA -digestalg SHA-256 "$$stage/final.apk" rebax >/dev/null; \
