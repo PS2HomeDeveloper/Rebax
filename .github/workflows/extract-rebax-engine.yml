@@ -1,6 +1,9 @@
 name: Extract Rebax Engine
 
 on:
+  push:
+    paths:
+      - 'Rebax_Engine.zip'
   workflow_dispatch:
 
 permissions:
