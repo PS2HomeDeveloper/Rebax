@@ -278,6 +278,11 @@ endef
 CC_SPEC := $(call rbx_try_cc,$(CC_CANDIDATES),$(CC_REQUIRE),$(CC_FORBID))
 TARGET_CC := $(firstword $(subst |, ,$(CC_SPEC)))
 TARGET_CC_FLAGS := $(subst ~, ,$(word 2,$(subst |, ,$(CC_SPEC))))
+USER_CC_SPEC := $(if $(filter environment command line,$(origin REBAX_CC)),$(REBAX_CC),$(if $(filter environment command line,$(origin CC)),$(CC),))
+ifneq ($(strip $(USER_CC_SPEC)),)
+  TARGET_CC := $(firstword $(USER_CC_SPEC))
+  TARGET_CC_FLAGS := $(wordlist 2,99,$(USER_CC_SPEC))
+endif
 TARGET_TRIPLE := $(ANDROID_TRIPLE)
 ifeq ($(TARGET_PLATFORM),windows)
   ifeq ($(TARGET_ARCH),x86)
