@@ -397,9 +397,10 @@ jobs:
             --disable-static \
             --disable-nls \
             CC="$ICONV_CC" \
-            CFLAGS="-fPIC"
-          make -C srclib libicrt.a
-          make -C lib libiconv.la
+            CPPFLAGS="-DO_BINARY=0" \
+            CFLAGS="-fPIC -DO_BINARY=0"
+          make -C srclib libicrt.a CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
+          make -C lib libiconv.la CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
           install -d "$ICONV_PREFIX/lib" "$ICONV_PREFIX/include"
           cp -P lib/.libs/libiconv.so* "$ICONV_PREFIX/lib/"
           cp -f include/iconv.h "$ICONV_PREFIX/include/"
