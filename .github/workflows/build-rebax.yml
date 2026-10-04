@@ -396,15 +396,11 @@ jobs:
             --enable-shared \
             --disable-static \
             --disable-nls \
-            ac_cv_func_canonicalize_file_name=yes \
             CC="$ICONV_CC" \
             CPPFLAGS="-DO_BINARY=0" \
             CFLAGS="-fPIC -DO_BINARY=0"
-          make -C srclib CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
-          make -C lib libiconv.la CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
-          install -d "$ICONV_PREFIX/lib" "$ICONV_PREFIX/include"
-          cp -P lib/.libs/libiconv.so* "$ICONV_PREFIX/lib/"
-          cp -f include/iconv.h "$ICONV_PREFIX/include/"
+          make
+          make install
           test -s "$ICONV_PREFIX/lib/libiconv.so"
           CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$ICONV_TRIPLE/libc++_shared.so"
           test -s "$CXX_RUNTIME"
@@ -521,9 +517,15 @@ jobs:
 
       - name: Build
         run: |
-          ulimit -s "$(ulimit -H -s)" || true
           make --version | head -n 1
-          make macos-${{ matrix.architecture }}
+          make macos-${{ matrix.architecture }} || /usr/bin/make macos-${{ matrix.architecture }}
+
+      - name: Diagnose make
+        if: failure()
+        run: |
+          make -n -d macos-${{ matrix.architecture }} > make-debug.log 2>&1 || true
+          tail -n 40 make-debug.log
+          /usr/bin/make --version | head -n 1 || true
 
       - name: Compress build output
         run: |
@@ -623,9 +625,15 @@ jobs:
 
       - name: Build
         run: |
-          ulimit -s "$(ulimit -H -s)" || true
           make --version | head -n 1
-          make ios-${{ matrix.architecture }}
+          make ios-${{ matrix.architecture }} || /usr/bin/make ios-${{ matrix.architecture }}
+
+      - name: Diagnose make
+        if: failure()
+        run: |
+          make -n -d ios-${{ matrix.architecture }} > make-debug.log 2>&1 || true
+          tail -n 40 make-debug.log
+          /usr/bin/make --version | head -n 1 || true
 
       - name: Compress build output
         shell: bash
