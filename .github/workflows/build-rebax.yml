@@ -396,6 +396,7 @@ jobs:
             --enable-shared \
             --disable-static \
             --disable-nls \
+            ac_cv_func_canonicalize_file_name=yes \
             CC="$ICONV_CC" \
             CPPFLAGS="-DO_BINARY=0" \
             CFLAGS="-fPIC -DO_BINARY=0"
