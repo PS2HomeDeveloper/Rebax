@@ -1,0 +1,54 @@
+name: Clean And Extract
+
+on:
+  push:
+    paths:
+      - '*.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Clean and extract
+        run: |
+          ZIP=$(find . -maxdepth 1 -type f -name '*.zip' | head -n1)
+
+          if [ -z "$ZIP" ]; then
+            echo "No zip file found"
+            exit 0
+          fi
+
+          WORK=$(mktemp -d)
+          cp "$ZIP" "$WORK/archive.zip"
+          unzip -q "$WORK/archive.zip" -d "$WORK/out"
+
+          SRC=$(find "$WORK/out" -mindepth 1 -maxdepth 1 -type d ! -name '__MACOSX' | head -n1)
+
+          if [ -z "$SRC" ]; then
+            echo "No folder found inside the archive"
+            exit 1
+          fi
+
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name '.git' \
+            ! -name '.github' \
+            -exec rm -rf {} +
+
+          rsync -a "$SRC/" ./
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "Clean and extract archive" || echo "Nothing to commit"
+          git push
