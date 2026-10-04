@@ -398,7 +398,8 @@ jobs:
             --disable-nls \
             CC="$ICONV_CC" \
             CFLAGS="-fPIC"
-          make -j"$(nproc)"
+          make -C srclib libicrt.a
+          make -C lib libiconv.la
           install -d "$ICONV_PREFIX/lib" "$ICONV_PREFIX/include"
           cp -P lib/.libs/libiconv.so* "$ICONV_PREFIX/lib/"
           cp -f include/iconv.h "$ICONV_PREFIX/include/"
