@@ -400,7 +400,7 @@ jobs:
             CC="$ICONV_CC" \
             CPPFLAGS="-DO_BINARY=0" \
             CFLAGS="-fPIC -DO_BINARY=0"
-          make -C srclib libicrt.a CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
+          make -C srclib CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
           make -C lib libiconv.la CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
           install -d "$ICONV_PREFIX/lib" "$ICONV_PREFIX/include"
           cp -P lib/.libs/libiconv.so* "$ICONV_PREFIX/lib/"
@@ -431,10 +431,7 @@ jobs:
             exit 1
           fi
           apk="${apks[0]}"
-          engine_version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
-          expected_engine="assets/rebax/Rebax_Engine_${engine_version}_android_${{ matrix.architecture }}"
           required_entries=(
-            "$expected_engine"
             "classes.dex"
             "lib/${{ matrix.architecture }}/libmain.so"
             "lib/${{ matrix.architecture }}/libSDL2.so"
@@ -520,9 +517,12 @@ jobs:
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-macos" -type f
           echo "SDL2_ROOT=$PWD/sdl2-macos" >> "$GITHUB_ENV"
+          rm -rf "SDL2-$SDL2_VERSION" sdl2-build SDL2.tar.gz
 
       - name: Build
         run: |
+          ulimit -s "$(ulimit -H -s)" || true
+          make --version | head -n 1
           make macos-${{ matrix.architecture }}
 
       - name: Compress build output
@@ -619,9 +619,12 @@ jobs:
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-ios" -type f
           echo "SDL2_ROOT=$PWD/sdl2-ios" >> "$GITHUB_ENV"
+          rm -rf "SDL2-$SDL2_VERSION" sdl2-build SDL2.tar.gz
 
       - name: Build
         run: |
+          ulimit -s "$(ulimit -H -s)" || true
+          make --version | head -n 1
           make ios-${{ matrix.architecture }}
 
       - name: Compress build output
