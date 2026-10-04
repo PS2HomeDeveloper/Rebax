@@ -188,7 +188,7 @@ WIN_LLVM_MINGW_ROOT := $(firstword $(sort $(wildcard llvm-mingw-extracted/*)))
 
 ANDROID_NDK_ROOTS := $(ANDROID_NDK_HOME) $(ANDROID_NDK_ROOT) $(ANDROID_NDK) $(ANDROID_HOME)/ndk $(ANDROID_SDK_ROOT)/ndk $(ANDROID_SDK)/ndk $(HOME)/Android/Sdk/ndk $(HOME)/Library/Android/sdk/ndk $(HOME)/.android/sdk/ndk $(TERMUX_PREFIX)/opt/android-ndk $(TERMUX_PREFIX)/opt/android-sdk/ndk $(TERMUX_PREFIX)/share/android-ndk /opt/android-ndk /opt/android-sdk/ndk /opt/android/sdk/ndk /usr/lib/android-ndk /usr/lib/android-sdk/ndk /usr/local/lib/android/sdk/ndk
 ANDROID_SDK_ROOTS := $(ANDROID_HOME) $(ANDROID_SDK_ROOT) $(ANDROID_SDK) $(HOME)/Android/Sdk $(HOME)/Library/Android/sdk $(HOME)/.android/sdk $(TERMUX_PREFIX)/opt/android-sdk $(TERMUX_PREFIX)/share/android-sdk /opt/android-sdk /opt/android /usr/lib/android-sdk /usr/local/lib/android/sdk
-ANDROID_NDK_ROOT := $(lastword $(sort $(wildcard $(ANDROID_NDK_ROOTS)) $(wildcard $(addsuffix /*,$(ANDROID_NDK_ROOTS)))))
+ANDROID_NDK_ROOT := $(firstword $(foreach r,$(ANDROID_NDK_ROOTS),$(if $(wildcard $(r)/toolchains/llvm/prebuilt/*/bin),$(r))))
 ANDROID_NDK_BIN := $(lastword $(sort $(wildcard $(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/*/bin)))
 ANDROID_SDK_ROOT := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOTS))))
 ANDROID_BUILD_TOOLS := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOT)/build-tools/*)))
@@ -607,14 +607,17 @@ run: all
 	$(TARGET)
 -include $(DEPS)
 ANDROID_PAYLOAD_LIBS := -llog -landroid -lOpenSLES
-SDL2_JAVA_SOURCE_ROOTS := $(strip $(SDL2_ANDROID_JAVA_DIR) $(SDL2_JAVA_DIR) $(SDL2_SOURCE_DIR) $(SDL2_SRC_DIR) $(SDL2_ANDROID_PROJECT) $(SDL2_ROOT) $(SDL2_DIR) $(SDL2_PREFIX) $(SDL2_INSTALL_PREFIX) $(CURDIR) $(wildcard SDL2-*) $(wildcard sdl2-*) $(wildcard third_party/SDL2*) $(wildcard external/SDL2*) $(wildcard vendor/SDL2*) $(wildcard $(HOME)/.local/SDL2*) $(wildcard $(HOME)/src/SDL2*) $(wildcard $(HOME)/SDL2*) $(wildcard $(TERMUX_PREFIX)/opt/SDL2*) $(wildcard $(TERMUX_PREFIX)/share/SDL2*) $(wildcard /usr/local/src/SDL2*) $(wildcard /usr/local/SDL2*) $(wildcard /opt/SDL2*))
-define rbx_sdl2_java_files
-$(foreach file,$(call rwildcard,$(1)/,*),$(if $(findstring /org/libsdl/app/,$(file)),$(if $(filter %.java,$(file)),$(file))))
-endef
-ifneq ($(strip $(SDL2_JAVA_SOURCES)),)
-  SDL2_JAVA_SOURCES := $(sort $(SDL2_JAVA_SOURCES))
-else
-  SDL2_JAVA_SOURCES := $(sort $(foreach root,$(SDL2_JAVA_SOURCE_ROOTS),$(if $(wildcard $(root)/.),$(call rbx_sdl2_java_files,$(root)))))
+SDL2_JAVA_SOURCES :=
+ifeq ($(WANT_APK),1)
+  SDL2_JAVA_SOURCE_ROOTS := $(strip $(SDL2_ANDROID_JAVA_DIR) $(SDL2_JAVA_DIR) $(SDL2_SOURCE_DIR) $(SDL2_SRC_DIR) $(SDL2_ANDROID_PROJECT) $(SDL2_ROOT) $(SDL2_DIR) $(SDL2_PREFIX) $(SDL2_INSTALL_PREFIX) $(CURDIR) $(wildcard SDL2-*) $(wildcard sdl2-*) $(wildcard third_party/SDL2*) $(wildcard external/SDL2*) $(wildcard vendor/SDL2*) $(wildcard $(HOME)/.local/SDL2*) $(wildcard $(HOME)/src/SDL2*) $(wildcard $(HOME)/SDL2*) $(wildcard $(TERMUX_PREFIX)/opt/SDL2*) $(wildcard $(TERMUX_PREFIX)/share/SDL2*) $(wildcard /usr/local/src/SDL2*) $(wildcard /usr/local/SDL2*) $(wildcard /opt/SDL2*))
+  define rbx_sdl2_java_files
+  $(foreach file,$(call rwildcard,$(1)/,*),$(if $(findstring /org/libsdl/app/,$(file)),$(if $(filter %.java,$(file)),$(file))))
+  endef
+  ifneq ($(strip $(SDL2_JAVA_SOURCES)),)
+    SDL2_JAVA_SOURCES := $(sort $(SDL2_JAVA_SOURCES))
+  else
+    SDL2_JAVA_SOURCES := $(sort $(foreach root,$(SDL2_JAVA_SOURCE_ROOTS),$(if $(wildcard $(root)/.),$(call rbx_sdl2_java_files,$(root)))))
+  endif
 endif
 
 ifeq ($(WANT_APK),1)
