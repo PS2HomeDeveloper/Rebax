@@ -78,9 +78,9 @@ jobs:
       - name: Resolve latest SDL2 2.x release
         shell: bash
         run: |
-          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
-            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
-            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+          latest="$(curl -fsSL --retry 3 https://www.libsdl.org/release/ \
+            | grep -oE 'SDL2-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' \
+            | sed -E 's/^SDL2-([0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz$/\1/' \
             | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
           test -n "$latest"
           echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
@@ -234,9 +234,9 @@ jobs:
       - name: Resolve latest SDL2 2.x release
         shell: bash
         run: |
-          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
-            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
-            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+          latest="$(curl -fsSL --retry 3 https://www.libsdl.org/release/ \
+            | grep -oE 'SDL2-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' \
+            | sed -E 's/^SDL2-([0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz$/\1/' \
             | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
           test -n "$latest"
           echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
@@ -334,9 +334,9 @@ jobs:
       - name: Resolve latest SDL2 2.x release
         shell: bash
         run: |
-          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
-            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
-            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+          latest="$(curl -fsSL --retry 3 https://www.libsdl.org/release/ \
+            | grep -oE 'SDL2-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' \
+            | sed -E 's/^SDL2-([0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz$/\1/' \
             | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
           test -n "$latest"
           echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
@@ -458,9 +458,9 @@ jobs:
       - name: Resolve latest SDL2 2.x release
         shell: bash
         run: |
-          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
-            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
-            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+          latest="$(curl -fsSL --retry 3 https://www.libsdl.org/release/ \
+            | grep -oE 'SDL2-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' \
+            | sed -E 's/^SDL2-([0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz$/\1/' \
             | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
           test -n "$latest"
           echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
@@ -555,9 +555,9 @@ jobs:
       - name: Resolve latest SDL2 2.x release
         shell: bash
         run: |
-          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
-            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
-            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+          latest="$(curl -fsSL --retry 3 https://www.libsdl.org/release/ \
+            | grep -oE 'SDL2-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' \
+            | sed -E 's/^SDL2-([0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz$/\1/' \
             | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
           test -n "$latest"
           echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
