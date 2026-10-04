@@ -1,3 +1,13 @@
+# Status
+Rebax is under active development. Features and workflows may change between releases.
+
+
+
+
+
+
+
+
 # Rebax
 
 Rebax is a 2D and 3D game engine and editor for creating games and applications that run on the **PlayStation 2**.
