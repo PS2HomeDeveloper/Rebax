@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 env:
-  SDL2_VERSION: 2.32.8
+  SDL2_VERSION: 2.32.10
   
   RELEASE_TAG: v1.0.0
 
@@ -74,6 +74,16 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve latest SDL2 2.x release
+        shell: bash
+        run: |
+          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
+            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
+            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+            | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
+          test -n "$latest"
+          echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
 
       - name: Read version
         id: version
@@ -221,8 +231,17 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve latest SDL2 2.x release
+        shell: bash
+        run: |
+          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
+            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
+            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+            | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
+          test -n "$latest"
+          echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
+
       - name: Build SDL2 for ${{ matrix.architecture }} from source
-        if: matrix.architecture != 'x86_64'
         run: |
           curl -fL --retry 3 -o SDL2.tar.gz \
             "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
@@ -238,12 +257,6 @@ jobs:
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-linux" -type f
           echo "SDL2_ROOT=$PWD/sdl2-linux" >> "$GITHUB_ENV"
-
-      - name: Use system SDL2
-        if: matrix.architecture == 'x86_64'
-        run: |
-          echo "SDL2_ROOT=/usr" >> "$GITHUB_ENV"
-          echo "SDL2_RUNTIME_DIR=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
@@ -318,6 +331,16 @@ jobs:
           yes | sdkmanager --sdk_root="$ANDROID_HOME" "ndk;$NDK_VERSION" > /dev/null
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
 
+      - name: Resolve latest SDL2 2.x release
+        shell: bash
+        run: |
+          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
+            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
+            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+            | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
+          test -n "$latest"
+          echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
+
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         run: |
           curl -fL --retry 3 -o SDL2.tar.gz \
@@ -357,24 +380,39 @@ jobs:
 
       - name: Build
         run: |
-          make android-${{ matrix.architecture }}
+          make android-${{ matrix.architecture }}.APK
 
       - name: Compress build output
         run: |
           mkdir -p release
           shopt -s nullglob
-          outputs=(build/output/*)
-          if [ ${#outputs[@]} -eq 0 ]; then
-            echo "::error::No file was produced in build/output; the Build step must have failed. Refusing to package or upload." >&2
+          apks=(build/output/*.apk)
+          if [ ${#apks[@]} -ne 1 ]; then
+            echo "::error::Expected exactly one APK in build/output, found ${#apks[@]}. Refusing to package or upload." >&2
             exit 1
           fi
-          repo_root="$PWD"
-          for file in "${outputs[@]}"; do
-            [ -f "$file" ] || continue
-            base="$(basename "$file")"
-            package="${base//_/-}"
-            (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
+          apk="${apks[0]}"
+          engine_version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          expected_engine="assets/rebax/Rebax_Engine_${engine_version}_android_${{ matrix.architecture }}"
+          required_entries=(
+            "$expected_engine"
+            "classes.dex"
+            "lib/${{ matrix.architecture }}/libmain.so"
+            "lib/${{ matrix.architecture }}/libSDL2.so"
+            "lib/${{ matrix.architecture }}/libiconv.so"
+            "lib/${{ matrix.architecture }}/libc++_shared.so"
+          )
+          listing=$(7z l -slt "$apk")
+          for entry in "${required_entries[@]}"; do
+            if ! grep -Fqx "Path = $entry" <<< "$listing"; then
+              echo "::error::APK is missing required entry: $entry" >&2
+              exit 1
+            fi
           done
+          repo_root="$PWD"
+          base="$(basename "$apk")"
+          package="${base//_/-}"
+          (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
@@ -416,6 +454,16 @@ jobs:
         run: |
           SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
           echo "REBAX_CC=clang -arch ${{ matrix.architecture }} -isysroot $SDKROOT -mmacosx-version-min=11.0" >> "$GITHUB_ENV"
+
+      - name: Resolve latest SDL2 2.x release
+        shell: bash
+        run: |
+          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
+            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
+            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+            | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
+          test -n "$latest"
+          echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
 
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         run: |
@@ -503,6 +551,16 @@ jobs:
           fi
           echo "IOS_SDK=$SDK" >> "$GITHUB_ENV"
           echo "IOS_SDKROOT=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Resolve latest SDL2 2.x release
+        shell: bash
+        run: |
+          latest="$(curl -fsSL --retry 3 https://api.github.com/repos/libsdl-org/SDL/tags?per_page=100 \
+            | grep -o '"name"[[:space:]]*:[[:space:]]*"release-2\.[^"]*"' \
+            | sed -E 's/.*"release-([^"]+)".*/\1/' \
+            | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
+          test -n "$latest"
+          echo "SDL2_VERSION=$latest" >> "$GITHUB_ENV"
 
       - name: Build SDL2 for ${{ matrix.architecture }} from source
         run: |
