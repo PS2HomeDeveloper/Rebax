@@ -1,0 +1,49 @@
+name: Extract Rebax Engine
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Rebax Engine
+        run: |
+          EXTRACT_DIR="$RUNNER_TEMP/rebax-extracted"
+
+          mkdir -p "$EXTRACT_DIR"
+
+          unzip -q Rebax_Engine.zip -d "$EXTRACT_DIR"
+
+          SOURCE_DIR="$EXTRACT_DIR/Rebax_Engine"
+
+          if [ ! -d "$SOURCE_DIR" ]; then
+            echo "Error: Rebax_Engine directory was not found."
+            exit 1
+          fi
+
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name '.git' \
+            ! -name '.github' \
+            ! -name 'Rebax_Engine.zip' \
+            -exec rm -rf {} +
+
+          rsync -a "$SOURCE_DIR/" ./
+
+          rm -f Rebax_Engine.zip
+
+      - name: Commit extracted project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "Extract Rebax Engine" || echo "Nothing to commit"
+          git push
