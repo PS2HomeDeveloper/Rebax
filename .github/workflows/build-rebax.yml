@@ -8,6 +8,7 @@ permissions:
 
 env:
   SDL2_VERSION: 2.32.10
+  LIBICONV_VERSION: 1.17
   
   RELEASE_TAG: v1.0.0
 
@@ -370,6 +371,25 @@ jobs:
           API="${NDK_PLATFORM#android-}"
           BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "CC=$BIN/$TRIPLE$API-clang" >> "$GITHUB_ENV"
+
+      - name: Build libiconv for ${{ matrix.architecture }} from source
+        run: |
+          curl -fL --retry 3 -o libiconv.tar.gz \
+            "https://ftp.gnu.org/gnu/libiconv/libiconv-$LIBICONV_VERSION.tar.gz"
+          tar -xzf libiconv.tar.gz
+          ICONV_PREFIX="$PWD/sdl2-android"
+          cd "libiconv-$LIBICONV_VERSION"
+          ./configure \
+            --host="$TRIPLE" \
+            --prefix="$ICONV_PREFIX" \
+            --enable-shared \
+            --disable-static \
+            --disable-nls \
+            CC="$CC" \
+            CFLAGS="-fPIC"
+          make -j"$(nproc)"
+          make install
+          test -s "$ICONV_PREFIX/lib/libiconv.so"
 
       - name: Read version
         id: version
