@@ -19,7 +19,7 @@ jobs:
 
       - name: Clean and extract
         run: |
-          ZIP=$(find . -maxdepth 1 -type f -name '*.zip' | head -n1)
+          ZIP=$(find . -maxdepth 1 -type f -name 'Rebax_Engine.zip' | head -n1)
 
           if [ -z "$ZIP" ]; then
             echo "No zip file found"
@@ -27,13 +27,15 @@ jobs:
           fi
 
           WORK=$(mktemp -d)
-          cp "$ZIP" "$WORK/archive.zip"
-          unzip -q "$WORK/archive.zip" -d "$WORK/out"
+          unzip -q "$ZIP" -d "$WORK/out"
 
-          SRC=$(find "$WORK/out" -mindepth 1 -maxdepth 1 -type d ! -name '__MACOSX' | head -n1)
+          echo "Archive structure:"
+          find "$WORK/out" -maxdepth 3
 
-          if [ -z "$SRC" ]; then
-            echo "No folder found inside the archive"
+          SRC=$(find "$WORK/out" -type d -name 'Rebax_Engine' ! -path '*__MACOSX*' | head -n1)
+
+          if [ -z "$SRC" ] || [ -z "$(ls -A "$SRC")" ]; then
+            echo "Rebax_Engine folder not found or empty"
             exit 1
           fi
 
