@@ -399,7 +399,9 @@ jobs:
             CC="$ICONV_CC" \
             CFLAGS="-fPIC"
           make -j"$(nproc)"
-          make install
+          install -d "$ICONV_PREFIX/lib" "$ICONV_PREFIX/include"
+          cp -P lib/.libs/libiconv.so* "$ICONV_PREFIX/lib/"
+          cp -f include/iconv.h "$ICONV_PREFIX/include/"
           test -s "$ICONV_PREFIX/lib/libiconv.so"
           CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$ICONV_TRIPLE/libc++_shared.so"
           test -s "$CXX_RUNTIME"
