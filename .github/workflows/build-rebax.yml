@@ -401,6 +401,9 @@ jobs:
           make -j"$(nproc)"
           make install
           test -s "$ICONV_PREFIX/lib/libiconv.so"
+          CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$ICONV_TRIPLE/libc++_shared.so"
+          test -s "$CXX_RUNTIME"
+          cp "$CXX_RUNTIME" "$ICONV_PREFIX/lib/libc++_shared.so"
 
       - name: Read version
         id: version
