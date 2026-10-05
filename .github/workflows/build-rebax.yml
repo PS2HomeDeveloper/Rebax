@@ -520,6 +520,8 @@ jobs:
           rm -rf "SDL2-$SDL2_VERSION" sdl2-build SDL2.tar.gz
 
       - name: Build
+        env:
+          SDL2_JAVA_SOURCES: none
         run: |
           make --version | head -n 1
           make macos-${{ matrix.architecture }} || /usr/bin/make macos-${{ matrix.architecture }}
@@ -629,6 +631,8 @@ jobs:
           rm -rf "SDL2-$SDL2_VERSION" sdl2-build SDL2.tar.gz
 
       - name: Build
+        env:
+          SDL2_JAVA_SOURCES: none
         run: |
           make --version | head -n 1
           make ios-${{ matrix.architecture }} || /usr/bin/make ios-${{ matrix.architecture }}
