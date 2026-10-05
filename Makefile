@@ -607,17 +607,16 @@ run: all
 	$(TARGET)
 -include $(DEPS)
 ANDROID_PAYLOAD_LIBS := -llog -landroid -lOpenSLES
-SDL2_JAVA_SOURCE_ROOTS := $(strip $(SDL2_ANDROID_JAVA_DIR) $(SDL2_SRC_DIR) $(SDL2_ANDROID_PROJECT) $(SDL2_ROOT) $(wildcard SDL2-*) $(wildcard sdl2-*) $(wildcard third_party/SDL2*) $(wildcard external/SDL2*) $(wildcard vendor/SDL2*) $(wildcard $(HOME)/SDL2*) $(wildcard $(HOME)/src/SDL2*) $(wildcard $(TERMUX_PREFIX)/opt/SDL2*) $(wildcard $(TERMUX_PREFIX)/share/SDL2*))
-define rbx_sdl2_java_files
+ifeq ($(WANT_APK),1)
+  SDL2_JAVA_SOURCE_ROOTS := $(strip $(SDL2_ANDROID_JAVA_DIR) $(SDL2_SRC_DIR) $(SDL2_ANDROID_PROJECT) $(SDL2_ROOT) $(wildcard SDL2-*) $(wildcard sdl2-*) $(wildcard third_party/SDL2*) $(wildcard external/SDL2*) $(wildcard vendor/SDL2*) $(wildcard $(HOME)/SDL2*) $(wildcard $(HOME)/src/SDL2*) $(wildcard $(TERMUX_PREFIX)/opt/SDL2*) $(wildcard $(TERMUX_PREFIX)/share/SDL2*))
+  define rbx_sdl2_java_files
 $(foreach file,$(call rwildcard,$(1)/,*),$(if $(findstring /org/libsdl/app/,$(file)),$(if $(filter %.java,$(file)),$(file))))
 endef
-ifneq ($(strip $(SDL2_JAVA_SOURCES)),)
-  SDL2_JAVA_SOURCES := $(sort $(SDL2_JAVA_SOURCES))
-else
-  SDL2_JAVA_SOURCES := $(sort $(foreach root,$(SDL2_JAVA_SOURCE_ROOTS),$(call rbx_sdl2_java_files,$(root))))
-endif
-
-ifeq ($(WANT_APK),1)
+  ifneq ($(strip $(SDL2_JAVA_SOURCES)),)
+    SDL2_JAVA_SOURCES := $(sort $(SDL2_JAVA_SOURCES))
+  else
+    SDL2_JAVA_SOURCES := $(sort $(foreach root,$(SDL2_JAVA_SOURCE_ROOTS),$(call rbx_sdl2_java_files,$(root))))
+  endif
   AAPT2 := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/aapt2 $(ANDROID_BUILD_TOOLS)/aapt2.exe $(ANDROID_BUILD_TOOLS)/aapt2.bat) $(shell command -v aapt2 2>/dev/null))
   AAPT := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/aapt $(ANDROID_BUILD_TOOLS)/aapt.exe $(ANDROID_BUILD_TOOLS)/aapt.bat) $(shell command -v aapt 2>/dev/null))
   ZIPALIGN := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/zipalign $(ANDROID_BUILD_TOOLS)/zipalign.exe) $(shell command -v zipalign 2>/dev/null))
