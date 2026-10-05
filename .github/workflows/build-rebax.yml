@@ -402,7 +402,11 @@ jobs:
           make
           make install
           test -s "$ICONV_PREFIX/lib/libiconv.so"
-          CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$ICONV_TRIPLE/libc++_shared.so"
+          CXX_TRIPLE="$ICONV_TRIPLE"
+          if [ "${{ matrix.architecture }}" = "armeabi-v7a" ]; then
+            CXX_TRIPLE=arm-linux-androideabi
+          fi
+          CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$CXX_TRIPLE/libc++_shared.so"
           test -s "$CXX_RUNTIME"
           cp "$CXX_RUNTIME" "$ICONV_PREFIX/lib/libc++_shared.so"
 
@@ -525,6 +529,7 @@ jobs:
         run: |
           make -n -d macos-${{ matrix.architecture }} > make-debug.log 2>&1 || true
           tail -n 40 make-debug.log
+          lldb --batch -o run -o "bt 30" -- make -n macos-${{ matrix.architecture }} 2>&1 | tail -n 60 || true
           /usr/bin/make --version | head -n 1 || true
 
       - name: Compress build output
@@ -633,6 +638,7 @@ jobs:
         run: |
           make -n -d ios-${{ matrix.architecture }} > make-debug.log 2>&1 || true
           tail -n 40 make-debug.log
+          lldb --batch -o run -o "bt 30" -- make -n ios-${{ matrix.architecture }} 2>&1 | tail -n 60 || true
           /usr/bin/make --version | head -n 1 || true
 
       - name: Compress build output
