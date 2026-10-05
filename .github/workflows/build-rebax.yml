@@ -517,22 +517,10 @@ jobs:
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-macos" -type f
           echo "SDL2_ROOT=$PWD/sdl2-macos" >> "$GITHUB_ENV"
-          rm -rf "SDL2-$SDL2_VERSION" sdl2-build SDL2.tar.gz
 
       - name: Build
-        env:
-          SDL2_JAVA_SOURCES: none
         run: |
-          make --version | head -n 1
-          make macos-${{ matrix.architecture }} || /usr/bin/make macos-${{ matrix.architecture }}
-
-      - name: Diagnose make
-        if: failure()
-        run: |
-          make -n -d macos-${{ matrix.architecture }} > make-debug.log 2>&1 || true
-          tail -n 40 make-debug.log
-          lldb --batch -o run -o "bt 30" -- make -n macos-${{ matrix.architecture }} 2>&1 | tail -n 60 || true
-          /usr/bin/make --version | head -n 1 || true
+          make macos-${{ matrix.architecture }}
 
       - name: Compress build output
         run: |
@@ -628,22 +616,10 @@ jobs:
           echo "---- installed SDL2 files ----"
           find "$PWD/sdl2-ios" -type f
           echo "SDL2_ROOT=$PWD/sdl2-ios" >> "$GITHUB_ENV"
-          rm -rf "SDL2-$SDL2_VERSION" sdl2-build SDL2.tar.gz
 
       - name: Build
-        env:
-          SDL2_JAVA_SOURCES: none
         run: |
-          make --version | head -n 1
-          make ios-${{ matrix.architecture }} || /usr/bin/make ios-${{ matrix.architecture }}
-
-      - name: Diagnose make
-        if: failure()
-        run: |
-          make -n -d ios-${{ matrix.architecture }} > make-debug.log 2>&1 || true
-          tail -n 40 make-debug.log
-          lldb --batch -o run -o "bt 30" -- make -n ios-${{ matrix.architecture }} 2>&1 | tail -n 60 || true
-          /usr/bin/make --version | head -n 1 || true
+          make ios-${{ matrix.architecture }}
 
       - name: Compress build output
         shell: bash
