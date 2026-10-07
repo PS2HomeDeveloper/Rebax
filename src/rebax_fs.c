@@ -475,6 +475,17 @@ int rebax_fs_extract_tar_xz(const char *xz_path, const char *dest_dir) {
                 }
             }
             fclose(out);
+#if !defined(_WIN32)
+            {
+                unsigned int mode = (unsigned int)parse_octal_field(header + 100, 8) & 0777u;
+                const unsigned char *body = data + pos;
+                int is_program = usize >= 4 && ((body[0] == 0x7F && body[1] == 'E' && body[2] == 'L' && body[3] == 'F')
+                                                || (body[0] == '#' && body[1] == '!'));
+                if (is_program) mode |= 0755u;
+                if (mode == 0) mode = 0644u;
+                chmod(full_path, (mode_t)mode);
+            }
+#endif
         }
         /* Any other typeflag (symlink, PAX header...) - silently skipped,
          * exactly what we actually need in my ps2dev/nodes archives (just

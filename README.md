@@ -53,6 +53,35 @@ Either **wget** or **curl** is required to download the prebuilt toolchain packa
 
 ## Notes
 
+### Platform Support and Testing
+
+Rebax is built for Windows, Linux, macOS, Android and iOS. All builds are produced automatically by GitHub Actions, but the maintainer does not have every kind of device, so the amount of real testing differs between platforms.
+
+| Platform | How it is tested |
+| --- | --- |
+| Android | Tested on a real device, including the full PlayStation 2 export. |
+| Linux | Tested on Termux:X11 on an Android phone and on a Linux desktop in GitHub Codespaces (Xvfb, XFCE, x11vnc and noVNC). |
+| Windows | Tested in an emulated environment. |
+| macOS | Built by GitHub Actions only. Not tested on a real Mac. |
+| iOS | Built by GitHub Actions only. Not tested on a real device. |
+
+macOS and iOS are experimental and are not guaranteed to work. Bug reports and test results for any platform are welcome.
+
+### Reporting Problems
+
+Each time you start an export, Rebax writes a log file that records every step. If the export fails or Rebax closes by itself, attach this file to your report. If the program crashed, the last line of the file starts with `CRASH` and shows where it stopped.
+
+The file is overwritten on every export. It is located at:
+
+| Platform | Log file |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\Rebax\export_log.txt` |
+| Linux | `~/.local/share/Rebax/export_log.txt` |
+| macOS | `~/Library/Application Support/Rebax/export_log.txt` |
+| Android | `Rebax_export_log.txt` in the main storage folder (`/storage/emulated/0/`) |
+
+Exporting is not supported on iOS, so it does not create a log there.
+
 ### iOS
 
 - The iOS package (`.ipa`) is **not signed**. It cannot be installed on a device as downloaded. It must be signed first, either with your own Apple ID or developer account, or with a sideloading tool such as AltStore or Sideloadly. Signing is up to whoever installs it.

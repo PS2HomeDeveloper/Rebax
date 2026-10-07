@@ -11,43 +11,77 @@
 #endif
 #include "export_internal.h"
 
-#if defined(__ANDROID__)
 #include <signal.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include "rebax_paths.h"
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
 
-#define EXPORT_TRACE_PATH "/storage/emulated/0/Rebax_export_log.txt"
 static int g_trace_fd = -1;
 
 static void trace_write_raw(const char *text) {
     if (g_trace_fd < 0) return;
     size_t n = strlen(text);
-    if (write(g_trace_fd, text, n) < 0) return;
+    if (write(g_trace_fd, text, (unsigned int)n) < 0) return;
 }
 
+static int trace_append(char *line, int len, const char *text) {
+    while (*text) line[len++] = *text++;
+    return len;
+}
+
+static int trace_append_hex(char *line, int len, unsigned long long value, int digits) {
+    const char *table = "0123456789abcdef";
+    for (int shift = (digits - 1) * 4; shift >= 0; shift -= 4) line[len++] = table[(value >> shift) & 0xF];
+    return len;
+}
+
+#if defined(_WIN32)
+static LONG WINAPI trace_crash_filter(EXCEPTION_POINTERS *info) {
+    char line[96];
+    int len = trace_append(line, 0, "CRASH exception=0x");
+    len = trace_append_hex(line, len, (unsigned long long)info->ExceptionRecord->ExceptionCode, 8);
+    len = trace_append(line, len, " address=0x");
+    len = trace_append_hex(line, len, (unsigned long long)(uintptr_t)info->ExceptionRecord->ExceptionAddress, 16);
+    line[len++] = '\n';
+    line[len] = '\0';
+    trace_write_raw(line);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#else
 static void trace_crash_handler(int sig, siginfo_t *info, void *ctx) {
     (void)ctx;
     char line[96];
-    const char *digits = "0123456789abcdef";
-    int len = 0;
-    const char *head = "CRASH signal=";
-    while (*head) line[len++] = *head++;
+    int len = trace_append(line, 0, "CRASH signal=");
     line[len++] = (char)('0' + (sig / 10) % 10);
     line[len++] = (char)('0' + sig % 10);
-    const char *mid = " address=0x";
-    while (*mid) line[len++] = *mid++;
-    uintptr_t addr = (uintptr_t)info->si_addr;
-    for (int shift = (int)(sizeof(addr) * 8) - 4; shift >= 0; shift -= 4) line[len++] = digits[(addr >> shift) & 0xF];
+    len = trace_append(line, len, " address=0x");
+    len = trace_append_hex(line, len, (unsigned long long)(uintptr_t)info->si_addr, 16);
     line[len++] = '\n';
     line[len] = '\0';
     trace_write_raw(line);
     signal(sig, SIG_DFL);
     raise(sig);
 }
+#endif
 
 void export_trace_begin(void) {
+    char path[1700];
+#if defined(__ANDROID__)
+    snprintf(path, sizeof(path), "%s", "/storage/emulated/0/Rebax_export_log.txt");
+#else
+    snprintf(path, sizeof(path), "%s/export_log.txt", rebax_root_dir());
+#endif
     if (g_trace_fd >= 0) close(g_trace_fd);
-    g_trace_fd = open(EXPORT_TRACE_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    g_trace_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
+#if defined(_WIN32)
+    SetUnhandledExceptionFilter(trace_crash_filter);
+#else
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_sigaction = trace_crash_handler;
@@ -58,16 +92,13 @@ void export_trace_begin(void) {
     sigaction(SIGFPE, &sa, NULL);
     sigaction(SIGILL, &sa, NULL);
     sigaction(SIGPIPE, &sa, NULL);
+#endif
 }
 
 void export_trace(const char *text) {
     trace_write_raw(text);
     trace_write_raw("\n");
 }
-#else
-void export_trace_begin(void) {}
-void export_trace(const char *text) { (void)text; }
-#endif
 
 /* ------------------------------------------------------------
  * Output lines queue - one line per item, circular with fixed size. Reading

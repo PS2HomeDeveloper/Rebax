@@ -46,7 +46,8 @@ static void collect_sources(const char *root, const char *relative,
              relative[0] ? "/" : "", relative);
     DIR *dir = opendir(directory);
     if (dir == NULL) return;
-    char names[512][256];
+    char (*names)[256] = (char (*)[256])malloc(512 * 256);
+    if (names == NULL) { closedir(dir); return; }
     int name_count = 0;
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL && name_count < 512) {
@@ -85,6 +86,7 @@ static void collect_sources(const char *root, const char *relative,
             }
         }
     }
+    free(names);
 }
 
 void export_makefile_write(const char *build_dir, const char *src_dir_name) {
@@ -93,7 +95,8 @@ void export_makefile_write(const char *build_dir, const char *src_dir_name) {
     FILE *f = fopen(path, "w");
     if (f == NULL) return;
 
-    export_source_name_t sources[MAX_EXPORT_SOURCES];
+    export_source_name_t *sources = (export_source_name_t *)malloc(sizeof(export_source_name_t) * MAX_EXPORT_SOURCES);
+    if (sources == NULL) { fclose(f); return; }
     int source_count = 0;
     collect_sources(build_dir, "", sources, &source_count);
     int has_cpp = 0;
@@ -124,6 +127,7 @@ void export_makefile_write(const char *build_dir, const char *src_dir_name) {
     } else {
         fprintf(f, "all: $(EE_BIN)\n\n");
     }
+    free(sources);
     fprintf(f, "include $(PS2SDK)/samples/Makefile.pref\n");
     if (has_cpp) fprintf(f, "include $(PS2SDK)/samples/Makefile.eeglobal_cpp\n");
     else fprintf(f, "include $(PS2SDK)/samples/Makefile.eeglobal\n");

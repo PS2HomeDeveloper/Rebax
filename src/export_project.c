@@ -49,7 +49,8 @@ static int copy_tree_sources(const char *project_root, const char *relative,
     DIR *dir = opendir(source_dir);
     if (dir == NULL) return 1;
 
-    char names[512][256];
+    char (*names)[256] = (char (*)[256])malloc(512 * 256);
+    if (names == NULL) { closedir(dir); return 0; }
     int count = 0;
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL && count < 512) {
@@ -71,7 +72,7 @@ static int copy_tree_sources(const char *project_root, const char *relative,
         if (stat(child_source, &st) != 0) continue;
         if (S_ISDIR(st.st_mode)) {
             if (ignored_directory(names[i])) continue;
-            if (!copy_tree_sources(project_root, child_relative, destination_root, copied_count)) return 0;
+            if (!copy_tree_sources(project_root, child_relative, destination_root, copied_count)) { free(names); return 0; }
             continue;
         }
         if (!S_ISREG(st.st_mode) || !is_project_source(names[i])) continue;
@@ -84,13 +85,14 @@ static int copy_tree_sources(const char *project_root, const char *relative,
         char *slash = strrchr(destination_dir, '/');
         if (slash != NULL) {
             *slash = '\0';
-            if (!rebax_fs_mkdir_p(destination_dir)) return 0;
+            if (!rebax_fs_mkdir_p(destination_dir)) { free(names); return 0; }
         }
-        if (!rebax_fs_copy_file(child_source, destination)) return 0;
+        if (!rebax_fs_copy_file(child_source, destination)) { free(names); return 0; }
         export_scan_file_for_export_flags(child_source);
         (*copied_count)++;
         log_pushf("[exporter] included project source: %s", child_relative);
     }
+    free(names);
     return 1;
 }
 

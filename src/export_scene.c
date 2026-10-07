@@ -84,7 +84,8 @@ void export_scene_walk_rscene_files(const char *dir_path, void (*on_file)(const 
     DIR *dir = opendir(dir_path);
     if (dir == NULL) return;
 
-    char names[256][256];
+    char (*names)[256] = (char (*)[256])malloc(256 * 256);
+    if (names == NULL) { closedir(dir); return; }
     size_t count = 0;
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL && count < 256) {
@@ -120,6 +121,7 @@ void export_scene_walk_rscene_files(const char *dir_path, void (*on_file)(const 
             }
         }
     }
+    free(names);
 }
 
 /* ------------------------------------------------------------

@@ -146,6 +146,14 @@ static int has_setup_marker(void) {
     struct stat st;
     snprintf(marker, sizeof(marker), "%s/.setup_ok", g_root_dir);
     if (stat(marker, &st) != 0) return 0;
+#if !defined(_WIN32)
+    {
+        FILE *mf = fopen(marker, "rb");
+        int version = mf ? fgetc(mf) : EOF;
+        if (mf) fclose(mf);
+        if (version != '2') return 0;
+    }
+#endif
 
     char ps2dev_dir[REBAX_PATH_MAX];
     snprintf(ps2dev_dir, sizeof(ps2dev_dir), "%s/ps2dev", g_toolchain_dir);
@@ -190,6 +198,16 @@ void rebax_paths_setup_start(void) {
     g_setup_state = SETUP_TOOLCHAINS;
 }
 
+#if defined(__ANDROID__)
+static void copy_engine_tool_cb(const char *name, void *user) {
+    int *ok = (int *)user;
+    char asset[REBAX_PATH_MAX], dest[REBAX_PATH_MAX];
+    snprintf(asset, sizeof(asset), "toolchains/%s", name);
+    snprintf(dest, sizeof(dest), "%s/Engine/toolchains/%s", g_root_dir, name);
+    if (!asset_file_copy(asset, dest) || chmod(dest, 0755) != 0) *ok = 0;
+}
+#endif
+
 #if defined(REBAX_IOS)
 static void setup_step(void) {
     g_setup_state = SETUP_DONE;
@@ -204,7 +222,9 @@ static void setup_step(void) {
         printf("[rebax] preparing bundled make and ps2dev archive...\n");
         snprintf(archive, sizeof(archive), "%s/ps2dev.tar.xz", g_toolchain_dir);
 #if defined(__ANDROID__)
-        if (!asset_file_copy("toolchains/make", g_make_path)
+        int engine_tools_ok = 1;
+        if (!asset_file_list("toolchains/", copy_engine_tool_cb, &engine_tools_ok)
+            || !engine_tools_ok || !rebax_fs_exists(g_make_path)
             || !asset_file_copy("ps2/toolchains/ps2dev.tar.xz", archive)) {
 #else
         if (!write_blob(_binary_embedded_toolchains_make_start,
@@ -249,7 +269,7 @@ static void setup_step(void) {
         remove(archive);
 #endif
         snprintf(archive, sizeof(archive), "%s/.setup_ok", g_root_dir);
-        { FILE *f = fopen(archive, "wb"); if (!f) { g_setup_state = SETUP_FAILED; return; } fclose(f); }
+        { FILE *f = fopen(archive, "wb"); if (!f) { g_setup_state = SETUP_FAILED; return; } fputs("2", f); fclose(f); }
         g_setup_state = SETUP_DONE;
         return;
     }
