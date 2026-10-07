@@ -9,7 +9,15 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#define EXPORT_UNSUPPORTED 1
+#endif
+#endif
 
 #include "export_dialog.h"
 #include "window.h"
@@ -22,6 +30,7 @@
 #include "ps2_exporter.h"
 #include "ui_common.h"
 #include "ui_dialog.h"
+#include "android_storage.h"
 
 #define DIALOG_WIDTH    620
 #define DIALOG_HEIGHT   460
@@ -38,6 +47,51 @@
 
 static int g_is_open = 0;
 static int g_ready = 0;
+
+#if defined(EXPORT_UNSUPPORTED)
+#define NOTICE_FONT_SIZE (LABEL_FONT_SIZE + 4)
+#define NOTICE_LINE_COUNT 7
+
+static const char *const NOTICE_TITLE = "Export is not supported on iOS";
+static const char *const NOTICE_LINES[NOTICE_LINE_COUNT] = {
+    "iOS does not allow apps to run other programs,",
+    "so the PS2 build tools (make, ps2dev) cannot run.",
+    "",
+    "You can still create and edit your project here.",
+    "To export, copy the project folder to a PC, Mac",
+    "or Linux computer and export it from there.",
+    ""
+};
+
+static window_texture_t *g_notice_title_tex = NULL;
+static int g_notice_title_w = 0, g_notice_title_h = 0;
+static window_texture_t *g_notice_line_tex[NOTICE_LINE_COUNT];
+static int g_notice_line_w[NOTICE_LINE_COUNT];
+static int g_notice_line_h[NOTICE_LINE_COUNT];
+static labeled_button_t g_close_btn;
+static window_texture_t *g_close_btn_tex = NULL;
+static window_texture_t *g_close_txt_tex = NULL;
+
+static window_texture_t *make_notice_texture(const char *text, font_weight_t weight,
+                                              unsigned char r, unsigned char g, unsigned char b,
+                                              int *out_w, int *out_h) {
+    size_t n = strlen(text);
+    if (n == 0) return NULL;
+    unsigned char *rgb = (unsigned char *)malloc(n * 3);
+    if (rgb == NULL) return NULL;
+    for (size_t i = 0; i < n; i++) { rgb[i * 3] = r; rgb[i * 3 + 1] = g; rgb[i * 3 + 2] = b; }
+    font_text_image_t img = font_render_text_colored(text, weight, NOTICE_FONT_SIZE, rgb);
+    free(rgb);
+    window_texture_t *tex = NULL;
+    if (img.pixels != NULL) {
+        tex = window_create_texture(img.pixels, img.width, img.height);
+        *out_w = img.width;
+        *out_h = img.height;
+        font_free_text_image(&img);
+    }
+    return tex;
+}
+#endif
 
 static text_field_t g_name_field;
 static text_field_t g_path_field;
@@ -124,9 +178,21 @@ static void ensure_ready(void) {
         g_log_line_h[i] = 0;
         g_log_line_cached[i][0] = '\0';
     }
+
+#if defined(EXPORT_UNSUPPORTED)
+    g_notice_title_tex = make_notice_texture(NOTICE_TITLE, FONT_WEIGHT_BOLD, 255, 90, 90,
+                                             &g_notice_title_w, &g_notice_title_h);
+    for (int i = 0; i < NOTICE_LINE_COUNT; i++) {
+        g_notice_line_w[i] = g_notice_line_h[i] = 0;
+        g_notice_line_tex[i] = make_notice_texture(NOTICE_LINES[i], FONT_WEIGHT_REGULAR, 255, 214, 80,
+                                                   &g_notice_line_w[i], &g_notice_line_h[i]);
+    }
+    ui_make_blue_button("Close", LABEL_FONT_SIZE, &g_close_btn, &g_close_btn_tex, &g_close_txt_tex);
+#endif
 }
 
 void export_dialog_open(void) {
+    android_storage_request_if_needed();
     ensure_ready();
     g_is_open = 1;
 }
@@ -194,6 +260,25 @@ static void pump_export_log(void) {
 
 void export_dialog_update(int window_w, int window_h) {
     if (!g_is_open) return;
+
+#if defined(EXPORT_UNSUPPORTED)
+    {
+        int ux, uy;
+        ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &ux, &uy);
+        if (window_mouse_left_just_pressed()) {
+            int mx = window_mouse_x(), my = window_mouse_y();
+            int cx = ux + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
+            int cy = uy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2;
+            int bx = ux + DIALOG_WIDTH - DIALOG_PADDING - g_close_btn.width;
+            int by = uy + DIALOG_HEIGHT - DIALOG_PADDING - g_close_btn.height;
+            if ((mx >= cx && mx < cx + CLOSE_BTN_SIZE && my >= cy && my < cy + CLOSE_BTN_SIZE)
+                || (mx >= bx && mx < bx + g_close_btn.width && my >= by && my < by + g_close_btn.height)) {
+                g_is_open = 0;
+            }
+        }
+        return;
+    }
+#endif
 
     /* The crucial line in this function - advances the export state machine one step (starts
      * shell commands, polls them later without blocking). Without it the export does
@@ -375,6 +460,31 @@ void export_dialog_draw(int window_w, int window_h) {
     ui_dialog_draw_close_button(dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE,
                                 dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2, CLOSE_BTN_SIZE);
 
+#if defined(EXPORT_UNSUPPORTED)
+    {
+        int ty = dy + TITLEBAR_HEIGHT + 24;
+        if (g_notice_title_tex != NULL) {
+            window_draw_texture(g_notice_title_tex, dx + DIALOG_PADDING, ty, g_notice_title_w, g_notice_title_h);
+        }
+        ty += NOTICE_FONT_SIZE + 22;
+        for (int i = 0; i < NOTICE_LINE_COUNT; i++) {
+            if (g_notice_line_tex[i] != NULL) {
+                window_draw_texture(g_notice_line_tex[i], dx + DIALOG_PADDING, ty,
+                                    g_notice_line_w[i], g_notice_line_h[i]);
+            }
+            ty += NOTICE_FONT_SIZE + 12;
+        }
+        int bx = dx + DIALOG_WIDTH - DIALOG_PADDING - g_close_btn.width;
+        int by = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_close_btn.height;
+        if (g_close_btn_tex != NULL) {
+            window_draw_texture(g_close_btn_tex, bx, by, g_close_btn.width, g_close_btn.height);
+            window_draw_texture(g_close_txt_tex, bx + g_close_btn.text_offset_x, by + g_close_btn.text_offset_y,
+                                g_close_btn.text_img.width, g_close_btn.text_img.height);
+        }
+        return;
+    }
+#endif
+
     ps2_export_status_t status = ps2_export_get_status();
 
     if (status == PS2_EXPORT_STATUS_IDLE) {
@@ -495,6 +605,19 @@ void export_dialog_shutdown(void) {
     for (int i = 0; i < LOG_VISIBLE_LINES; i++) {
         if (g_log_line_tex[i]) window_destroy_texture(g_log_line_tex[i]);
     }
+
+#if defined(EXPORT_UNSUPPORTED)
+    if (g_notice_title_tex) window_destroy_texture(g_notice_title_tex);
+    g_notice_title_tex = NULL;
+    for (int i = 0; i < NOTICE_LINE_COUNT; i++) {
+        if (g_notice_line_tex[i]) window_destroy_texture(g_notice_line_tex[i]);
+        g_notice_line_tex[i] = NULL;
+    }
+    if (g_close_btn_tex) window_destroy_texture(g_close_btn_tex);
+    if (g_close_txt_tex) window_destroy_texture(g_close_txt_tex);
+    g_close_btn_tex = g_close_txt_tex = NULL;
+    labeled_button_free(&g_close_btn);
+#endif
 
     labeled_button_free(&g_browse_btn);
     labeled_button_free(&g_cancel_btn);

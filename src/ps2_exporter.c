@@ -121,6 +121,8 @@ int ps2_export_start(const char *exe_name, int is_release, const char *output_di
     }
 
     log_reset();
+    export_trace_begin();
+    export_trace("trace: export start");
 
     strncpy(g_exe_name, exe_name, sizeof(g_exe_name) - 1);
     g_exe_name[sizeof(g_exe_name) - 1] = '\0';
@@ -152,6 +154,7 @@ int ps2_export_start(const char *exe_name, int is_release, const char *output_di
         if (old) { struct dirent *e; while((e=readdir(old))) { if(!strcmp(e->d_name,".")||!strcmp(e->d_name,"..")) continue; char q[1600]; snprintf(q,sizeof(q),"%s/%s",g_build_dir,e->d_name); rebax_fs_remove_recursive(q); } closedir(old); }
     }
 
+    export_trace("trace: workspace cleaned");
     export_scene_reset();
     g_used_types_count = 0;
     g_sdk_types_count = 0;
@@ -203,7 +206,9 @@ void ps2_export_update(void) {
             snprintf(src_dir, sizeof(src_dir), "%s/src", g_build_dir);
             if (!rebax_fs_mkdir_p(src_dir)) { g_state=EXPORT_STATE_FAILED; return; }
 
+            export_trace("trace: writing runtime files");
             export_codegen_write_runtime_files(src_dir);
+            export_trace("trace: walking scenes");
 
             /* Generated scene_data.c - the "original" part (extern decls +
              * value/node arrays) is written directly while we parse each scene,
@@ -235,6 +240,7 @@ void ps2_export_update(void) {
             g_codegen_main = NULL;
             g_codegen_table = NULL;
 
+            export_trace("trace: scenes parsed");
             if (g_used_types_count == 0) {
                 log_push("[exporter] FAILED: no valid nodes found in any project scene.");
                 remove(table_path);
@@ -261,16 +267,19 @@ void ps2_export_update(void) {
             if (table_src != NULL) fclose(table_src);
             remove(table_path);
 
+            export_trace("trace: copying node sources");
             if (!export_nodes_copy_matched(src_dir)) {
                 log_push("[exporter] FAILED: one or more used node types have no matching source file.");
                 g_state = EXPORT_STATE_FAILED;
                 return;
             }
+            export_trace("trace: writing sdk");
             if (!export_codegen_write_sdk_files(src_dir)) {
                 log_push("[exporter] FAILED: could not generate the Native Rebax SDK.");
                 g_state = EXPORT_STATE_FAILED;
                 return;
             }
+            export_trace("trace: copying project sources");
             if (!export_project_copy_sources(project_root, src_dir)) {
                 g_state = EXPORT_STATE_FAILED;
                 return;
@@ -289,7 +298,9 @@ void ps2_export_update(void) {
                 export_codegen_write_engine_context_impl(src_dir);
             }
 
+            export_trace("trace: writing makefile");
             export_makefile_write(src_dir, ".");
+            export_trace("trace: makefile written");
 
             log_push("[exporter] build directory ready - starting compilation...");
             g_state = EXPORT_STATE_BUILD;
@@ -314,8 +325,11 @@ void ps2_export_update(void) {
                 snprintf(pathv,sizeof(pathv),"%s/bin:%s/ee/bin:%s/iop/bin:%s/bin:%s",g_ps2dev_root,g_ps2dev_root,g_ps2dev_root,sdk,getenv("PATH")?getenv("PATH"):"");
                 REBAX_SETENV("PATH",pathv);
                 snprintf(cmd,sizeof(cmd),"cd '%s' && '%s' 2>&1",src_dir,rebax_make_path());
+                export_trace("trace: starting build command:");
+                export_trace(cmd);
 
                 if (!shell_step_start(&g_step, cmd)) {
+                    export_trace("trace: popen failed");
                     log_push("[exporter] FAILED: could not start build process.");
                     g_state = EXPORT_STATE_FAILED;
                     return;

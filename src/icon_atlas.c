@@ -3,6 +3,11 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "icon_atlas_pages.h"
+#ifdef __ANDROID__
+#include <stdio.h>
+#include <stdlib.h>
+#include "asset_files.h"
+#endif
 #include "icon_atlas.h"
 #include "window.h"
 
@@ -16,9 +21,20 @@ int icon_atlas_init(void) {
     if (g_initialized) return 1;
     for (int page = 0; page < ICON_ATLAS_PAGE_COUNT; page++) {
         int w = 0, h = 0, channels = 0;
+#ifdef __ANDROID__
+        char asset_name[96];
+        size_t asset_size = 0;
+        snprintf(asset_name, sizeof(asset_name), "resources/images/icons/icons%d.png", page + 1);
+        unsigned char *asset_data = asset_file_read(asset_name, &asset_size);
+        unsigned char *pixels = asset_data
+            ? stbi_load_from_memory(asset_data, (int)asset_size, &w, &h, &channels, 4)
+            : NULL;
+        free(asset_data);
+#else
         unsigned char *pixels = stbi_load_from_memory(
             icon_atlas_page_data(page), (int)icon_atlas_page_size(page),
             &w, &h, &channels, 4);
+#endif
         if (pixels == NULL || w != 256 || h != 256) {
             if (pixels != NULL) stbi_image_free(pixels);
             icon_atlas_shutdown();

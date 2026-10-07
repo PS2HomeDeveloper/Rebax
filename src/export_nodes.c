@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include "export_internal.h"
 #include "rebax_fs.h"
+#include "node_source.h"
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #define MAX_EXTRA_FLAGS EXPORT_MAX_EXTRA_FLAGS
 
@@ -62,10 +63,7 @@ static void scan_line_for_marker(const char *line, const char *marker,
 /* Scans a single source file (i.e. a file we copied for export) for
  * @PS2_EXPORT_LIBS/@PS2_EXPORT_INCLUDES comments and records them. Called for every
  * .c/.h file actually copied - no exceptions, no prior knowledge of its contents */
-void export_scan_file_for_export_flags(const char *path) {
-    long size = 0;
-    char *content = export_read_whole_file(path, &size);
-    if (content == NULL) return;
+static void scan_content_for_export_flags(char *content) {
 
     char *line = strtok(content, "\n");
     while (line != NULL) {
@@ -82,24 +80,51 @@ void export_scan_file_for_export_flags(const char *path) {
     free(content);
 }
 
+void export_scan_file_for_export_flags(const char *path) {
+    long size = 0;
+    char *content = export_read_whole_file(path, &size);
+    if (content == NULL) return;
+    scan_content_for_export_flags(content);
+}
+
+static void scan_node_source_for_export_flags(const char *name) {
+    long size = 0;
+    char *content = node_source_read(name, &size);
+    if (content == NULL) return;
+    scan_content_for_export_flags(content);
+}
+
+typedef struct {
+    char (*names)[96];
+    int count;
+    int capacity;
+} node_name_list_t;
+
+static void collect_node_name(const char *name, void *user) {
+    node_name_list_t *list = (node_name_list_t *)user;
+    size_t len = strlen(name);
+    if (len < 3 || strcmp(name + len - 2, ".c") != 0 || len >= 96) return;
+    if (list->count == list->capacity) {
+        list->capacity = list->capacity ? list->capacity * 2 : 32;
+        list->names = realloc(list->names, (size_t)list->capacity * sizeof(list->names[0]));
+        if (list->names == NULL) { list->count = 0; list->capacity = 0; return; }
+    }
+    strcpy(list->names[list->count++], name);
+}
+
 int export_nodes_copy_matched(const char *dest_src_dir) {
-    DIR *dir = opendir(g_nodes_src_dir);
-    if (dir == NULL) {
+    node_name_list_t node_names = {0};
+    if (!node_source_list(collect_node_name, &node_names)) {
         log_pushf("[exporter] failed to open node resources: %s", g_nodes_src_dir);
         return 0;
     }
 
     int matched_count = 0;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        size_t len = strlen(entry->d_name);
-        if (len < 3 || strcmp(entry->d_name + len - 2, ".c") != 0) continue;
-
-        char full_path[1536];
-        snprintf(full_path, sizeof(full_path), "%s/%s", g_nodes_src_dir, entry->d_name);
+    for (int n = 0; n < node_names.count; n++) {
+        const char *entry_name = node_names.names[n];
 
         long size = 0;
-        char *content = export_read_whole_file(full_path, &size);
+        char *content = node_source_read(entry_name, &size);
         if (content == NULL) continue;
 
         char *at_node = strstr(content, "@NODE");
@@ -142,39 +167,36 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         /* Copy the .c file itself plus the matching .h if present (no failure if absent -
          * some nodes lack a dedicated header and use the shared node_interface.h) */
         char base_name[64];
-        strncpy(base_name, entry->d_name, sizeof(base_name) - 1);
+        strncpy(base_name, entry_name, sizeof(base_name) - 1);
         base_name[sizeof(base_name) - 1] = '\0';
         char *ext_dot = strrchr(base_name, '.');
         if (ext_dot) *ext_dot = '\0';
 
-        char src_c[1600], src_h[1600], dst_c[1600], dst_h[1600];
-        snprintf(src_c, sizeof(src_c), "%s/%s.c", g_nodes_src_dir, base_name);
-        snprintf(src_h, sizeof(src_h), "%s/%s.h", g_nodes_src_dir, base_name);
+        char name_c[100], name_h[100], dst_c[1600], dst_h[1600];
+        snprintf(name_c, sizeof(name_c), "%s.c", base_name);
+        snprintf(name_h, sizeof(name_h), "%s.h", base_name);
         snprintf(dst_c, sizeof(dst_c), "%s/%s.c", dest_src_dir, base_name);
         snprintf(dst_h, sizeof(dst_h), "%s/%s.h", dest_src_dir, base_name);
 
-        if (!rebax_fs_copy_file(src_c, dst_c)) { closedir(dir); return 0; }
-        rebax_fs_copy_file(src_h, dst_h);
+        if (!node_source_copy(name_c, dst_c)) { free(node_names.names); return 0; }
+        node_source_copy(name_h, dst_h);
 
-        export_scan_file_for_export_flags(src_c);
-        export_scan_file_for_export_flags(src_h); /* No harm if the .h is missing - read_whole_file quietly returns NULL */
+        scan_node_source_for_export_flags(name_c);
+        scan_node_source_for_export_flags(name_h); /* No harm if the .h is missing - read_whole_file quietly returns NULL */
 
         log_pushf("[exporter] included node type: %s (%s.c)", type_name, base_name);
         if (is_used) matched_count++;
     }
-    closedir(dir);
+    free(node_names.names);
 
     /* node_interface.h is always shared - all node files include it */
-    char node_iface_src[1600];
-    snprintf(node_iface_src, sizeof(node_iface_src), "%s/node_interface.h", g_nodes_src_dir);
-    { char dst[1600]; snprintf(dst,sizeof(dst),"%s/node_interface.h",dest_src_dir); if(!rebax_fs_copy_file(node_iface_src,dst)) return 0; }
-    export_scan_file_for_export_flags(node_iface_src);
+    { char dst[1600]; snprintf(dst,sizeof(dst),"%s/node_interface.h",dest_src_dir); if(!node_source_copy("node_interface.h",dst)) return 0; }
+    scan_node_source_for_export_flags("node_interface.h");
 
     {
-        char sdk_src[1600], sdk_dst[1600];
-        snprintf(sdk_src, sizeof(sdk_src), "%s/rebax_sdk.h", g_nodes_src_dir);
+        char sdk_dst[1600];
         snprintf(sdk_dst, sizeof(sdk_dst), "%s/rebax_sdk.h", dest_src_dir);
-        if (!rebax_fs_copy_file(sdk_src, sdk_dst)) return 0;
+        if (!node_source_copy("rebax_sdk.h", sdk_dst)) return 0;
     }
 
     /* engine_context.h - completely independent of g_needs_image_loader (it was
@@ -184,9 +206,7 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
      * correctly and independently. A separate condition here prevents repeating this
      * mistake with any future dependency.) */
     if (g_needs_engine_context_stub) {
-        char ectx_src[1600];
-        snprintf(ectx_src, sizeof(ectx_src), "%s/engine_context.h", g_nodes_src_dir);
-        { char dst[1600]; snprintf(dst,sizeof(dst),"%s/engine_context.h",dest_src_dir); rebax_fs_copy_file(ectx_src,dst); }
+        { char dst[1600]; snprintf(dst,sizeof(dst),"%s/engine_context.h",dest_src_dir); node_source_copy("engine_context.h",dst); }
 
         /* Actual verification (no assumptions) - clearly prints whether the copy succeeded,
          * so we don't have to guess again if a similar error occurs later */
@@ -198,7 +218,7 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
                       ectx_dst, (long)st.st_size);
         } else {
             log_pushf("[exporter] WARNING: engine_context.h missing after copy attempt "
-                      "(source: %s)", ectx_src);
+                      "(source: %s)", g_nodes_src_dir);
         }
     }
 
@@ -221,10 +241,8 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
             "image_loader_tim2.c", "image_loader_tim.c",
         };
         for (size_t f = 0; f < sizeof(IMAGE_LOADER_FILES) / sizeof(IMAGE_LOADER_FILES[0]); f++) {
-            char src_path[1600];
-            snprintf(src_path, sizeof(src_path), "%s/%s", g_nodes_src_dir, IMAGE_LOADER_FILES[f]);
-            { char dst[1600]; snprintf(dst,sizeof(dst),"%s/%s",dest_src_dir,IMAGE_LOADER_FILES[f]); if(!rebax_fs_copy_file(src_path,dst)) return 0; }
-            export_scan_file_for_export_flags(src_path);
+            { char dst[1600]; snprintf(dst,sizeof(dst),"%s/%s",dest_src_dir,IMAGE_LOADER_FILES[f]); if(!node_source_copy(IMAGE_LOADER_FILES[f],dst)) return 0; }
+            scan_node_source_for_export_flags(IMAGE_LOADER_FILES[f]);
         }
         log_push("[exporter] included full image loader subsystem (all formats - "
                  "per-format dead-code elimination is a separate future step).");

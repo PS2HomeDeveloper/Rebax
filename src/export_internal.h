@@ -102,4 +102,7 @@ void export_makefile_write(const char *build_dir, const char *src_dir_name);
 
 char *export_read_whole_file(const char *path, long *out_size);
 
+void export_trace_begin(void);
+void export_trace(const char *text);
+
 #endif

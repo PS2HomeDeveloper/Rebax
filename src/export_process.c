@@ -11,6 +11,64 @@
 #endif
 #include "export_internal.h"
 
+#if defined(__ANDROID__)
+#include <signal.h>
+#include <stdint.h>
+#include <sys/stat.h>
+
+#define EXPORT_TRACE_PATH "/storage/emulated/0/Rebax_export_log.txt"
+static int g_trace_fd = -1;
+
+static void trace_write_raw(const char *text) {
+    if (g_trace_fd < 0) return;
+    size_t n = strlen(text);
+    if (write(g_trace_fd, text, n) < 0) return;
+}
+
+static void trace_crash_handler(int sig, siginfo_t *info, void *ctx) {
+    (void)ctx;
+    char line[96];
+    const char *digits = "0123456789abcdef";
+    int len = 0;
+    const char *head = "CRASH signal=";
+    while (*head) line[len++] = *head++;
+    line[len++] = (char)('0' + (sig / 10) % 10);
+    line[len++] = (char)('0' + sig % 10);
+    const char *mid = " address=0x";
+    while (*mid) line[len++] = *mid++;
+    uintptr_t addr = (uintptr_t)info->si_addr;
+    for (int shift = (int)(sizeof(addr) * 8) - 4; shift >= 0; shift -= 4) line[len++] = digits[(addr >> shift) & 0xF];
+    line[len++] = '\n';
+    line[len] = '\0';
+    trace_write_raw(line);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+void export_trace_begin(void) {
+    if (g_trace_fd >= 0) close(g_trace_fd);
+    g_trace_fd = open(EXPORT_TRACE_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = trace_crash_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGABRT, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+    sigaction(SIGPIPE, &sa, NULL);
+}
+
+void export_trace(const char *text) {
+    trace_write_raw(text);
+    trace_write_raw("\n");
+}
+#else
+void export_trace_begin(void) {}
+void export_trace(const char *text) { (void)text; }
+#endif
+
 /* ------------------------------------------------------------
  * Output lines queue - one line per item, circular with fixed size. Reading
  * is sequential (ps2_export_poll_next_line) with no need for threads (everything
@@ -33,6 +91,7 @@ void log_push(const char *text) {
      * long operations (e.g. unpacking the large ps2dev archive) */
     printf("%s\n", text);
     fflush(stdout);
+    export_trace(text);
 
     /* If the queue fills, drop the oldest line (instead of stopping export) - diagnostic
      * log, not critical data that must be preserved verbatim forever */

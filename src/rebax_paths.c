@@ -7,6 +7,9 @@
 
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#define REBAX_IOS 1
+#endif
 #endif
 
 
@@ -24,7 +27,11 @@
 
 #include "rebax_paths.h"
 #include "rebax_fs.h"
+#if defined(__ANDROID__)
+#include "asset_files.h"
+#else
 #include "embedded_resources.h"
+#endif
 
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #define REBAX_PATH_MAX 1536
@@ -76,7 +83,7 @@ static void compute_paths(void) {
     snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s/Engine/ps2/toolchains", g_root_dir);
     snprintf(g_toolchain_dir, sizeof(g_toolchain_dir), "%s", g_toolchains_dir);
     snprintf(g_make_path, sizeof(g_make_path), "%s/Engine/toolchains/make", g_root_dir);
-    snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "%s/Engine/ps2/sdk/nodes", g_root_dir);
+    snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "ps2/sdk/nodes");
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
     snprintf(g_Editor_dir, sizeof(g_Editor_dir), "%s/Editor", g_root_dir);
 #elif defined(__linux__)
@@ -90,11 +97,10 @@ static void compute_paths(void) {
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
     snprintf(g_Editor_dir, sizeof(g_Editor_dir), "%s/Editor", g_root_dir);
     #elif defined(__APPLE__)
-#if TARGET_OS_IPHONE
-    const char *base = SDL_GetPrefPath("Rebax", "Rebax");
-    if (!base) { fprintf(stderr, "[rebax] iOS storage path is unavailable.\n"); abort(); }
-    snprintf(g_root_dir, sizeof(g_root_dir), "%s", base);
-    SDL_free((void *)base);
+#if defined(REBAX_IOS)
+    const char *home = getenv("HOME");
+    if (!home) { fprintf(stderr, "[rebax] iOS storage path is unavailable.\n"); abort(); }
+    snprintf(g_root_dir, sizeof(g_root_dir), "%s/Documents/Rebax", home);
 #else
     const char *home = getenv("HOME");
     if (!home) home = ".";
@@ -112,11 +118,15 @@ static void compute_paths(void) {
     char engine_toolchains_dir[REBAX_PATH_MAX], node_sdk_dir[REBAX_PATH_MAX];
     snprintf(engine_toolchains_dir, sizeof(engine_toolchains_dir), "%s/Engine/toolchains", g_root_dir);
     snprintf(node_sdk_dir, sizeof(node_sdk_dir), "%s/Engine/ps2/sdk", g_root_dir);
+#if !defined(REBAX_IOS)
     mkdir_recursive(g_toolchains_dir);
     mkdir_recursive(g_toolchain_dir);
     mkdir_recursive(engine_toolchains_dir);
+#endif
+#if !defined(__ANDROID__) && !defined(REBAX_IOS)
     mkdir_recursive(node_sdk_dir);
     mkdir_recursive(g_node_resources_dir);
+#endif
     mkdir_recursive(g_temp_export_dir);
     mkdir_recursive(g_Editor_dir);
     g_paths_ready = 1;
@@ -139,9 +149,14 @@ static int has_setup_marker(void) {
 
     char ps2dev_dir[REBAX_PATH_MAX];
     snprintf(ps2dev_dir, sizeof(ps2dev_dir), "%s/ps2dev", g_toolchain_dir);
+#if defined(__ANDROID__)
+    return rebax_fs_exists(g_make_path)
+        && rebax_fs_exists(ps2dev_dir);
+#else
     return rebax_fs_exists(g_make_path)
         && rebax_fs_exists(ps2dev_dir)
         && rebax_fs_exists(g_node_resources_dir);
+#endif
 }
 
 int rebax_paths_is_setup_needed(void) {
@@ -149,6 +164,7 @@ int rebax_paths_is_setup_needed(void) {
     return !has_setup_marker();
 }
 
+#if !defined(__ANDROID__) && !defined(REBAX_IOS)
 static int write_blob(const unsigned char *data, size_t size, const char *path) {
     if (!data || size == 0) return 0;
     FILE *f = fopen(path, "wb");
@@ -160,15 +176,25 @@ static int write_blob(const unsigned char *data, size_t size, const char *path) 
 #endif
     return ok;
 }
+#endif
 
 void rebax_paths_setup_start(void) {
     compute_paths();
     g_setup_thread = NULL;
+#if defined(REBAX_IOS)
+    g_setup_state = SETUP_DONE;
+    return;
+#endif
     if (!rebax_paths_is_setup_needed()) { g_setup_state = SETUP_DONE; return; }
     printf("[rebax] first run - preparing PS2 toolchains and node resources...\n");
     g_setup_state = SETUP_TOOLCHAINS;
 }
 
+#if defined(REBAX_IOS)
+static void setup_step(void) {
+    g_setup_state = SETUP_DONE;
+}
+#else
 static void setup_step(void) {
     char archive[REBAX_PATH_MAX], node_sdk_dir[REBAX_PATH_MAX];
     snprintf(node_sdk_dir, sizeof(node_sdk_dir), "%s/Engine/ps2/sdk", g_root_dir);
@@ -177,10 +203,15 @@ static void setup_step(void) {
     case SETUP_TOOLCHAINS:
         printf("[rebax] preparing bundled make and ps2dev archive...\n");
         snprintf(archive, sizeof(archive), "%s/ps2dev.tar.xz", g_toolchain_dir);
+#if defined(__ANDROID__)
+        if (!asset_file_copy("toolchains/make", g_make_path)
+            || !asset_file_copy("ps2/toolchains/ps2dev.tar.xz", archive)) {
+#else
         if (!write_blob(_binary_embedded_toolchains_make_start,
                         embedded_make_size(), g_make_path)
             || !write_blob(_binary_embedded_ps2_toolchains_ps2dev_tar_xz_start,
                            embedded_ps2dev_archive_size(), archive)) {
+#endif
             fprintf(stderr, "[rebax] FAILED: could not write bundled toolchain files.\n");
             remove(g_make_path);
             remove(archive);
@@ -207,6 +238,7 @@ static void setup_step(void) {
         g_setup_state = SETUP_NODES;
         return;
     case SETUP_NODES:
+#if !defined(__ANDROID__)
         printf("[rebax] extracting node resources...\n");
         snprintf(archive, sizeof(archive), "%s/.nodes.tar.xz", g_root_dir);
         if (!write_blob(_binary_embedded_ps2_sdk_nodes_tar_xz_start, embedded_node_archive_size(), archive)
@@ -215,12 +247,14 @@ static void setup_step(void) {
             remove(archive); g_setup_state = SETUP_FAILED; return;
         }
         remove(archive);
+#endif
         snprintf(archive, sizeof(archive), "%s/.setup_ok", g_root_dir);
         { FILE *f = fopen(archive, "wb"); if (!f) { g_setup_state = SETUP_FAILED; return; } fclose(f); }
         g_setup_state = SETUP_DONE;
         return;
     }
 }
+#endif
 
 static int setup_worker(void *unused) {
     (void)unused;

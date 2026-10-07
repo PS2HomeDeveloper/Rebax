@@ -18,8 +18,19 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#include "embedded_resources.h"
 #include "font.h"
+
+#ifdef __ANDROID__
+#include "asset_files.h"
+static unsigned char *g_font_regular_data;
+static unsigned char *g_font_bold_data;
+#define FONT_REGULAR_DATA g_font_regular_data
+#define FONT_BOLD_DATA g_font_bold_data
+#else
+#include "embedded_resources.h"
+#define FONT_REGULAR_DATA _binary_embedded_resources_fonts_SpaceGrotesk_Regular_ttf_start
+#define FONT_BOLD_DATA _binary_embedded_resources_fonts_SpaceGrotesk_Bold_ttf_start
+#endif
 
 static stbtt_fontinfo g_font_regular;
 static stbtt_fontinfo g_font_bold;
@@ -30,15 +41,23 @@ int font_init(void) {
         return 1;
     }
 
+#ifdef __ANDROID__
+    if (!g_font_regular_data) g_font_regular_data = asset_file_read("resources/fonts/SpaceGrotesk-Regular.ttf", NULL);
+    if (!g_font_bold_data) g_font_bold_data = asset_file_read("resources/fonts/SpaceGrotesk-Bold.ttf", NULL);
+    if (!g_font_regular_data || !g_font_bold_data) {
+        return 0;
+    }
+#endif
+
     int ok_regular = stbtt_InitFont(
         &g_font_regular,
-        _binary_embedded_resources_fonts_SpaceGrotesk_Regular_ttf_start,
-        stbtt_GetFontOffsetForIndex(_binary_embedded_resources_fonts_SpaceGrotesk_Regular_ttf_start, 0)
+        FONT_REGULAR_DATA,
+        stbtt_GetFontOffsetForIndex(FONT_REGULAR_DATA, 0)
     );
     int ok_bold = stbtt_InitFont(
         &g_font_bold,
-        _binary_embedded_resources_fonts_SpaceGrotesk_Bold_ttf_start,
-        stbtt_GetFontOffsetForIndex(_binary_embedded_resources_fonts_SpaceGrotesk_Bold_ttf_start, 0)
+        FONT_BOLD_DATA,
+        stbtt_GetFontOffsetForIndex(FONT_BOLD_DATA, 0)
     );
 
     if (!ok_regular || !ok_bold) {

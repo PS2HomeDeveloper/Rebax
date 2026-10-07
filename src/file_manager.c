@@ -53,6 +53,7 @@
 #include "ui_dialog.h"
 #include "path_utils.h"
 #include "file_icons.h"
+#include "android_storage.h"
 
 /* ------------------------------------------------------------
  * Layout constants
@@ -464,6 +465,7 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
 void file_manager_open(file_manager_root_t root, file_manager_mode_t mode,
                          const char **extensions, int extension_count,
                          file_manager_callback_t callback, void *user_data) {
+    android_storage_request_if_needed();
     g_pick_mode = mode;
 
     g_extension_count = 0;
@@ -500,6 +502,7 @@ void file_manager_open(file_manager_root_t root, file_manager_mode_t mode,
 
 void file_manager_open_save(file_manager_root_t root, const char *default_filename,
                               file_manager_callback_t callback, void *user_data) {
+    android_storage_request_if_needed();
     g_pick_mode = FILE_MANAGER_MODE_SAVE_FILE;
     g_extension_count = 0; /* No filtering - all files are shown to the context only, exactly like PICK_FOLDER */
 

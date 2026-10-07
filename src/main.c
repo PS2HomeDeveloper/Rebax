@@ -23,6 +23,7 @@
 #include "rebax_paths.h" /* Rebax working directory + first-run setup for tools and node resources */
 #include "file_manager.h" /* Built-in file manager - opened from anywhere in the engine, drawn on top of everything */
 #include "ui_dialog.h"
+#include "android_storage.h"
 
 /* ------------------------------------------------------------
  * In the future: additional library includes will be added here, e.g.:
@@ -38,6 +39,8 @@ int main(void) {
     }
 
     printf("Rebax_Engine started successfully.\n");
+
+    android_storage_request_if_needed();
 
     /* First run - extract the PS2Dev environment and node resources to the Rebax folder
      * (see rebax_paths.h). Loading screen without auto-hide until the real operation

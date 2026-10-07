@@ -1439,9 +1439,7 @@ static int is_program(const char *path) {
 #endif
 }
 
-static int cmd_which(int argc, char **argv) {
-    if (argc != 3) die("usage: which <program>");
-    const char *name = argv[2];
+static int find_program(const char *name, char *found, size_t cap) {
     int has_dir = 0;
     for (const char *c = name; *c; c++) if (is_sep(*c)) has_dir = 1;
 
@@ -1480,12 +1478,20 @@ static int cmd_which(int argc, char **argv) {
             char full[1700];
             if (has_dir) snprintf(full, sizeof(full), "%s%s", name, exts[e]);
             else snprintf(full, sizeof(full), "%s/%s%s", dir, name, exts[e]);
-            if (is_program(full)) { puts(full); return 0; }
+            if (is_program(full)) { snprintf(found, cap, "%s", full); return 1; }
         }
         first = 0;
         if (has_dir) break;
     }
-    return 1;
+    return 0;
+}
+
+static int cmd_which(int argc, char **argv) {
+    if (argc != 3) die("usage: which <program>");
+    char found[1700];
+    if (!find_program(argv[2], found, sizeof(found))) return 1;
+    puts(found);
+    return 0;
 }
 
 typedef struct {
@@ -1688,6 +1694,738 @@ static int cmd_extract(int argc, char **argv) {
     return 0;
 }
 
+#ifdef _WIN32
+#define RBX_POPEN _popen
+#define RBX_PCLOSE _pclose
+#define RBX_QUIET " >nul 2>&1"
+#define RBX_QUIET_ERR " 2>nul"
+#else
+#define RBX_POPEN popen
+#define RBX_PCLOSE pclose
+#define RBX_QUIET " >/dev/null 2>&1"
+#define RBX_QUIET_ERR " 2>/dev/null"
+#endif
+
+typedef struct {
+    char *text;
+    size_t len;
+    size_t cap;
+} cmdline_t;
+
+static void cmdline_add(cmdline_t *c, const char *arg) {
+    int quote = arg[0] == '\0' || strchr(arg, ' ') != NULL;
+    size_t al = strlen(arg);
+    size_t need = c->len + al + 4;
+    if (need > c->cap) {
+        c->cap = need * 2 + 64;
+        c->text = (char *)xrealloc(c->text, c->cap);
+    }
+    if (c->len) c->text[c->len++] = ' ';
+    if (quote) c->text[c->len++] = '"';
+    memcpy(c->text + c->len, arg, al);
+    c->len += al;
+    if (quote) c->text[c->len++] = '"';
+    c->text[c->len] = '\0';
+}
+
+static void cmdline_add_program(cmdline_t *c, const char *name) {
+#ifdef _WIN32
+    char *fixed = xstrdup(name);
+    for (char *p = fixed; *p; p++) if (*p == '/') *p = '\\';
+    cmdline_add(c, fixed);
+    free(fixed);
+#else
+    cmdline_add(c, name);
+#endif
+}
+
+static void cmdline_add_words(cmdline_t *c, const char *words, char sep) {
+    const char *p = words;
+    while (*p) {
+        char word[1700];
+        size_t n = 0;
+        while (*p && *p != sep && n < sizeof(word) - 1) word[n++] = *p++;
+        word[n] = '\0';
+        if (*p == sep) p++;
+        if (n) cmdline_add(c, word);
+    }
+}
+
+static void cmdline_append_raw(cmdline_t *c, const char *raw) {
+    size_t rl = strlen(raw);
+    if (c->len + rl + 1 > c->cap) {
+        c->cap = (c->len + rl) * 2 + 64;
+        c->text = (char *)xrealloc(c->text, c->cap);
+    }
+    memcpy(c->text + c->len, raw, rl + 1);
+    c->len += rl;
+}
+
+static char *cmdline_final(cmdline_t *c) {
+#ifdef _WIN32
+    size_t n = c->len + 3;
+    char *w = (char *)xmalloc(n);
+    snprintf(w, n, "\"%s\"", c->text);
+    return w;
+#else
+    return xstrdup(c->text);
+#endif
+}
+
+static int run_cmdline(cmdline_t *c) {
+    char *line = cmdline_final(c);
+    int rc = system(line);
+    free(line);
+    free(c->text);
+    c->text = NULL;
+    c->len = c->cap = 0;
+    return rc == 0 ? 0 : 1;
+}
+
+static int write_text_file(const char *path, const char *text) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return 0;
+    size_t n = strlen(text);
+    int ok = fwrite(text, 1, n, f) == n;
+    if (fclose(f) != 0) ok = 0;
+    return ok;
+}
+
+static const char *file_arch(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return "none";
+    unsigned char b[64];
+    size_t n = fread(b, 1, sizeof(b), f);
+    const char *result = "unknown";
+    if (n >= 20 && b[0] == 0x7f && b[1] == 'E' && b[2] == 'L' && b[3] == 'F') {
+        if (b[19] == 0x00 && b[18] == 0x3e) result = "x86_64";
+        else if (b[19] == 0x00 && b[18] == 0x03) result = "x86";
+        else if (b[19] == 0x00 && b[18] == 0xb7) result = "arm64";
+        else if (b[19] == 0x00 && b[18] == 0x28) result = "arm";
+    } else if (n >= 64 && b[0] == 'M' && b[1] == 'Z') {
+        long off = (long)b[60] | ((long)b[61] << 8) | ((long)b[62] << 16) | ((long)b[63] << 24);
+        unsigned char m[2];
+        if (off >= 0 && fseek(f, off + 4, SEEK_SET) == 0 && fread(m, 1, 2, f) == 2) {
+            if (m[0] == 0x64 && m[1] == 0x86) result = "x86_64";
+            else if (m[0] == 0x4c && m[1] == 0x01) result = "x86";
+            else if (m[0] == 0x64 && m[1] == 0xaa) result = "arm64";
+            else if (m[0] == 0xc0 && m[1] == 0x01) result = "arm";
+            else if (m[0] == 0xc4 && m[1] == 0x01) result = "arm";
+        }
+    } else if (n >= 8) {
+        uint32_t h = ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | b[3];
+        if (h == 0xcffaedfe || h == 0xcefaedfe || h == 0xfeedface || h == 0xfeedfacf || h == 0xcafebabe || h == 0xbebafeca) {
+            uint32_t cm = ((uint32_t)b[4] << 24) | ((uint32_t)b[5] << 16) | ((uint32_t)b[6] << 8) | b[7];
+            if (cm == 0x0c000001 || cm == 0x0100000c) result = "arm64";
+            else if (cm == 0x07000001 || cm == 0x01000007) result = "x86_64";
+            else if (cm == 0x0c000000 || cm == 0x0000000c) result = "arm";
+            else if (cm == 0x07000000 || cm == 0x00000007) result = "x86";
+        }
+    }
+    fclose(f);
+    return result;
+}
+
+static int cmd_file_arch(int argc, char **argv) {
+    if (argc != 3) die("usage: file-arch <file>");
+    puts(file_arch(argv[2]));
+    return 0;
+}
+
+static int cmd_replace(int argc, char **argv) {
+    if (argc != 5) die("usage: replace <file> <from> <to>");
+    const char *from = argv[3];
+    const char *to = argv[4];
+    size_t fl = strlen(from);
+    size_t tl = strlen(to);
+    if (fl == 0) die("replace: empty search text");
+    FILE *f = fopen(argv[2], "rb");
+    if (!f) die("cannot read '%s'", argv[2]);
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size < 0) die("cannot read '%s'", argv[2]);
+    char *data = (char *)xmalloc((size_t)size + 1);
+    if (fread(data, 1, (size_t)size, f) != (size_t)size) die("cannot read '%s'", argv[2]);
+    fclose(f);
+    data[size] = '\0';
+    size_t count = 0;
+    for (const char *p = data; (p = strstr(p, from)) != NULL; p += fl) count++;
+    if (count == 0) { free(data); return 0; }
+    size_t out_size = (size_t)size - count * fl + count * tl;
+    char *out = (char *)xmalloc(out_size + 1);
+    char *w = out;
+    const char *p = data;
+    const char *hit;
+    while ((hit = strstr(p, from)) != NULL) {
+        memcpy(w, p, (size_t)(hit - p));
+        w += hit - p;
+        memcpy(w, to, tl);
+        w += tl;
+        p = hit + fl;
+    }
+    size_t rest = strlen(p);
+    memcpy(w, p, rest);
+    w += rest;
+    f = fopen(argv[2], "wb");
+    if (!f) die("cannot write '%s'", argv[2]);
+    if (fwrite(out, 1, (size_t)(w - out), f) != (size_t)(w - out)) die("cannot write '%s'", argv[2]);
+    fclose(f);
+    free(data);
+    free(out);
+    return 0;
+}
+
+static int cmd_android_entry(int argc, char **argv) {
+    if (argc != 3) die("usage: android-entry <out.c>");
+    ensure_parent_dir(argv[2]);
+    if (!write_text_file(argv[2],
+            "extern int main(void);\n"
+            "int SDL_main(int argc, char **argv) { (void)argc; (void)argv; return main(); }\n"))
+        die("cannot write '%s'", argv[2]);
+    return 0;
+}
+
+static int cmd_android_manifest(int argc, char **argv) {
+    if (argc != 5) die("usage: android-manifest <out.xml> <version_name> <target_sdk>");
+    ensure_parent_dir(argv[2]);
+    char text[4096];
+    snprintf(text, sizeof(text),
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+        "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"org.rebax.engine\" android:versionCode=\"1\" android:versionName=\"%s\">"
+        "<uses-sdk android:minSdkVersion=\"21\" android:targetSdkVersion=\"%s\"/>"
+        "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>"
+        "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>"
+        "<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\"/>"
+        "<uses-feature android:glEsVersion=\"0x00020000\" android:required=\"true\"/>"
+        "<application android:label=\"Rebax\" android:allowBackup=\"true\" android:requestLegacyExternalStorage=\"true\" android:extractNativeLibs=\"true\" android:hasCode=\"true\">"
+        "<activity android:name=\"org.libsdl.app.SDLActivity\" android:exported=\"true\" android:launchMode=\"singleTop\" android:screenOrientation=\"landscape\" android:configChanges=\"keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode\" android:theme=\"@android:style/Theme.NoTitleBar.Fullscreen\">"
+        "<intent-filter><action android:name=\"android.intent.action.MAIN\"/><category android:name=\"android.intent.category.LAUNCHER\"/></intent-filter>"
+        "<meta-data android:name=\"android.app.lib_name\" android:value=\"main\"/>"
+        "</activity></application></manifest>",
+        argv[3], argv[4]);
+    if (!write_text_file(argv[2], text)) die("cannot write '%s'", argv[2]);
+    return 0;
+}
+
+static int cmd_require_lib(int argc, char **argv) {
+    if (argc != 5 || argv[4][0] == '\0') {
+        fprintf(stderr, "ERROR: no %s library matching the target was found\n", argc > 2 ? argv[2] : "required");
+        return 1;
+    }
+    const char *label = argv[2];
+    const char *expect = argv[3];
+    const char *path = argv[4];
+    if (!rebax_fs_exists(path)) {
+        fprintf(stderr, "ERROR: %s (%s) was not found on disk; nothing was packaged\n", label, path);
+        return 1;
+    }
+    const char *arch = file_arch(path);
+    if (strcmp(arch, "unknown") != 0 && strcmp(arch, expect) != 0) {
+        fprintf(stderr, "ERROR: %s is %s but the target is %s\n", path, arch, expect);
+        return 1;
+    }
+    return 0;
+}
+
+static int cmd_toolchain(int argc, char **argv) {
+    if (argc < 5) die("usage: toolchain <dir> <url> <tmp_file> [required_file]...");
+    const char *dir = argv[2];
+    const char *url = argv[3];
+    const char *tmp = argv[4];
+    if (!rebax_fs_exists(dir)) {
+        if (!rebax_fs_mkdir_p(dir)) die("cannot create directory '%s'", dir);
+    } else {
+        int files = 0;
+        if (rebax_fs_is_dir(dir)) rebax_fs_walk_files(dir, count_cb, &files);
+        if (files != 0) {
+            int missing = 0;
+            for (int i = 5; i < argc; i++) {
+                if (!rebax_fs_exists(argv[i])) {
+                    printf("Warning: missing required toolchain file: %s\n", argv[i]);
+                    missing = 1;
+                }
+            }
+            if (missing) printf("Warning: directory '%s' already contains files; not downloading its package.\n", dir);
+            return 0;
+        }
+    }
+    printf("Downloading %s\n", url);
+    fflush(stdout);
+    rebax_fs_remove_recursive(tmp);
+    ensure_parent_dir(tmp);
+    cmdline_t c = {0};
+    cmdline_add(&c, "curl");
+    cmdline_add(&c, "-fL");
+    cmdline_add(&c, "--retry");
+    cmdline_add(&c, "3");
+    cmdline_add(&c, "--connect-timeout");
+    cmdline_add(&c, "15");
+    cmdline_add(&c, "-o");
+    cmdline_add(&c, tmp);
+    cmdline_add(&c, url);
+    if (run_cmdline(&c) != 0) {
+        rebax_fs_remove_recursive(tmp);
+        die("download failed: %s (curl is required)", url);
+    }
+    if (!rebax_fs_extract_tar_xz(tmp, dir)) {
+        rebax_fs_remove_recursive(tmp);
+        die("cannot extract '%s'", tmp);
+    }
+    rebax_fs_remove_recursive(tmp);
+    return 0;
+}
+
+static int cmd_bundle_libs(int argc, char **argv) {
+    if (argc < 4) die("usage: bundle-libs <dest_dir> <lib>... -- <dir>...");
+    const char *dest = argv[2];
+    if (!rebax_fs_mkdir_p(dest)) die("cannot create directory '%s'", dest);
+    int sep = argc;
+    for (int i = 3; i < argc; i++) if (strcmp(argv[i], "--") == 0) { sep = i; break; }
+    for (int i = 3; i < sep; i++) {
+        for (int j = sep + 1; j < argc; j++) {
+            char from[1700], to[1700];
+            snprintf(from, sizeof(from), "%s/%s", argv[j], argv[i]);
+            if (rebax_fs_exists(from)) {
+                snprintf(to, sizeof(to), "%s/%s", dest, argv[i]);
+                if (!rebax_fs_copy_file(from, to)) die("cannot copy '%s' to '%s'", from, to);
+                break;
+            }
+        }
+    }
+    return 0;
+}
+
+static void cc_build_probe(cmdline_t *c, const char *name, const char *flags) {
+    cmdline_add_program(c, name);
+    cmdline_add_words(c, flags, '~');
+}
+
+static int cc_probe_link(const char *work, const char *name, const char *flags) {
+    char src[1700], out[1700];
+    snprintf(src, sizeof(src), "%s/probe.c", work);
+    snprintf(out, sizeof(out), "%s/probe.bin", work);
+    if (!write_text_file(src, "int main(){return 0;}\n")) return 0;
+    cmdline_t c = {0};
+    cc_build_probe(&c, name, flags);
+    cmdline_add(&c, src);
+    cmdline_add(&c, "-o");
+    cmdline_add(&c, out);
+    cmdline_append_raw(&c, RBX_QUIET);
+    return run_cmdline(&c) == 0;
+}
+
+static int cc_probe_dump(const char *name, const char *flags, const char *const *need, int need_n, const char *const *bad, int bad_n) {
+    cmdline_t c = {0};
+    cc_build_probe(&c, name, flags);
+    cmdline_add(&c, "-dumpmachine");
+    cmdline_append_raw(&c, RBX_QUIET_ERR);
+    char *line = cmdline_final(&c);
+    FILE *p = RBX_POPEN(line, "r");
+    free(line);
+    free(c.text);
+    char t[512];
+    size_t n = 0;
+    if (p) {
+        n = fread(t, 1, sizeof(t) - 1, p);
+        RBX_PCLOSE(p);
+    }
+    t[n] = '\0';
+    while (n > 0 && isspace((unsigned char)t[n - 1])) t[--n] = '\0';
+    for (int i = 0; i < need_n; i++) if (strstr(t, need[i]) == NULL) return 0;
+    for (int i = 0; i < bad_n; i++) if (strstr(t, bad[i]) != NULL) return 0;
+    return 1;
+}
+
+static int cmd_cc_select(int argc, char **argv) {
+    if (argc < 3) die("usage: cc-select <work_dir> [--require word...] [--forbid word...] --candidates name:flags:mode...");
+    const char *work = argv[2];
+    const char *need[32], *bad[32];
+    int need_n = 0, bad_n = 0, mode = 0, first_cand = argc;
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "--require") == 0) mode = 1;
+        else if (strcmp(argv[i], "--forbid") == 0) mode = 2;
+        else if (strcmp(argv[i], "--candidates") == 0) { first_cand = i + 1; break; }
+        else if (mode == 1 && need_n < 32) need[need_n++] = argv[i];
+        else if (mode == 2 && bad_n < 32) bad[bad_n++] = argv[i];
+    }
+    if (!rebax_fs_mkdir_p(work)) die("cannot create directory '%s'", work);
+    for (int i = first_cand; i < argc; i++) {
+        char *cand = xstrdup(argv[i]);
+        char *last = strrchr(cand, ':');
+        if (!last) { free(cand); continue; }
+        *last = '\0';
+        const char *mode_s = last + 1;
+        char *prev = strrchr(cand, ':');
+        const char *flags = "";
+        if (prev) { *prev = '\0'; flags = prev + 1; }
+        const char *name = cand;
+        char found[1700];
+        int ok = 0;
+        if (name[0] != '\0' && find_program(name, found, sizeof(found))) {
+            if (strcmp(mode_s, "link") == 0) ok = cc_probe_link(work, name, flags);
+            else ok = cc_probe_dump(name, flags, need, need_n, bad, bad_n);
+        }
+        if (ok) {
+            printf("%s|%s\n", name, flags);
+            free(cand);
+            return 0;
+        }
+        free(cand);
+    }
+    return 0;
+}
+
+static int cmd_cc_check(int argc, char **argv) {
+    if (argc < 4) die("usage: cc-check <work_dir> <compiler> [flag]...");
+    const char *work = argv[2];
+    char src[1700], out[1700], log[1700];
+    snprintf(src, sizeof(src), "%s/check.c", work);
+    snprintf(out, sizeof(out), "%s/check.bin", work);
+    snprintf(log, sizeof(log), "%s/check.log", work);
+    if (!rebax_fs_mkdir_p(work)) die("cannot create directory '%s'", work);
+    if (!write_text_file(src, "int main(){return 0;}\n")) die("cannot write '%s'", src);
+    cmdline_t c = {0};
+    cmdline_add_program(&c, argv[3]);
+    for (int i = 4; i < argc; i++) cmdline_add(&c, argv[i]);
+    cmdline_add(&c, src);
+    cmdline_add(&c, "-o");
+    cmdline_add(&c, out);
+    cmdline_append_raw(&c, " >");
+    cmdline_add(&c, log);
+    cmdline_append_raw(&c, " 2>&1");
+    int rc = run_cmdline(&c);
+    FILE *f = fopen(log, "rb");
+    if (f) {
+        int ch;
+        while ((ch = fgetc(f)) != EOF) putchar(ch == '\n' || ch == '\r' ? ' ' : ch);
+        fclose(f);
+    }
+    printf(" rbax_cc_exit=%d\n", rc);
+    return 0;
+}
+
+typedef struct {
+    const char *src;
+    const char *dst;
+    const char *skip[16];
+    int skip_count;
+    int failed;
+} copy_dir_ctx_t;
+
+static int path_has_skipped_part(const char *rel, const char *const *skip, int skip_count) {
+    const char *p = rel;
+    while (*p) {
+        char part[512];
+        size_t n = 0;
+        while (*p && !is_sep(*p) && n < sizeof(part) - 1) part[n++] = *p++;
+        part[n] = '\0';
+        while (is_sep(*p)) p++;
+        for (int i = 0; i < skip_count; i++) if (strcmp(part, skip[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+static void copy_dir_cb(const char *path, void *user) {
+    copy_dir_ctx_t *c = (copy_dir_ctx_t *)user;
+    size_t sl = strlen(c->src);
+    const char *rel = path + sl;
+    while (is_sep(*rel)) rel++;
+    if (path_has_skipped_part(rel, c->skip, c->skip_count)) return;
+    char to[1700];
+    snprintf(to, sizeof(to), "%s/%s", c->dst, rel);
+    for (char *q = to + strlen(c->dst); *q; q++) if (*q == '\\') *q = '/';
+    ensure_parent_dir(to);
+    if (!rebax_fs_copy_file(path, to)) {
+        fprintf(stderr, "[rebax-tool] error: cannot copy '%s' to '%s'\n", path, to);
+        c->failed = 1;
+    }
+}
+
+static int cmd_copy_dir(int argc, char **argv) {
+    if (argc < 4) die("usage: copy-dir <src_dir> <dst_dir> [--skip <name>]...");
+    copy_dir_ctx_t c;
+    memset(&c, 0, sizeof(c));
+    c.src = argv[2];
+    c.dst = argv[3];
+    for (int i = 4; i + 1 < argc; i += 2) {
+        if (strcmp(argv[i], "--skip") != 0 || c.skip_count >= 16) die("usage: copy-dir <src_dir> <dst_dir> [--skip <name>]...");
+        c.skip[c.skip_count++] = argv[i + 1];
+    }
+    if (!rebax_fs_is_dir(c.src)) die("'%s' is not a directory", c.src);
+    if (!rebax_fs_mkdir_p(c.dst)) die("cannot create directory '%s'", c.dst);
+    rebax_fs_walk_files(c.src, copy_dir_cb, &c);
+    if (c.failed) return 1;
+    return 0;
+}
+
+typedef struct {
+    const char *root;
+    char **items;
+    size_t count;
+    size_t cap;
+} manifest_ctx_t;
+
+static void manifest_cb(const char *path, void *user) {
+    manifest_ctx_t *m = (manifest_ctx_t *)user;
+    const char *rel = path + strlen(m->root);
+    while (is_sep(*rel)) rel++;
+    if (m->count == m->cap) {
+        m->cap = m->cap ? m->cap * 2 : 64;
+        m->items = (char **)xrealloc(m->items, m->cap * sizeof(char *));
+    }
+    char *copy = xstrdup(rel);
+    for (char *q = copy; *q; q++) if (*q == '\\') *q = '/';
+    m->items[m->count++] = copy;
+}
+
+static int manifest_cmp(const void *a, const void *b) {
+    return strcmp(*(char *const *)a, *(char *const *)b);
+}
+
+static int cmd_asset_manifest(int argc, char **argv) {
+    if (argc != 4) die("usage: asset-manifest <assets_dir> <out_file>");
+    manifest_ctx_t m;
+    memset(&m, 0, sizeof(m));
+    m.root = argv[2];
+    if (!rebax_fs_is_dir(m.root)) die("'%s' is not a directory", m.root);
+    rebax_fs_walk_files(m.root, manifest_cb, &m);
+    qsort(m.items, m.count, sizeof(char *), manifest_cmp);
+    ensure_parent_dir(argv[3]);
+    FILE *f = fopen(argv[3], "wb");
+    if (!f) die("cannot write '%s'", argv[3]);
+    for (size_t i = 0; i < m.count; i++) {
+        const char *rel = m.items[i];
+        const char *out_rel = argv[3] + strlen(m.root);
+        while (is_sep(*out_rel)) out_rel++;
+        if (strcmp(rel, out_rel) != 0) fprintf(f, "%s\n", rel);
+        free(m.items[i]);
+    }
+    free(m.items);
+    if (fclose(f) != 0) die("cannot write '%s'", argv[3]);
+    return 0;
+}
+
+static int cmd_ios_plist(int argc, char **argv) {
+    if (argc != 6) die("usage: ios-plist <out.plist> <version> <executable> <iPhoneOS|iPhoneSimulator>");
+    ensure_parent_dir(argv[2]);
+    const char *version = argv[3];
+    if (*version == 'v' || *version == 'V') version++;
+    int device = strcmp(argv[5], "iPhoneSimulator") != 0;
+    char text[4096];
+    snprintf(text, sizeof(text),
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+        "<plist version=\"1.0\"><dict>"
+        "<key>CFBundleDevelopmentRegion</key><string>en</string>"
+        "<key>CFBundleExecutable</key><string>%s</string>"
+        "<key>CFBundleIdentifier</key><string>org.rebax.engine</string>"
+        "<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>"
+        "<key>CFBundleName</key><string>Rebax</string>"
+        "<key>CFBundleDisplayName</key><string>Rebax</string>"
+        "<key>CFBundlePackageType</key><string>APPL</string>"
+        "<key>CFBundleShortVersionString</key><string>%s</string>"
+        "<key>CFBundleVersion</key><string>%s</string>"
+        "<key>CFBundleSupportedPlatforms</key><array><string>%s</string></array>"
+        "<key>MinimumOSVersion</key><string>13.0</string>"
+        "<key>LSRequiresIPhoneOS</key><true/>"
+        "<key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>"
+        "%s"
+        "<key>UIRequiresFullScreen</key><true/>"
+        "<key>UIStatusBarHidden</key><true/>"
+        "<key>UIFileSharingEnabled</key><true/>"
+        "<key>LSSupportsOpeningDocumentsInPlace</key><true/>"
+        "<key>UISupportedInterfaceOrientations</key><array>"
+        "<string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string>"
+        "</array>"
+        "</dict></plist>\n",
+        argv[4], version, version, argv[5],
+        device ? "<key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>" : "");
+    if (!write_text_file(argv[2], text)) die("cannot write '%s'", argv[2]);
+    return 0;
+}
+
+typedef struct {
+    char *rel;
+    char *path;
+} zip_item_t;
+
+typedef struct {
+    const char *root;
+    zip_item_t *items;
+    size_t count;
+    size_t cap;
+} zip_collect_t;
+
+typedef struct {
+    uint32_t crc;
+    uint32_t size;
+    uint32_t offset;
+    uint32_t mode;
+    char *name;
+} zip_entry_t;
+
+static uint32_t g_zip_crc_table[256];
+
+static void zip_crc_init(void) {
+    for (uint32_t i = 0; i < 256; i++) {
+        uint32_t c = i;
+        for (int k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+        g_zip_crc_table[i] = c;
+    }
+}
+
+static uint32_t zip_crc(const unsigned char *p, size_t n) {
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < n; i++) c = g_zip_crc_table[(c ^ p[i]) & 0xFF] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+}
+
+static void zip_put16(FILE *f, uint32_t v) {
+    unsigned char b[2] = { (unsigned char)(v & 0xFF), (unsigned char)((v >> 8) & 0xFF) };
+    if (fwrite(b, 1, 2, f) != 2) die("cannot write zip");
+}
+
+static void zip_put32(FILE *f, uint32_t v) {
+    unsigned char b[4] = { (unsigned char)(v & 0xFF), (unsigned char)((v >> 8) & 0xFF), (unsigned char)((v >> 16) & 0xFF), (unsigned char)((v >> 24) & 0xFF) };
+    if (fwrite(b, 1, 4, f) != 4) die("cannot write zip");
+}
+
+static void zip_collect_cb(const char *path, void *user) {
+    zip_collect_t *z = (zip_collect_t *)user;
+    const char *rel = path + strlen(z->root);
+    while (is_sep(*rel)) rel++;
+    if (z->count == z->cap) {
+        z->cap = z->cap ? z->cap * 2 : 64;
+        z->items = (zip_item_t *)xrealloc(z->items, z->cap * sizeof(zip_item_t));
+    }
+    z->items[z->count].rel = xstrdup(rel);
+    for (char *q = z->items[z->count].rel; *q; q++) if (*q == '\\') *q = '/';
+    z->items[z->count].path = xstrdup(path);
+    z->count++;
+}
+
+static int zip_item_cmp(const void *a, const void *b) {
+    return strcmp(((const zip_item_t *)a)->rel, ((const zip_item_t *)b)->rel);
+}
+
+static int zip_name_has_suffix(const char *name, const char *suffix) {
+    size_t n = strlen(name), s = strlen(suffix);
+    return n >= s && strcmp(name + n - s, suffix) == 0;
+}
+
+static int cmd_zip_dir(int argc, char **argv) {
+    if (argc < 5) die("usage: zip-dir <out.zip> <base_dir> <entry> [--exec <suffix>]...");
+    const char *out = argv[2];
+    const char *base = argv[3];
+    const char *entry = argv[4];
+    const char *exec_suffix[16];
+    int exec_count = 0;
+    for (int i = 5; i + 1 < argc; i += 2) {
+        if (strcmp(argv[i], "--exec") != 0 || exec_count >= 16) die("usage: zip-dir <out.zip> <base_dir> <entry> [--exec <suffix>]...");
+        exec_suffix[exec_count++] = argv[i + 1];
+    }
+    char root[1700];
+    snprintf(root, sizeof(root), "%s/%s", base, entry);
+    if (!rebax_fs_is_dir(root)) die("'%s' is not a directory", root);
+
+    zip_collect_t z;
+    memset(&z, 0, sizeof(z));
+    z.root = base;
+    rebax_fs_walk_files(root, zip_collect_cb, &z);
+    if (z.count == 0) die("'%s' contains no files", root);
+    qsort(z.items, z.count, sizeof(zip_item_t), zip_item_cmp);
+
+    zip_crc_init();
+    rebax_fs_remove_recursive(out);
+    ensure_parent_dir(out);
+    FILE *f = fopen(out, "wb");
+    if (!f) die("cannot write '%s'", out);
+
+    zip_entry_t *entries = (zip_entry_t *)xmalloc(z.count * sizeof(zip_entry_t));
+    uint32_t offset = 0;
+    for (size_t i = 0; i < z.count; i++) {
+        FILE *in = fopen(z.items[i].path, "rb");
+        if (!in) die("cannot read '%s'", z.items[i].path);
+        fseek(in, 0, SEEK_END);
+        long len = ftell(in);
+        fseek(in, 0, SEEK_SET);
+        if (len < 0) die("cannot read '%s'", z.items[i].path);
+        unsigned char *data = (unsigned char *)xmalloc((size_t)len + 1);
+        if (len > 0 && fread(data, 1, (size_t)len, in) != (size_t)len) die("cannot read '%s'", z.items[i].path);
+        fclose(in);
+
+        int is_exec = 0;
+        for (int k = 0; k < exec_count; k++) if (zip_name_has_suffix(z.items[i].rel, exec_suffix[k])) is_exec = 1;
+
+        uint32_t crc = zip_crc(data, (size_t)len);
+        uint32_t name_len = (uint32_t)strlen(z.items[i].rel);
+        entries[i].crc = crc;
+        entries[i].size = (uint32_t)len;
+        entries[i].offset = offset;
+        entries[i].mode = is_exec ? 0x81EDu : 0x81A4u;
+        entries[i].name = z.items[i].rel;
+
+        zip_put32(f, 0x04034b50u);
+        zip_put16(f, 20);
+        zip_put16(f, 0);
+        zip_put16(f, 0);
+        zip_put16(f, 0);
+        zip_put16(f, 22561);
+        zip_put32(f, crc);
+        zip_put32(f, (uint32_t)len);
+        zip_put32(f, (uint32_t)len);
+        zip_put16(f, name_len);
+        zip_put16(f, 0);
+        if (fwrite(z.items[i].rel, 1, name_len, f) != name_len) die("cannot write '%s'", out);
+        if (len > 0 && fwrite(data, 1, (size_t)len, f) != (size_t)len) die("cannot write '%s'", out);
+        offset += 30 + name_len + (uint32_t)len;
+        free(data);
+    }
+
+    uint32_t cd_start = offset;
+    for (size_t i = 0; i < z.count; i++) {
+        uint32_t name_len = (uint32_t)strlen(entries[i].name);
+        zip_put32(f, 0x02014b50u);
+        zip_put16(f, 0x0314);
+        zip_put16(f, 20);
+        zip_put16(f, 0);
+        zip_put16(f, 0);
+        zip_put16(f, 0);
+        zip_put16(f, 22561);
+        zip_put32(f, entries[i].crc);
+        zip_put32(f, entries[i].size);
+        zip_put32(f, entries[i].size);
+        zip_put16(f, name_len);
+        zip_put16(f, 0);
+        zip_put16(f, 0);
+        zip_put16(f, 0);
+        zip_put16(f, 0);
+        zip_put32(f, entries[i].mode << 16);
+        zip_put32(f, entries[i].offset);
+        if (fwrite(entries[i].name, 1, name_len, f) != name_len) die("cannot write '%s'", out);
+        offset += 46 + name_len;
+    }
+
+    zip_put32(f, 0x06054b50u);
+    zip_put16(f, 0);
+    zip_put16(f, 0);
+    zip_put16(f, (uint32_t)z.count);
+    zip_put16(f, (uint32_t)z.count);
+    zip_put32(f, offset - cd_start);
+    zip_put32(f, cd_start);
+    zip_put16(f, 0);
+    if (fclose(f) != 0) die("cannot write '%s'", out);
+
+    for (size_t i = 0; i < z.count; i++) {
+        free(z.items[i].rel);
+        free(z.items[i].path);
+    }
+    free(z.items);
+    free(entries);
+    return 0;
+}
+
 static void usage(void) {
     fputs("usage: rebax-tool <command> [args]\n"
           "  mkdir <dir>...                          create directories (mkdir -p)\n"
@@ -1704,7 +2442,20 @@ static void usage(void) {
           "  icon-atlas-pages <dir> <header> <icon.png>... build icons1.png, icons2.png, ...\n"
           "  node-registry <registry.h> <types.h> <node.c>...\n"
           "  node-editor-registry <out.h> <node_editor.c>...\n"
-          "  embed-asm <out.S> <src_file> [symbol_path]  write .incbin wrapper for <src_file>\n",
+          "  embed-asm <out.S> <src_file> [symbol_path]  write .incbin wrapper for <src_file>\n"
+          "  file-arch <file>                        print x86_64, x86, arm64, arm, unknown or none\n"
+          "  replace <file> <from> <to>              replace every occurrence of <from> in <file>\n"
+          "  toolchain <dir> <url> <tmp> [required]... download and extract a toolchain package\n"
+          "  bundle-libs <dest> <lib>... -- <dir>... copy the first match of each library\n"
+          "  android-entry <out.c>                   write the SDL_main wrapper source\n"
+          "  android-manifest <out.xml> <version> <target_sdk>\n"
+          "  require-lib <label> <arch> <path>       check that a library exists for the arch\n"
+          "  cc-select <work_dir> [--require w...] [--forbid w...] --candidates c...\n"
+          "  cc-check <work_dir> <compiler> [flag]... compile and link a test program\n"
+          "  copy-dir <src> <dst> [--skip name]...   copy a directory tree, skipping parts named <name>\n"
+          "  asset-manifest <dir> <out_file>         list every file under <dir>, one relative path per line\n"
+          "  ios-plist <out.plist> <version> <exe> <iPhoneOS|iPhoneSimulator>  write Info.plist\n"
+          "  zip-dir <out.zip> <base> <entry> [--exec <suffix>]...  zip <base>/<entry> (stored) keeping exec bits\n",
           stderr);
 }
 
@@ -1728,6 +2479,19 @@ int main(int argc, char **argv) {
     if (strcmp(cmd, "node-registry") == 0) return cmd_node_registry(argc, argv);
     if (strcmp(cmd, "node-editor-registry") == 0) return cmd_node_editor_registry(argc, argv);
     if (strcmp(cmd, "embed-asm") == 0) return cmd_embed_asm(argc, argv);
+    if (strcmp(cmd, "file-arch") == 0) return cmd_file_arch(argc, argv);
+    if (strcmp(cmd, "replace") == 0) return cmd_replace(argc, argv);
+    if (strcmp(cmd, "toolchain") == 0) return cmd_toolchain(argc, argv);
+    if (strcmp(cmd, "bundle-libs") == 0) return cmd_bundle_libs(argc, argv);
+    if (strcmp(cmd, "android-entry") == 0) return cmd_android_entry(argc, argv);
+    if (strcmp(cmd, "android-manifest") == 0) return cmd_android_manifest(argc, argv);
+    if (strcmp(cmd, "require-lib") == 0) return cmd_require_lib(argc, argv);
+    if (strcmp(cmd, "cc-select") == 0) return cmd_cc_select(argc, argv);
+    if (strcmp(cmd, "cc-check") == 0) return cmd_cc_check(argc, argv);
+    if (strcmp(cmd, "copy-dir") == 0) return cmd_copy_dir(argc, argv);
+    if (strcmp(cmd, "asset-manifest") == 0) return cmd_asset_manifest(argc, argv);
+    if (strcmp(cmd, "ios-plist") == 0) return cmd_ios_plist(argc, argv);
+    if (strcmp(cmd, "zip-dir") == 0) return cmd_zip_dir(argc, argv);
 
     usage();
     return 2;
