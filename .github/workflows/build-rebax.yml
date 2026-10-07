@@ -396,17 +396,17 @@ jobs:
             --enable-shared \
             --disable-static \
             --disable-nls \
+            ac_cv_func_canonicalize_file_name=yes \
             CC="$ICONV_CC" \
             CPPFLAGS="-DO_BINARY=0" \
             CFLAGS="-fPIC -DO_BINARY=0"
-          make
-          make install
+          make -C srclib libicrt.a CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
+          make -C lib libiconv.la CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
+          install -d "$ICONV_PREFIX/lib" "$ICONV_PREFIX/include"
+          cp -P lib/.libs/libiconv.so* "$ICONV_PREFIX/lib/"
+          cp -f include/iconv.h "$ICONV_PREFIX/include/"
           test -s "$ICONV_PREFIX/lib/libiconv.so"
-          CXX_TRIPLE="$ICONV_TRIPLE"
-          if [ "${{ matrix.architecture }}" = "armeabi-v7a" ]; then
-            CXX_TRIPLE=arm-linux-androideabi
-          fi
-          CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$CXX_TRIPLE/libc++_shared.so"
+          CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$ICONV_TRIPLE/libc++_shared.so"
           test -s "$CXX_RUNTIME"
           cp "$CXX_RUNTIME" "$ICONV_PREFIX/lib/libc++_shared.so"
 
@@ -416,6 +416,28 @@ jobs:
         run: |
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           echo "tag=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare signing key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No signing key secret found; the APK will be signed with a temporary debug key."
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/rebax-release.keystore"
+          test -s "$RUNNER_TEMP/rebax-release.keystore"
+          {
+            echo "KEYSTORE=$RUNNER_TEMP/rebax-release.keystore"
+            printf 'KEYSTORE_PASS=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'KEY_ALIAS=%s\n' "$SIGNING_KEY_ALIAS"
+            if [ -n "$SIGNING_KEY_PASSWORD" ]; then printf 'KEY_PASS=%s\n' "$SIGNING_KEY_PASSWORD"; fi
+          } >> "$GITHUB_ENV"
+          echo "Signing with the release key."
 
       - name: Build
         run: |
@@ -431,7 +453,10 @@ jobs:
             exit 1
           fi
           apk="${apks[0]}"
+          engine_version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          expected_engine="assets/rebax/Rebax_Engine_${engine_version}_android_${{ matrix.architecture }}"
           required_entries=(
+            "$expected_engine"
             "classes.dex"
             "lib/${{ matrix.architecture }}/libmain.so"
             "lib/${{ matrix.architecture }}/libSDL2.so"
@@ -621,27 +646,29 @@ jobs:
         run: |
           make ios-${{ matrix.architecture }}
 
-      - name: Compress build output
+      - name: Show linked libraries
+        run: |
+          otool -L build/ios/Rebax_Engine_*_ios_${{ matrix.architecture }}
+          find build/ios/Payload -type f
+
+      - name: Collect build output
         shell: bash
         run: |
           mkdir -p release
           shopt -s nullglob
-          outputs=(build/output/*)
+          outputs=(build/output/*.ipa build/output/*.zip)
           if [ ${#outputs[@]} -eq 0 ]; then
-            echo "::error::No file was produced in build/output; the Build step must have failed. Refusing to package or upload." >&2
+            echo "::error::No package was produced in build/output; the Build step must have failed. Refusing to upload." >&2
             exit 1
           fi
-          repo_root="$PWD"
           for file in "${outputs[@]}"; do
-            [ -f "$file" ] || continue
             base="$(basename "$file")"
-            package="${base//_/-}"
-            (cd build/output && 7z a "$repo_root/release/${package}.7z" "$base")
+            cp "$file" "release/${base//_/-}"
           done
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          files: release/*.7z
+          files: release/*
           fail_on_unmatched_files: true
