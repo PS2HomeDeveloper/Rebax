@@ -283,7 +283,7 @@ Future code-editor subsystems such as diagnostics, symbol indexing, syntax highl
 
 The Rebax exporter must target native PS2 development.
 
-Exported projects must produce a native PS2 application equivalent in structure and final behavior to a project developed directly using C/C++ source files, header files, a Makefile, and the PS2 GCC/PS2Dev toolchain.
+Exported projects must produce a native PS2 application equivalent in structure and final behavior to a project developed directly using C/C++ source files, header files, and the PS2 GCC/PS2Dev toolchain.
 
 The intended flow is:
 
@@ -335,7 +335,7 @@ The exporter is responsible for:
 3. resolving only the node types and engine modules actually used;
 4. converting project properties into typed native representations;
 5. converting or copying required assets into the exported project;
-6. generating readable C/C++ source, headers, data files, and a native Makefile;
+6. generating readable C/C++ source, headers, data files, and the build inputs;
 7. generating any required linker or platform configuration;
 8. invoking the PS2 toolchain with explicit, reproducible settings;
 9. reporting compiler, linker, and packaging failures accurately;
@@ -359,7 +359,7 @@ A small, explicit native runtime may be included when it is required by the gene
 
 ### 5.5 Determinism and reproducibility
 
-For the same project, settings, toolchain, and source inputs, export should produce the same generated project structure and equivalent build inputs. Avoid embedding machine-specific absolute paths in generated source unless they are required only in the generated Makefile and are clearly documented.
+For the same project, settings, toolchain, and source inputs, export should produce the same generated project structure and equivalent build inputs. Avoid embedding machine-specific absolute paths in generated source unless they are clearly documented.
 
 Generated output must use stable ordering for:
 
@@ -424,7 +424,7 @@ Sprite2D rotation is stored in radians and must be applied around the sprite cen
 
 #### 5.7.3 Official PS2 build references
 
-Native output must follow the official PS2SDK/gsKit conventions. The authoritative build fragments are provided by the installed toolchain:
+Native output must follow the official PS2SDK/gsKit conventions. Rebax does not run `make` or include the PS2SDK rule files; `ps2_build.c` reproduces the commands of these official fragments directly (same compilers, flags and order):
 
 ```text
 $(PS2SDK)/samples/Makefile.pref
@@ -434,7 +434,7 @@ $(PS2SDK)/samples/Makefile.iopglobal
 $(PS2SDK)/samples/Makefile.ioprp
 ```
 
-Rebax must not copy the complete PS2SDK or gsKit source tree into every exported project. It should generate a normal Makefile that includes the installed fragments and links only the libraries required by the selected native nodes. C-only exports use the C rules; an export containing C++ sources will use the official C++ rules and C++ link driver in the later project-source milestone.
+Rebax must not copy the complete PS2SDK or gsKit source tree into every exported project. `ps2_build.c` compiles each source and links only the libraries required by the selected native nodes. C-only exports use the C rules; an export containing C++ sources uses the official C++ rules and the C++ link driver. EE ELF/ERL/library, IOP IRX/library and IOPRP targets are supported by the same module; when the official fragments change, update `ps2_build.c` to match.
 
 ### 5.8 C/C++ Project Source Export
 
@@ -444,7 +444,6 @@ The generated layout is:
 
 ```text
 Native PS2 Project/
-├── Makefile
 └── src/
     ├── scene_loader_main.c     # generated weak fallback entry point
     ├── scene_runtime.c/.h      # small native scene bridge
@@ -463,7 +462,7 @@ The exporter copies these project extensions while preserving their relative pat
 
 The exporter does not flatten or rename project files. This keeps local `#include "header.h"` relationships intact and makes the generated project inspectable by a native developer. Build/cache directories such as `.git`, `.svn`, `build`, and `Temp` are not copied as source inputs.
 
-The generated Makefile discovers source files recursively and emits each object exactly once. If the project contains no C++ source, it includes the official `Makefile.eeglobal` rules and links with the C driver. If at least one `.cc`, `.cpp`, or `.cxx` file is present, it includes the official `Makefile.eeglobal_cpp` rules and links with the C++ driver. C and C++ files may therefore coexist in one exported project.
+The build discovers source files recursively and compiles each object exactly once. If the project contains no C++ source, it follows the official `Makefile.eeglobal` rules and links with the C driver. If at least one `.cc`, `.cpp`, or `.cxx` file is present, it follows the official `Makefile.eeglobal_cpp` rules and links with the C++ driver. C and C++ files may therefore coexist in one exported project.
 
 Project source files may declare additional native dependencies using the same file-local markers as native node implementations:
 
@@ -472,7 +471,7 @@ Project source files may declare additional native dependencies using the same f
 /* @PS2_EXPORT_LIBS: -lpacket */
 ```
 
-The exporter scans copied project sources and headers, deduplicates those flags, and adds them to the generated Makefile. It must not guess libraries from filenames or copy the PS2SDK into the project.
+The exporter scans copied project sources and headers, deduplicates those flags, and passes them to the compiler and linker. It must not guess libraries from filenames or copy the PS2SDK into the project.
 
 The generated scene bootstrap is a weak fallback `main`. A project-owned strong `main` in C or C++ overrides it, allowing a native developer to own the application entry point. If no project `main` exists, Rebax's generated scene loop remains the executable entry point.
 
@@ -537,13 +536,13 @@ src/
 ├── ps2_exporter.h       # Stable public API used by the editor
 ├── ps2_exporter.c       # Export orchestration and state machine
 ├── export_internal.h    # Private contract shared only by exporter modules
-├── export_process.c     # Non-blocking make/toolchain process and log queue
+├── export_process.c     # Non-blocking toolchain process and log queue
 ├── export_scene.c       # .rscene discovery, parsing, and scene C data generation
 ├── export_nodes.c       # Used-node selection, source copying, and PS2 dependencies
 ├── export_project.c     # Project C/C++ source/header collection and marker scanning
 ├── export_assets.c      # Project asset conversion and deduplicated embedding
 ├── export_codegen.c     # Native PS2 runtime and entry-point templates
-└── export_makefile.c    # Native PS2 Makefile generation
+└── ps2_build.c          # Direct PS2 toolchain driver (compile, link, strip, IRX, IOPRP)
 ```
 
 ### 6.1 Responsibilities and boundaries
@@ -557,7 +556,7 @@ src/
 - `export_assets.c` converts each logical asset once and emits native data. It must not embed the same asset once per scene or node instance.
 - `export_codegen.c` emits project-specific native C files and the small native runtime bridge. It must not emit a private Rebax project interpreter.
 - `export_codegen.c` also emits the single public `rebax_sdk.c` implementation from the complete current node catalog; the public declaration is `embedded/nodes/rebax_sdk.h` and is copied into each native export.
-- `export_makefile.c` emits the native PS2 Makefile and must include each source, include flag, and library flag only once.
+- `ps2_build.c` plans and runs the PS2 compiler and linker commands without `make`; it must include each source, include flag, and library flag only once and must stay free of scene or node semantics.
 
 ### 6.2 Stable public API
 
@@ -592,9 +591,9 @@ Convert unique assets
   ↓
 Generate native C/C++ and headers
   ↓
-Generate deterministic native Makefile
+Plan deterministic compile and link commands
   ↓
-Invoke PS2 GCC/PS2Dev through the non-blocking process module
+Run PS2 GCC/PS2Dev through ps2_build and the non-blocking process module
   ↓
 Copy the final ELF
 ```
@@ -609,7 +608,7 @@ The generated project must deduplicate at every relevant level:
 2. **Node implementation:** instances reference the same `node_interface_t` implementation; no per-instance C source is generated.
 3. **Assets:** the same canonical asset path is embedded once.
 4. **Headers and shared modules:** shared runtime files are emitted once.
-5. **Compiler flags:** repeated `-I` and `-l` declarations are removed before writing the Makefile.
+5. **Compiler flags:** repeated `-I` and `-l` declarations are removed before the build commands are planned.
 6. **Build inputs:** the generated object list contains each source exactly once.
 
 Multiple scene instances are represented as data in generated files such as `scene_data.c`; they must not produce duplicated copies of the implementation.
@@ -635,7 +634,6 @@ The temporary export output must remain inspectable and follow this shape:
 
 ```text
 Temp/export/
-├── Makefile
 └── src/
     ├── scene_loader_main.c
     ├── scene_runtime.c
@@ -649,7 +647,7 @@ Temp/export/
     └── <unique used node sources>
 ```
 
-The generated project must be buildable through the ordinary PS2SDK Makefile rules and must not require `.rscene` files, the editor, or a Rebax-specific interpreter on the PS2.
+The generated project must be buildable with the ordinary PS2 GCC toolchain and must not require `.rscene` files, the editor, or a Rebax-specific interpreter on the PS2.
 
 ### 6.7 Safe exporter refactoring
 
@@ -667,13 +665,13 @@ A module split is successful only when behavior is preserved and each module has
 
 ## 7. Exporter Output and Native Build Guide
 
-The exporter produces a normal native PS2 project. The generated `Makefile` includes the PS2SDK sample build rules, lists the generated and selected native sources, adds only discovered include/library flags, and produces `<name>.elf`. Debug and Release use the same project structure; Release may strip symbols after a successful link.
+The exporter produces a normal native PS2 project. The build compiles the generated and selected native sources with the PS2SDK flags, adds only discovered include/library flags, and produces `<name>.elf`. Debug and Release use the same project structure; Release may strip symbols after a successful link.
 
 A developer diagnosing an export should inspect, in order:
 
 1. the exporter log for scene and node discovery;
 2. the generated `src/scene_data.c` for typed scene data;
-3. the generated source list and flags in `Makefile`;
+3. the compile and link commands recorded in the export log;
 4. the PS2 compiler/linker output;
 5. the final ELF path.
 

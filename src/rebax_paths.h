@@ -5,7 +5,6 @@
 const char *rebax_root_dir(void);
 const char *rebax_toolchains_dir(void);       /* Rebax/Engine/ps2/toolchains */
 const char *rebax_toolchain_dir(void);        /* Rebax/Engine/ps2/toolchains (contains ps2dev/) */
-const char *rebax_make_path(void);            /* Rebax/Engine/toolchains/make[.exe] */
 const char *rebax_node_resources_dir(void);   /* Rebax/Engine/ps2/sdk/nodes */
 const char *rebax_temp_export_dir(void);      /* Rebax/Temp/export */
 const char *rebax_settings_dir(void);         /* Rebax/Settings */

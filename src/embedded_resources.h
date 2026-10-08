@@ -10,8 +10,6 @@
 
 #ifndef __ANDROID__
 #if !(defined(__APPLE__) && TARGET_OS_IPHONE)
-extern const unsigned char _binary_embedded_toolchains_make_start[];
-extern const unsigned char _binary_embedded_toolchains_make_end[];
 extern const unsigned char _binary_embedded_ps2_toolchains_ps2dev_tar_xz_start[];
 extern const unsigned char _binary_embedded_ps2_toolchains_ps2dev_tar_xz_end[];
 extern const unsigned char _binary_embedded_ps2_sdk_nodes_tar_xz_start[];
@@ -24,7 +22,6 @@ extern const unsigned char _binary_embedded_resources_fonts_SpaceGrotesk_Bold_tt
 
 #define EMBEDDED_SIZE(symbol) ((size_t)(_binary_##symbol##_end - _binary_##symbol##_start))
 #if !(defined(__APPLE__) && TARGET_OS_IPHONE)
-static inline size_t embedded_make_size(void) { return EMBEDDED_SIZE(embedded_toolchains_make); }
 static inline size_t embedded_ps2dev_archive_size(void) { return EMBEDDED_SIZE(embedded_ps2_toolchains_ps2dev_tar_xz); }
 static inline size_t embedded_node_archive_size(void) { return EMBEDDED_SIZE(embedded_ps2_sdk_nodes_tar_xz); }
 #endif

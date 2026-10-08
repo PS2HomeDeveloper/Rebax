@@ -98,7 +98,6 @@ int export_assets_convert_images(const char *dest_src_dir);
 void export_codegen_write_runtime_files(const char *src_dir);
 void export_codegen_write_engine_context_impl(const char *src_dir);
 int export_codegen_write_sdk_files(const char *src_dir);
-void export_makefile_write(const char *build_dir, const char *src_dir_name);
 
 char *export_read_whole_file(const char *path, long *out_size);
 

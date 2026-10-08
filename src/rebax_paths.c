@@ -39,7 +39,6 @@
 static char g_root_dir[REBAX_PATH_MAX];
 static char g_toolchains_dir[REBAX_PATH_MAX];
 static char g_toolchain_dir[REBAX_PATH_MAX];
-static char g_make_path[REBAX_PATH_MAX];
 static char g_node_resources_dir[REBAX_PATH_MAX];
 static char g_temp_export_dir[REBAX_PATH_MAX];
 static char g_Editor_dir[REBAX_PATH_MAX];
@@ -72,7 +71,6 @@ static void compute_paths(void) {
     snprintf(g_root_dir, sizeof(g_root_dir), "%s\\Rebax", base);
     snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s\\Engine\\ps2\\toolchains", g_root_dir);
     snprintf(g_toolchain_dir, sizeof(g_toolchain_dir), "%s", g_toolchains_dir);
-    snprintf(g_make_path, sizeof(g_make_path), "%s\\Engine\\toolchains\\make.exe", g_root_dir);
     snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "%s\\Engine\\ps2\\sdk\\nodes", g_root_dir);
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s\\Temp\\export", g_root_dir);
     snprintf(g_Editor_dir, sizeof(g_Editor_dir), "%s\\Editor", g_root_dir);
@@ -82,7 +80,6 @@ static void compute_paths(void) {
     snprintf(g_root_dir, sizeof(g_root_dir), "%s/Rebax", base);
     snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s/Engine/ps2/toolchains", g_root_dir);
     snprintf(g_toolchain_dir, sizeof(g_toolchain_dir), "%s", g_toolchains_dir);
-    snprintf(g_make_path, sizeof(g_make_path), "%s/Engine/toolchains/make", g_root_dir);
     snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "ps2/sdk/nodes");
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
     snprintf(g_Editor_dir, sizeof(g_Editor_dir), "%s/Editor", g_root_dir);
@@ -92,7 +89,6 @@ static void compute_paths(void) {
     snprintf(g_root_dir, sizeof(g_root_dir), "%s/.local/share/Rebax", home);
     snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s/Engine/ps2/toolchains", g_root_dir);
     snprintf(g_toolchain_dir, sizeof(g_toolchain_dir), "%s", g_toolchains_dir);
-    snprintf(g_make_path, sizeof(g_make_path), "%s/Engine/toolchains/make", g_root_dir);
     snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "%s/Engine/ps2/sdk/nodes", g_root_dir);
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
     snprintf(g_Editor_dir, sizeof(g_Editor_dir), "%s/Editor", g_root_dir);
@@ -108,7 +104,6 @@ static void compute_paths(void) {
 #endif
     snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s/Engine/ps2/toolchains", g_root_dir);
     snprintf(g_toolchain_dir, sizeof(g_toolchain_dir), "%s", g_toolchains_dir);
-    snprintf(g_make_path, sizeof(g_make_path), "%s/Engine/toolchains/make", g_root_dir);
     snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "%s/Engine/ps2/sdk/nodes", g_root_dir);
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
     snprintf(g_Editor_dir, sizeof(g_Editor_dir), "%s/Editor", g_root_dir);
@@ -135,7 +130,6 @@ static void compute_paths(void) {
 const char *rebax_root_dir(void) { compute_paths(); return g_root_dir; }
 const char *rebax_toolchains_dir(void) { compute_paths(); return g_toolchains_dir; }
 const char *rebax_toolchain_dir(void) { compute_paths(); return g_toolchain_dir; }
-const char *rebax_make_path(void) { compute_paths(); return g_make_path; }
 const char *rebax_node_resources_dir(void) { compute_paths(); return g_node_resources_dir; }
 const char *rebax_temp_export_dir(void) { compute_paths(); return g_temp_export_dir; }
 const char *rebax_Editor_dir(void) { compute_paths(); return g_Editor_dir; }
@@ -158,11 +152,9 @@ static int has_setup_marker(void) {
     char ps2dev_dir[REBAX_PATH_MAX];
     snprintf(ps2dev_dir, sizeof(ps2dev_dir), "%s/ps2dev", g_toolchain_dir);
 #if defined(__ANDROID__)
-    return rebax_fs_exists(g_make_path)
-        && rebax_fs_exists(ps2dev_dir);
+    return rebax_fs_exists(ps2dev_dir);
 #else
-    return rebax_fs_exists(g_make_path)
-        && rebax_fs_exists(ps2dev_dir)
+    return rebax_fs_exists(ps2dev_dir)
         && rebax_fs_exists(g_node_resources_dir);
 #endif
 }
@@ -219,32 +211,22 @@ static void setup_step(void) {
     switch (g_setup_state) {
     case SETUP_NONE: case SETUP_DONE: case SETUP_FAILED: return;
     case SETUP_TOOLCHAINS:
-        printf("[rebax] preparing bundled make and ps2dev archive...\n");
+        printf("[rebax] preparing ps2dev archive...\n");
         snprintf(archive, sizeof(archive), "%s/ps2dev.tar.xz", g_toolchain_dir);
 #if defined(__ANDROID__)
         int engine_tools_ok = 1;
-        if (!asset_file_list("toolchains/", copy_engine_tool_cb, &engine_tools_ok)
-            || !engine_tools_ok || !rebax_fs_exists(g_make_path)
+        asset_file_list("toolchains/", copy_engine_tool_cb, &engine_tools_ok);
+        if (!engine_tools_ok
             || !asset_file_copy("ps2/toolchains/ps2dev.tar.xz", archive)) {
 #else
-        if (!write_blob(_binary_embedded_toolchains_make_start,
-                        embedded_make_size(), g_make_path)
-            || !write_blob(_binary_embedded_ps2_toolchains_ps2dev_tar_xz_start,
-                           embedded_ps2dev_archive_size(), archive)) {
+        if (!write_blob(_binary_embedded_ps2_toolchains_ps2dev_tar_xz_start,
+                        embedded_ps2dev_archive_size(), archive)) {
 #endif
             fprintf(stderr, "[rebax] FAILED: could not write bundled toolchain files.\n");
-            remove(g_make_path);
             remove(archive);
             g_setup_state = SETUP_FAILED;
             return;
         }
-#ifndef _WIN32
-        if (chmod(g_make_path, 0755) != 0) {
-            fprintf(stderr, "[rebax] FAILED: could not mark make executable.\n");
-            g_setup_state = SETUP_FAILED;
-            return;
-        }
-#endif
         g_setup_state = SETUP_PS2DEV;
         return;
     case SETUP_PS2DEV:

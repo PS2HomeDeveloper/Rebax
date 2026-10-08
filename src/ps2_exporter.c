@@ -66,14 +66,12 @@
 
 #if defined(_WIN32)
 #include <io.h>
-#define REBAX_SETENV(name, value) _putenv_s(name, value)
-#else
-#define REBAX_SETENV(name, value) setenv(name, value, 1)
 #endif
 
 #include <stdarg.h>
 
 #include "ps2_exporter.h"
+#include "ps2_build.h"
 #include "current_project.h"
 #include "rebax_paths.h"
 #include "rebax_fs.h"
@@ -91,6 +89,7 @@
 #include "export_internal.h"
 
 export_state_t g_state = EXPORT_STATE_IDLE;
+static int g_build_started;
 export_shell_step_t g_step;
 char g_exe_name[128];
 int g_is_release;
@@ -121,6 +120,7 @@ int ps2_export_start(const char *exe_name, int is_release, const char *output_di
     }
 
     log_reset();
+    g_build_started = 0;
     export_trace_begin();
     export_trace("trace: export start");
 
@@ -172,6 +172,8 @@ int ps2_export_start(const char *exe_name, int is_release, const char *output_di
 
 void ps2_export_cancel(void) {
     shell_step_cancel(&g_step);
+    ps2_build_cancel();
+    g_build_started = 0;
     if (g_state != EXPORT_STATE_IDLE) {
         log_push("[exporter] export cancelled by user.");
     }
@@ -188,7 +190,6 @@ ps2_export_status_t ps2_export_get_status(void) {
 }
 
 void ps2_export_update(void) {
-    char cmd[3200];
     int ok;
 
     switch (g_state) {
@@ -298,45 +299,49 @@ void ps2_export_update(void) {
                 export_codegen_write_engine_context_impl(src_dir);
             }
 
-            export_trace("trace: writing makefile");
-            export_makefile_write(src_dir, ".");
-            export_trace("trace: makefile written");
-
             log_push("[exporter] build directory ready - starting compilation...");
             g_state = EXPORT_STATE_BUILD;
             return;
         }
 
         case EXPORT_STATE_BUILD: {
-            if (!g_step.active) {
-                char src_dir[1536];
+            if (!g_build_started) {
+                char src_dir[1536], output[1600], include_project[1600];
                 snprintf(src_dir, sizeof(src_dir), "%s/src", g_build_dir);
+                snprintf(output, sizeof(output), "%s/%s.elf", src_dir, g_exe_name);
+                snprintf(include_project, sizeof(include_project), "-I%s/project", src_dir);
 
-                /* One shell command that builds everything: export PS2SDK environment variables
-                 * (must be in the same single shell invocation - see ps2_exporter.h comment),
-                 * prepend the mips64r5900el-ps2-elf-* tools to PATH, then make.
-                 * scene_data.c is now plain C code (regular data, no raw objcopy needed -
-                 * see the design comment at the top of the file) */
-                REBAX_SETENV("PS2DEV",g_ps2dev_root);
-                char sdk[1600],gskit[1600],pathv[3600];
-                snprintf(sdk,sizeof(sdk),"%s/ps2sdk",g_ps2dev_root);
-                snprintf(gskit,sizeof(gskit),"%s/gsKit",g_ps2dev_root);
-                REBAX_SETENV("PS2SDK",sdk); REBAX_SETENV("GSKIT",gskit);
-                snprintf(pathv,sizeof(pathv),"%s/bin:%s/ee/bin:%s/iop/bin:%s/bin:%s",g_ps2dev_root,g_ps2dev_root,g_ps2dev_root,sdk,getenv("PATH")?getenv("PATH"):"");
-                REBAX_SETENV("PATH",pathv);
-                snprintf(cmd,sizeof(cmd),"cd '%s' && '%s' 2>&1",src_dir,rebax_make_path());
-                export_trace("trace: starting build command:");
-                export_trace(cmd);
+                const char *incs[EXPORT_MAX_EXTRA_FLAGS + 1];
+                const char *libs[EXPORT_MAX_EXTRA_FLAGS];
+                int inc_count = 0, lib_count = 0;
+                incs[inc_count++] = include_project;
+                for (int i = 0; i < g_extra_incs_count; i++) incs[inc_count++] = g_extra_incs[i];
+                for (int i = 0; i < g_extra_libs_count; i++) libs[lib_count++] = g_extra_libs[i];
 
-                if (!shell_step_start(&g_step, cmd)) {
-                    export_trace("trace: popen failed");
-                    log_push("[exporter] FAILED: could not start build process.");
+                ps2_build_config_t config;
+                memset(&config, 0, sizeof(config));
+                config.kind = PS2_BUILD_EE_ELF;
+                config.ps2dev_root = g_ps2dev_root;
+                config.work_dir = src_dir;
+                config.output = output;
+                config.release = g_is_release;
+                config.incs = incs;
+                config.inc_count = inc_count;
+                config.libs = libs;
+                config.lib_count = lib_count;
+
+                export_trace("trace: starting build");
+                if (!ps2_build_start(&config)) {
+                    export_trace("trace: build start failed");
+                    log_push("[exporter] FAILED: could not prepare the build.");
                     g_state = EXPORT_STATE_FAILED;
                     return;
                 }
+                g_build_started = 1;
             }
 
-            if (!shell_step_poll(&g_step, &ok)) {
+            if (!ps2_build_poll(&ok)) {
+                g_build_started = 0;
                 if (!ok) {
                     log_push("[exporter] FAILED: build failed - see output above for the exact error.");
                     g_state = EXPORT_STATE_FAILED;
@@ -349,9 +354,8 @@ void ps2_export_update(void) {
         }
 
         case EXPORT_STATE_STRIP:
-            /* Symbol stripping in the Release build is actually included in the generated
-             * Makefile "all:" rule (EE_STRIP) - this case is not used currently,
-             * reserved if we need a separate strip step later */
+            /* Symbol stripping in the Release build is a stage of ps2_build - this case is
+             * not used currently, reserved if we need a separate strip step later */
             g_state = EXPORT_STATE_COPY_OUTPUT;
             return;
 
