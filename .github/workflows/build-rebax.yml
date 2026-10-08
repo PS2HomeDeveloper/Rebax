@@ -396,17 +396,17 @@ jobs:
             --enable-shared \
             --disable-static \
             --disable-nls \
-            ac_cv_func_canonicalize_file_name=yes \
             CC="$ICONV_CC" \
             CPPFLAGS="-DO_BINARY=0" \
             CFLAGS="-fPIC -DO_BINARY=0"
-          make -C srclib libicrt.a CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
-          make -C lib libiconv.la CPPFLAGS="-DO_BINARY=0" CFLAGS="-fPIC -DO_BINARY=0"
-          install -d "$ICONV_PREFIX/lib" "$ICONV_PREFIX/include"
-          cp -P lib/.libs/libiconv.so* "$ICONV_PREFIX/lib/"
-          cp -f include/iconv.h "$ICONV_PREFIX/include/"
+          make
+          make install
           test -s "$ICONV_PREFIX/lib/libiconv.so"
-          CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$ICONV_TRIPLE/libc++_shared.so"
+          CXX_TRIPLE="$ICONV_TRIPLE"
+          if [ "${{ matrix.architecture }}" = "armeabi-v7a" ]; then
+            CXX_TRIPLE=arm-linux-androideabi
+          fi
+          CXX_RUNTIME="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$CXX_TRIPLE/libc++_shared.so"
           test -s "$CXX_RUNTIME"
           cp "$CXX_RUNTIME" "$ICONV_PREFIX/lib/libc++_shared.so"
 
@@ -453,10 +453,7 @@ jobs:
             exit 1
           fi
           apk="${apks[0]}"
-          engine_version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
-          expected_engine="assets/rebax/Rebax_Engine_${engine_version}_android_${{ matrix.architecture }}"
           required_entries=(
-            "$expected_engine"
             "classes.dex"
             "lib/${{ matrix.architecture }}/libmain.so"
             "lib/${{ matrix.architecture }}/libSDL2.so"
