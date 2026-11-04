@@ -438,7 +438,7 @@ rebax-build-tool: $(RTOOL)
 PS2_TOOLCHAIN_RELEASE_BASE := https://github.com/PS2HomeDeveloper/Rebax-PS2-Toolchains/releases/download/1.0.0
 ENGINE_TOOLCHAIN_RELEASE_BASE := https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/download/1.0.0
 PS2_TOOLCHAINS_DIR := embedded/ps2/toolchains
-ENGINE_TOOLCHAINS_DIR := embedded/toolchains
+ENGINE_TOOLCHAINS_DIR := embedded/tools
 ifeq ($(TARGET_PLATFORM),android)
   ifeq ($(TARGET_ARCH),arm64-v8a)
     TOOLCHAIN_ASSET := rebax-toolchains-android-arm64-v8a.tar.xz
@@ -477,16 +477,12 @@ else
   TOOLCHAIN_ASSET := rebax-toolchains-linux-x86_64.tar.xz
 endif
 PS2_TOOLCHAIN_ASSET := $(subst rebax-toolchains-,rebax-PS2-toolchains-,$(TOOLCHAIN_ASSET))
-ifeq ($(TARGET_PLATFORM),windows)
-  TOOLCHAIN_MAKE_BIN := make.exe
-else
-  TOOLCHAIN_MAKE_BIN := make
-endif
 PS2_TOOLCHAIN_REQUIRED := $(PS2_TOOLCHAINS_DIR)/ps2dev.tar.xz
-ENGINE_TOOLCHAIN_REQUIRED := $(ENGINE_TOOLCHAINS_DIR)/$(TOOLCHAIN_MAKE_BIN)
-TOOLCHAIN_REQUIRED := $(PS2_TOOLCHAIN_REQUIRED) $(ENGINE_TOOLCHAIN_REQUIRED)
+TOOLCHAIN_REQUIRED := $(PS2_TOOLCHAIN_REQUIRED)
+ENGINE_TOOLCHAIN_PREPARE := prepare-engine-toolchain
 ifeq ($(TARGET_PLATFORM),ios)
   TOOLCHAIN_REQUIRED :=
+  ENGINE_TOOLCHAIN_PREPARE :=
 endif
 PS2_TOOLCHAIN_ASSET_URL := $(PS2_TOOLCHAIN_RELEASE_BASE)/$(PS2_TOOLCHAIN_ASSET)
 ENGINE_TOOLCHAIN_ASSET_URL := $(ENGINE_TOOLCHAIN_RELEASE_BASE)/$(TOOLCHAIN_ASSET)
@@ -498,10 +494,9 @@ prepare-ps2-toolchain: $(RTOOL) | $(BUILD_DIR)
 	@$(RTOOL) toolchain $(PS2_TOOLCHAINS_DIR) $(PS2_TOOLCHAIN_ASSET_URL) $(PS2_TOOLCHAIN_TMP) $(PS2_TOOLCHAIN_REQUIRED)
 
 prepare-engine-toolchain: $(RTOOL) | $(BUILD_DIR)
-	@$(RTOOL) toolchain $(ENGINE_TOOLCHAINS_DIR) $(ENGINE_TOOLCHAIN_ASSET_URL) $(ENGINE_TOOLCHAIN_TMP) $(ENGINE_TOOLCHAIN_REQUIRED)
+	@$(RTOOL) toolchain $(ENGINE_TOOLCHAINS_DIR) $(ENGINE_TOOLCHAIN_ASSET_URL) $(ENGINE_TOOLCHAIN_TMP)
 
 $(PS2_TOOLCHAIN_REQUIRED): prepare-ps2-toolchain
-$(ENGINE_TOOLCHAIN_REQUIRED): prepare-engine-toolchain
 
 SRC_DIR := src
 EMBEDDED_DIR := embedded
@@ -542,7 +537,7 @@ DEPS := $(SRC_OBJS:.o=.d)
 
 $(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS): all
 
-all: $(RTOOL) $(TOOLCHAIN_REQUIRED) generate
+all: $(RTOOL) $(TOOLCHAIN_REQUIRED) $(ENGINE_TOOLCHAIN_PREPARE) generate
 		+$(MAKE) --no-print-directory RBX_TOOL_READY=1 HOST_PLATFORM=$(HOST_PLATFORM) HOST_ARCH=$(HOST_ARCH) HOST_TRIPLE=$(HOST_TRIPLE) TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) WANT_APK=$(WANT_APK) $(if $(filter 1,$(WANT_APK)),apk-selected,build-selected)
 
 build-selected: $(TARGET) bundle-runtime-libs $(if $(filter ios,$(TARGET_PLATFORM)),ios-package)
@@ -586,11 +581,6 @@ $(NODE_EDITOR_REGISTRY_GENERATED): $(NODE_EDITOR_SOURCE_FILES) | $(RTOOL) $(BUIL
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_REGISTRY_GENERATED) $(NODE_EDITOR_REGISTRY_GENERATED) | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
 	$(TARGET_CC) $(TARGET_CC_FLAGS) $(CFLAGS) -c $< -o $@
-$(OBJ_DIR)/embedded/toolchains/$(TOOLCHAIN_MAKE_BIN).o: $(ENGINE_TOOLCHAINS_DIR)/$(TOOLCHAIN_MAKE_BIN) | $(RTOOL)
-	@$(RTOOL) mkdir $(dir $@)
-	@$(RTOOL) embed-asm $@.S $< embedded/toolchains/make
-	@$(EMBED_ASM_FIXUP)
-	$(TARGET_CC) $(TARGET_CC_FLAGS) -c $@.S -o $@
 $(OBJ_DIR)/embedded/%.o: $(EMBEDDED_DIR)/% | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
 	@$(RTOOL) embed-asm $@.S $<
@@ -659,7 +649,7 @@ apk-package: $(TARGET) bundle-runtime-libs
 	@echo Copying assets
 	@$(RTOOL) copy-dir $(EMBEDDED_PS2_DIR)/toolchains $(APK_ASSETS)/ps2/toolchains
 	@$(RTOOL) copy-dir $(NODE_SRC_DIR) $(APK_ASSETS)/ps2/sdk/nodes
-	@$(RTOOL) copy-dir $(ENGINE_TOOLCHAINS_DIR) $(APK_ASSETS)/toolchains
+	@$(RTOOL) copy-dir $(ENGINE_TOOLCHAINS_DIR) $(APK_ASSETS)/tools
 	@$(RTOOL) copy-dir $(EMBEDDED_DIR)/resources $(APK_ASSETS)/resources --skip icons_src
 	@$(RTOOL) asset-manifest $(APK_ASSETS) $(APK_ASSETS)/rebax_assets.txt
 	@echo Linking $(APK_LIB_DIR)/libmain.so

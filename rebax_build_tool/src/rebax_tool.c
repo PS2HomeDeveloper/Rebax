@@ -75,7 +75,7 @@
 #define STBI_ONLY_PNG
 #define STBI_NO_HDR
 #define STBI_NO_LINEAR
-#include "../../src/stb_image.h"
+#include "../../third_party/stb_image.h"
 
 /* ============================================================
  * Small utilities

@@ -523,6 +523,37 @@ int rebax_fs_extract_tar_xz(const char *xz_path, const char *dest_dir) {
             }
             fclose(out);
         }
+        else if (typeflag == '2' || typeflag == '1') {
+            char link_name[101];
+            char parent[1800];
+            char *last_slash;
+            memcpy(link_name, header + 157, 100);
+            link_name[100] = '\0';
+            if (!tar_name_safe(link_name)) { ok = 0; break; }
+            strncpy(parent, full_path, sizeof(parent) - 1);
+            parent[sizeof(parent) - 1] = '\0';
+            last_slash = strrchr(parent, '/');
+            if (last_slash != NULL) {
+                *last_slash = '\0';
+                if (!rebax_fs_mkdir_p(parent)) { ok = 0; break; }
+            }
+            if (typeflag == '2') {
+#if !defined(_WIN32)
+                unlink(full_path);
+                if (symlink(link_name, full_path) != 0) { ok = 0; break; }
+#endif
+            } else {
+                char target[1800];
+                snprintf(target, sizeof(target), "%s/%s", dest_dir, link_name);
+                if (!rebax_fs_copy_file(target, full_path)) { ok = 0; break; }
+#if !defined(_WIN32)
+                {
+                    struct stat link_st;
+                    if (stat(target, &link_st) == 0) chmod(full_path, link_st.st_mode & 0777);
+                }
+#endif
+            }
+        }
         /* Any other typeflag (symlink, PAX header...) - silently skipped, which is
          * all we need for ps2dev/nodes archives (only regular files, headers, and directories) */
 

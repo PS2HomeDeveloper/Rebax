@@ -1,12 +1,67 @@
 # Contributing to Rebax
 
-Thank you for contributing to Rebax. Rebax is a 2D/3D editor and engine for creating applications that run on the PlayStation 2. Contributions must preserve the project's architectural direction: shared systems, predictable ownership, minimal duplication, and native PS2 output.
+Thank you for contributing to Rebax. Rebax is an open-source, non-commercial 2D/3D game engine and development environment intended to produce native applications for multiple target families. PlayStation 2 is the initial implementation target, not the permanent boundary of the project. The long-term vision includes PlayStation 1 and the modern platforms Windows, Linux, Android, iOS, and macOS.
 
-This document is normative for new code and for refactoring existing code.
+The current source tree and exporter are still primarily PS2-oriented. Do not describe a target as implemented or supported merely because it appears in the long-term vision. Contributions must preserve shared systems, predictable ownership, minimal duplication, native output, and explicit boundaries between editor, runtime, platform, exporter, and toolchain code.
 
-## 1. Core Engineering Rules
+This document is normative for new code and for refactoring existing code. Sections that explicitly describe the PS2 exporter document the current PS2 implementation; they must not be interpreted as requirements that all future targets share PS2-specific internals.
 
-### 1.1 Prefer one shared implementation
+## 1. Project Vision and Architectural Boundaries
+
+### 1.1 Target families
+
+Rebax is intended to support three project families:
+
+1. **PlayStation 1** — a target family with its own hardware limits, runtime implementation, libraries, toolchain, and export rules.
+2. **PlayStation 2** — the initial implementation target and the first native export path to preserve while the architecture is improved.
+3. **Rebax Multi-Platform** — Windows, Linux, Android, iOS, and macOS, using shared systems where appropriate and platform-specific implementations where necessary.
+
+These are architectural goals, not a claim that every target is currently implemented. PlayStation 1 and PlayStation 2 must not be treated as interchangeable targets. The five modern platforms also have different graphics, operating-system, packaging, signing, and build requirements; sharing a project family does not mean sharing every implementation.
+
+A project family must affect real compatibility decisions: available nodes, supported resources, runtime implementations, export settings, and build requirements. The editor must not offer an unsupported feature as if it were valid for the selected target.
+
+### 1.2 Native output
+
+Rebax aims to turn project scenes, node data, and assets into native build inputs at export time. The exported application must not need the Rebax editor or a general-purpose interpreter for the original `.rscene` project files merely to run. A native runtime may still be included when required for node lifecycle, rendering, resources, memory, or other engine services.
+
+The goal is to include only the code, node implementations, assets, and dependencies required by the selected project and target where feasible. Do not assume that every platform can or should produce one standalone file; follow the target's executable and packaging requirements.
+
+### 1.3 Node and SDK boundaries
+
+A node is a logical engine feature, not automatically a platform-specific implementation. Keep these responsibilities distinct:
+
+- node metadata and editor-visible properties;
+- editor preview and interaction;
+- internal runtime node interface;
+- target-specific runtime implementation;
+- public Rebax SDK API;
+- exporter metadata and dependency declarations.
+
+These responsibilities do not always require separate files, but they must have clear ownership. Do not make editor previews depend on private runtime implementation details. Do not expose internal memory layouts or property offsets as public SDK API accidentally.
+
+The public Rebax SDK is the API used by project-owned native code. It is distinct from the internal node ABI and from the concrete C/C++ files that implement nodes. Target-specific SDK functions must be documented as target-specific and must not imply universal availability.
+
+### 1.4 Exporter and toolchain boundaries
+
+Separate common project analysis from target-specific code generation, compilation, linking, and packaging. PS1 and PS2 need independent target implementations where their runtime or hardware requirements differ. Common exporter code should handle genuinely shared work such as project validation, dependency discovery, asset analysis, diagnostics, and build-plan creation.
+
+A toolchain package is not just a compiler executable. Depending on the target, it may require an assembler, linker, target headers, runtime libraries, system SDKs, and packaging or signing tools. Track the environment where a build tool runs separately from the target for which it produces output. Missing tools or dependencies must cause a clear build failure, not placeholder output or false success.
+
+Large toolchains should be managed as versioned, target-aware packages rather than placed inside `src/`. The editor may use locally installed or separately downloaded build tools. Bundling a compiler for development must not make that compiler a dependency of the exported game.
+
+### 1.5 Source organization and refactoring
+
+Organize source files by architectural responsibility rather than by the project's historical first target. Keep editor-only code, shared engine systems, runtime node implementations, platform backends, SDK interfaces, exporters, and build/toolchain management distinguishable.
+
+Do not move or rename files solely to make the tree look uniform. Before a move, identify callers, include paths, generated outputs, embedded-resource paths, build rules, and target dependencies. Refactor one responsibility at a time and preserve working PS2 export behavior unless a deliberate change is being made and validated.
+
+### 1.6 Development status must be truthful
+
+PlayStation 2 is the initial implementation target. PlayStation 1, Windows, Linux, Android, iOS, and macOS must be described as planned until each has a working implementation and a validated build and runtime path. Recognizing a target name or providing a toolchain archive is not sufficient to claim support.
+
+## 2. Core Engineering Rules
+
+### 2.1 Prefer one shared implementation
 
 Before adding a new function, widget, dialog, browser, loader, serializer, or exporter path, search the existing source tree for an equivalent implementation.
 
@@ -21,7 +76,7 @@ Examples:
 
 Do not create a second implementation merely because a caller needs a different mode. Add an explicit mode, root, policy, or callback when the behavior is genuinely the same system.
 
-### 1.2 Do not duplicate rendering logic
+### 2.2 Do not duplicate rendering logic
 
 A feature with several modes must not copy the complete draw/update implementation for every mode. Keep the common layout, input handling, resource lifetime, and drawing in one implementation. Use small conditional branches only for the parts that are genuinely different.
 
@@ -34,7 +89,7 @@ For example, the File Manager may support:
 
 These are modes of one File Manager, not separate file browser implementations.
 
-### 1.3 Keep public libraries generic
+### 2.3 Keep public libraries generic
 
 A reusable library must not contain assumptions about one caller or one dialog. The caller selects the operation through the public API and receives the result through a callback or a documented result object.
 
@@ -56,15 +111,15 @@ src/file_manager.h
 
 Do not reintroduce the old `asset_browser` name for new code.
 
-### 1.4 Make the smallest correct change
+### 2.4 Make the smallest correct change
 
 When fixing a bug, modify the smallest set of files that directly implements the fix. Do not reformat unrelated files, migrate unrelated modules, or include historical changes in a new patch.
 
 Every delivery must contain only files added or modified for the current request.
 
-## 2. Ownership, Lifetime, and Dynamic Data
+## 3. Ownership, Lifetime, and Dynamic Data
 
-### 2.1 Make ownership explicit
+### 3.1 Make ownership explicit
 
 Every allocated resource must have a clear owner and release path. This includes:
 
@@ -78,19 +133,19 @@ Every allocated resource must have a clear owner and release path. This includes
 
 Document whether a pointer is borrowed, owned, or valid only until the next API call. Never return a pointer to memory that is about to be freed or overwritten.
 
-### 2.2 Protect data used during rebuilding
+### 3.2 Protect data used during rebuilding
 
 Do not keep a pointer into an array or buffer while calling a function that clears, reallocates, or rebuilds that array or buffer.
 
 Copy stable values, such as paths or identifiers, into local storage before rebuilding the underlying collection. This rule prevents navigation bugs such as using an old directory entry after the File Manager has reloaded its contents.
 
-### 2.3 Avoid unnecessary fixed global state
+### 3.3 Avoid unnecessary fixed global state
 
 Existing UI modules use a single-instance state model where appropriate, but new code must not add global state casually. Prefer an explicit context structure when a module may eventually support multiple instances, multiple projects, or background operations.
 
 If a fixed limit is necessary, define it near the data structure, validate it, and document the behavior when the limit is reached. Do not silently corrupt memory or create an invalid partial result.
 
-### 2.4 Keep dynamic operations non-blocking in the editor
+### 3.4 Keep dynamic operations non-blocking in the editor
 
 The editor UI is single-threaded. Long operations must not block the event loop. Use a small state machine and advance it from the module's update function.
 
@@ -104,9 +159,9 @@ This applies to operations such as:
 
 Use incremental polling or another documented non-blocking mechanism. The draw function must only render current state; it must not start an expensive operation or perform hidden blocking I/O.
 
-## 3. Module and UI Conventions
+## 4. Module and UI Conventions
 
-### 3.1 Separate responsibilities
+### 4.1 Separate responsibilities
 
 Keep these responsibilities separate:
 
@@ -118,13 +173,13 @@ Keep these responsibilities separate:
 
 A dialog should not duplicate filesystem logic, scene serialization, or export-generation logic.
 
-### 3.2 Reuse shared UI primitives
+### 4.2 Reuse shared UI primitives
 
 Use the existing theme, dialog, layout, button, text-field, selection, icon, and path utilities. Do not introduce local copies of colors, button rendering, modal backdrops, text-field behavior, or path normalization unless the shared API cannot express the required behavior.
 
 If a shared primitive is missing, improve the shared primitive once and migrate callers to it.
 
-### 3.3 Update and draw ordering
+### 4.3 Update and draw ordering
 
 Follow the existing frame lifecycle:
 
@@ -137,20 +192,20 @@ Follow the existing frame lifecycle:
 
 Do not perform input mutation inside draw functions. Do not update the same state from multiple independent callers.
 
-### 3.4 Error handling
+### 4.4 Error handling
 
 Errors must be visible and actionable. Return failure, invoke the documented failure callback, or add a clear exporter log line. Never report success when a file, directory, compiler command, conversion, or link step failed.
 
 Paths supplied by users must be validated before use. Avoid shell injection: commands must be constructed from validated values, escaped where required, or passed through a safer process API when available.
 
 
-### 3.5 Node Icon Design and Category Colors
+### 4.5 Node Icon Design and Category Colors
 
 Node icons must follow a consistent visual system across the editor. Each node belongs to a defined category, and every node must follow the global color assigned to its category.
 
 The icon itself may use additional colors, shapes, highlights, indicators, and other visual details, but these additions must not replace or conflict with the node category color.
 
-#### 3.5.1 Element Color
+#### 4.5.1 Element Color
 
 "Element" is the common visual base shared by all node categories.
 
@@ -162,7 +217,7 @@ The "Element" color must always be:
 
 Individual node icons may use the category color together with white for internal details, highlights, indicators, or other visual elements.
 
-#### 3.5.2 Node Category Colors
+#### 4.5.2 Node Category Colors
 
 Each node category must have one documented global color. Every node belonging to that category must use its category color as its primary category identity.
 
@@ -180,7 +235,7 @@ For example:
 
 The individual icon design may differ between nodes in the same category. The category color must remain consistent so that users can identify the node category visually.
 
-#### 3.5.3 Adding a New Node Category
+#### 4.5.3 Adding a New Node Category
 
 When a new node category is introduced, its global color must be added to the Node Category Colors section above.
 
@@ -196,7 +251,7 @@ A new node category must not introduce an undocumented category color.
 
 Individual node icons may have unique designs, but the category color is controlled by the category and must not be independently changed by individual nodes.
 
-## 4. Project and Build Rules
+## 5. Project and Build Rules
 
 The top-level `Makefile` discovers C sources recursively under `src`. New source files placed under `src` are therefore part of the build automatically; do not add unnecessary manual source lists.
 
@@ -218,15 +273,15 @@ Before submitting a change:
 - verify that no old duplicate module or stale include remains after a rename.
 
 
-## 5. Editor Preparation: Properties and Code Editor
+## 6. Editor Preparation: Properties and Code Editor
 
 The Inspector, node metadata, and embedded code editor are shared editor systems. New nodes and editor features must extend these systems instead of adding a private copy for one node or one dialog.
 
-### 5.1 Property metadata is the source of truth
+### 6.1 Property metadata is the source of truth
 
 A node declares its editor-visible properties once through its `node_property_t` metadata. The Inspector builds its rows from that metadata automatically. Do not duplicate a node's property names, types, defaults, or ordering in a second panel-specific table.
 
-The property definition must stay aligned with the native PS2 node interface:
+For the current PS2 target, the property definition must stay aligned with the native PS2 node interface. Future targets must define and validate their own compatible runtime interface:
 
 - the editor-side property order;
 - the native property order;
@@ -236,7 +291,7 @@ The property definition must stay aligned with the native PS2 node interface:
 
 When a property is added, update the node implementation and verify both editor display and native export. Properties that remain at their defaults must not cause unused runtime systems or duplicate libraries to be exported.
 
-### 5.2 Static versus runtime-controlled properties
+### 6.2 Static versus runtime-controlled properties
 
 The exporter must distinguish between values that are fixed in the exported scene and values that can change during execution.
 
@@ -247,13 +302,13 @@ The exporter must distinguish between values that are fixed in the exported scen
 
 For example, a `Sprite2D` rotation of `0` can be emitted as initial data, but the native sprite implementation must still preserve the rotation field and apply it when code changes the value at runtime. This is required for equivalent native output.
 
-### 5.3 Inspector interaction and scrolling
+### 6.3 Inspector interaction and scrolling
 
 The Inspector uses the shared `text_field` implementation for editable values and the shared `ui_scrollbar` implementation for vertical scrolling. New property types must add conversion and validation to the shared path rather than creating a new text-input implementation inside a node panel.
 
 The shared scrollbar width is **8 pixels**. Its thumb height remains proportional to the content length and viewport height. Mouse-wheel scrolling, dragging, focus changes, and keyboard input must continue to work for every panel that uses it.
 
-### 5.4 Embedded code editor
+### 6.4 Embedded code editor
 
 The embedded editor is named `code_editor`, not `script_editor`, because Rebax edits native C and C++ source files as well as headers. Its implementation is intentionally separated from File Manager and Inspector:
 
@@ -279,11 +334,11 @@ The initial editor supports:
 Future code-editor subsystems such as diagnostics, symbol indexing, syntax highlighting, debugging, and build integration must be added as focused modules. Do not turn `code_editor.c` into a second file manager, compiler, or exporter.
 
 
-## 5. Exporter Architecture: Native PS2 Output
+## 7. Current PS2 Exporter: Native PS2 Output
 
-The Rebax exporter must target native PS2 development.
+This section documents the current PS2 export implementation. It is not a requirement that future targets use PS2-specific runtime or build logic.
 
-Exported projects must produce a native PS2 application equivalent in structure and final behavior to a project developed directly using C/C++ source files, header files, and the PS2 GCC/PS2Dev toolchain.
+For PS2 exports, the output must be a native application equivalent in intended behavior to a project developed directly using C/C++ source files, headers, and the PS2 GCC/PS2Dev toolchain. Other targets must use their own appropriate native toolchains and target-specific export implementations.
 
 The intended flow is:
 
@@ -303,7 +358,7 @@ PS2 GCC / PS2Dev Toolchain
 ELF
 ```
 
-### 5.1 No Rebax-specific runtime interpreter
+### 7.1 No Rebax-specific runtime interpreter
 
 The exported PS2 application must not require the PS2 runtime to understand or interpret Rebax-specific project files, editor metadata, `.rscene` files, or an editor-only virtual machine in order to execute.
 
@@ -311,7 +366,7 @@ Rebax project data must be resolved on the host during export whenever possible.
 
 The final ELF must be produced by the standard PS2 toolchain, not by a special Rebax execution format.
 
-### 5.2 Equivalent Native Output, not byte-for-byte identity
+### 7.2 Equivalent Native Output, not byte-for-byte identity
 
 The goal is **Equivalent Native Output**. The generated ELF does not need to be byte-for-byte identical to an ELF produced by a developer manually writing equivalent C/C++ code.
 
@@ -326,7 +381,7 @@ Differences are expected because of:
 
 The important guarantees are that the exported project is a normal native PS2 project, is built through the same class of PS2 GCC/PS2Dev toolchain, and has equivalent intended runtime behavior and platform requirements.
 
-### 5.3 Exporter responsibilities
+### 7.3 Exporter responsibilities
 
 The exporter is responsible for:
 
@@ -343,7 +398,7 @@ The exporter is responsible for:
 
 Generated projects should be inspectable and buildable outside the editor whenever the required PS2 toolchain and dependencies are available.
 
-### 5.4 What must not be exported unnecessarily
+### 7.4 What must not be exported unnecessarily
 
 Do not copy editor-only systems into the PS2 output merely because they exist in the Rebax source tree. Do not export:
 
@@ -357,7 +412,7 @@ Do not copy editor-only systems into the PS2 output merely because they exist in
 
 A small, explicit native runtime may be included when it is required by the generated application, but it must be ordinary PS2-side C/C++ code and must not act as a general Rebax project interpreter.
 
-### 5.5 Determinism and reproducibility
+### 7.5 Determinism and reproducibility
 
 For the same project, settings, toolchain, and source inputs, export should produce the same generated project structure and equivalent build inputs. Avoid embedding machine-specific absolute paths in generated source unless they are clearly documented.
 
@@ -372,17 +427,17 @@ Generated output must use stable ordering for:
 
 Deduplicate shared node types, assets, and generated resources. If an image or resource is used by multiple scenes, convert or copy it once and reference the shared result.
 
-### 5.6 Debug and Release
+### 7.6 Debug and Release
 
 Debug and Release exports must use the same native project architecture. They may differ in compiler flags, symbols, optimization, logging, and post-link stripping, but neither mode may depend on a different proprietary runtime format.
 
 Release-only processing, such as stripping symbols, must happen after a successful native link and must never hide a failed build.
 
-### 5.7 Native Node Export Contract
+### 7.7 Native Node Export Contract
 
-The first export milestone is **Native Node Export**. Every node that exists in the editor must have one corresponding PS2-native implementation under `embedded/nodes/`. The editor preview and the exported PS2 implementation must use the same property names, order, types, defaults, and semantics.
+The first export milestone is **Native Node Export**. Every node offered for a PS2 project must have a corresponding PS2-native implementation. In the current source tree, native PS2 node sources are located under `embedded/ps2/sdk/nodes/`. Other targets must provide their own implementation where the node is supported. The editor preview and the exported PS2 implementation must use the same property names, order, types, defaults, and semantics.
 
-The native node file is the source of truth for its property metadata. Its `node_property_t` array, `property_offsets` array, `instance_size`, and `node_interface_t` must remain aligned. Property counts must be derived from the property array rather than repeated as unrelated numeric constants.
+For the current PS2 implementation, the native node interface is the source of truth for its runtime property layout; editor metadata must stay aligned with it. The architecture should avoid making a PS2 memory layout the universal source of truth for every future target. Its `node_property_t` array, `property_offsets` array, `instance_size`, and `node_interface_t` must remain aligned. Property counts must be derived from the property array rather than repeated as unrelated numeric constants.
 
 For each scene export, the exporter must:
 
@@ -397,7 +452,7 @@ For each scene export, the exporter must:
 
 The exported application must therefore execute the same meaningful node behavior as the editor preview. A property must not merely appear in the Inspector or be stored in `scene_data.c` while being ignored by the PS2 implementation.
 
-#### 5.7.1 Coordinate convention
+#### 7.7.1 Coordinate convention
 
 Rebax intentionally uses a beginner-friendly 2D coordinate convention:
 
@@ -410,7 +465,7 @@ Rebax intentionally uses a beginner-friendly 2D coordinate convention:
 
 This is an intentional Rebax design decision. Do not change it to a top-left-origin convention without a deliberate format/API migration.
 
-#### 5.7.2 Transform properties
+#### 7.7.2 Transform properties
 
 Transform properties are runtime data, not editor-only labels:
 
@@ -420,9 +475,9 @@ Transform properties are runtime data, not editor-only labels:
 
 When a transform is not yet visually rendered by a particular node, its native implementation must still store and expose the property correctly so later runtime behavior and the public SDK can use it without changing the scene format.
 
-Sprite2D rotation is stored in radians and must be applied around the sprite center in both the editor preview and the native PS2 renderer. Raw dimensions and pixel format are used only for headerless RAW assets and must not affect ordinary PNG, JPEG, BMP, TGA, TIFF, TIM, or TIM2 assets.
+For the current PS2 implementation, Sprite2D rotation is stored in radians and must be applied around the sprite center in both the editor preview and the native PS2 renderer. Future target implementations must preserve the documented node semantics while using their own renderer. Raw dimensions and pixel format are used only for headerless RAW assets and must not affect ordinary PNG, JPEG, BMP, TGA, TIFF, TIM, or TIM2 assets.
 
-#### 5.7.3 Official PS2 build references
+#### 7.7.3 Official PS2 build references
 
 Native output must follow the official PS2SDK/gsKit conventions. Rebax does not run `make` or include the PS2SDK rule files; `ps2_build.c` reproduces the commands of these official fragments directly (same compilers, flags and order):
 
@@ -436,7 +491,7 @@ $(PS2SDK)/samples/Makefile.ioprp
 
 Rebax must not copy the complete PS2SDK or gsKit source tree into every exported project. `ps2_build.c` compiles each source and links only the libraries required by the selected native nodes. C-only exports use the C rules; an export containing C++ sources uses the official C++ rules and the C++ link driver. EE ELF/ERL/library, IOP IRX/library and IOPRP targets are supported by the same module; when the official fragments change, update `ps2_build.c` to match.
 
-### 5.8 C/C++ Project Source Export
+### 7.8 C/C++ Project Source Export
 
 The second export milestone copies the project's native source tree into the generated PS2 project without converting it into a Rebax-specific format.
 
@@ -477,9 +532,9 @@ The generated scene bootstrap is a weak fallback `main`. A project-owned strong 
 
 Project source export is a build integration milestone, not the Native Rebax SDK. Project code must not depend on private exporter headers or `.rscene` parsing. Public runtime interfaces will be introduced by the Native Rebax SDK milestone.
 
-### 5.9 Native Rebax SDK
+### 7.9 Native Rebax SDK
 
-The Native Rebax SDK is the public runtime API available to project-owned C/C++ files in an exported PS2 project. Its public header is `rebax_sdk.h`; project code must include that header rather than including `export_internal.h`, `scene_runtime.h`, or private node implementation structures.
+The current PS2 Native Rebax SDK is the public runtime API available to project-owned C/C++ files in an exported PS2 project. Future target SDK implementations may expose target-specific functionality, but the public API and internal runtime ABI must remain conceptually distinct. Its public header is `rebax_sdk.h`; project code must include that header rather than including `export_internal.h`, `scene_runtime.h`, or private node implementation structures.
 
 The SDK provides:
 
@@ -490,7 +545,7 @@ The SDK provides:
 5. the native `init`, `update`, `draw`, `destroy`, and `free` lifecycle;
 6. consistent error codes for missing properties, wrong types, unsupported nodes, invalid arguments, and allocation failures.
 
-The current SDK catalog is:
+The current PS2 SDK catalog is:
 
 | Node | Public properties |
 |---|---|
@@ -527,9 +582,9 @@ The generated SDK implementation contains one shared native interface entry per 
 SDK-owned strings must not be freed by project code. Call `rebax_node_free` exactly once for each created node; it invokes the node's native destroy callback and releases SDK-owned property storage.
 
 
-## 6. Exporter Module Structure
+## 8. Current PS2 Exporter Module Structure
 
-The exporter is intentionally split into focused internal modules. Keep the public API in `src/ps2_exporter.h` stable while extending the implementation through the internal modules below. The editor should depend only on the public header and must not include `export_internal.h`.
+The current PS2 exporter is split into focused internal modules. Keep the public API in `src/ps2_exporter.h` stable while extending this PS2 implementation through the internal modules below. A future cross-target exporter interface should be separate from this PS2-specific API. The editor should depend only on the public header and must not include `export_internal.h`.
 
 ```text
 src/
@@ -545,20 +600,20 @@ src/
 └── ps2_build.c          # Direct PS2 toolchain driver (compile, link, strip, IRX, IOPRP)
 ```
 
-### 6.1 Responsibilities and boundaries
+### 8.1 Responsibilities and boundaries
 
 - `ps2_exporter.c` coordinates stages; it must not become a second implementation of scene parsing, asset conversion, node selection, or process polling.
 - `export_internal.h` is private. It defines the internal contract and shared export state; it is not a feature API.
 - `export_process.c` owns non-blocking process I/O, cancellation, exit status, and the exporter log queue. It must not know scene or node semantics.
 - `export_scene.c` is the only module that parses `.rscene` files. Other stages consume the parsed results and must not reparse the same files independently.
-- `export_nodes.c` selects each used node type once, copies its native PS2 source once, and collects only the dependencies declared by the copied source.
+- `export_nodes.c` selects each used PS2 node type once, copies its native PS2 source once, and collects only the dependencies declared by the copied source.
 - `export_project.c` copies project-owned C/C++ sources and headers under `src/project/` while preserving relative paths; it reuses the shared export-marker scanner and does not parse scenes.
 - `export_assets.c` converts each logical asset once and emits native data. It must not embed the same asset once per scene or node instance.
 - `export_codegen.c` emits project-specific native C files and the small native runtime bridge. It must not emit a private Rebax project interpreter.
-- `export_codegen.c` also emits the single public `rebax_sdk.c` implementation from the complete current node catalog; the public declaration is `embedded/nodes/rebax_sdk.h` and is copied into each native export.
+- `export_codegen.c` also emits the single public `rebax_sdk.c` implementation from the current PS2 node catalog; the public declaration is `embedded/ps2/sdk/nodes/rebax_sdk.h` and is copied into each PS2 native export.
 - `ps2_build.c` plans and runs the PS2 compiler and linker commands without `make`; it must include each source, include flag, and library flag only once and must stay free of scene or node semantics.
 
-### 6.2 Stable public API
+### 8.2 Stable public API
 
 The following functions are the public boundary and must remain source-compatible unless a deliberate API migration is approved:
 
@@ -572,7 +627,7 @@ void ps2_export_cancel(void);
 
 Internal files may be renamed or reorganized behind this boundary. `export_dialog.c` must continue to use the public API rather than reaching into exporter internals.
 
-### 6.3 One analysis pass
+### 8.3 One analysis pass
 
 An export must follow this order:
 
@@ -600,7 +655,7 @@ Copy the final ELF
 
 Do not add a second scan of `.rscene` files merely to discover nodes, images, or properties. Extend the scene analysis result instead. This avoids inconsistent results and unnecessary work.
 
-### 6.4 Deduplication contract
+### 8.4 Deduplication contract
 
 The generated project must deduplicate at every relevant level:
 
@@ -613,22 +668,22 @@ The generated project must deduplicate at every relevant level:
 
 Multiple scene instances are represented as data in generated files such as `scene_data.c`; they must not produce duplicated copies of the implementation.
 
-### 6.5 `embedded/nodes` is native runtime source
+### 8.5 `embedded/ps2/sdk/nodes/` is native runtime source
 
-`embedded/nodes/` contains hand-written, PS2-side C/C++ runtime sources. It is not a per-project generated directory and it must not contain one generated implementation per scene instance.
+`embedded/ps2/sdk/nodes/` contains the current hand-written, PS2-side C/C++ runtime sources. It is not a per-project generated directory and it must not contain one generated implementation per scene instance.
 
 The exporter reads this source repository, selects the node implementations needed by the analyzed project, and copies each selected implementation once into the temporary native project. The PS2 compiler then builds those ordinary sources.
 
 When adding a node:
 
-- keep its PS2 runtime implementation in `embedded/nodes/`;
+- keep its PS2 runtime implementation under `embedded/ps2/sdk/nodes/`;
 - add the editor-side registration separately where needed;
 - document its `@NODE` declaration;
 - declare its required PS2 include and library flags in the source comments;
 - avoid including loaders or libraries that the node does not use;
 - verify that two instances of the node still produce one copied source file.
 
-### 6.6 Generated native project layout
+### 8.6 Generated native project layout
 
 The temporary export output must remain inspectable and follow this shape:
 
@@ -649,7 +704,7 @@ Temp/export/
 
 The generated project must be buildable with the ordinary PS2 GCC toolchain and must not require `.rscene` files, the editor, or a Rebax-specific interpreter on the PS2.
 
-### 6.7 Safe exporter refactoring
+### 8.7 Safe exporter refactoring
 
 When moving code between exporter modules:
 
@@ -663,9 +718,9 @@ When moving code between exporter modules:
 
 A module split is successful only when behavior is preserved and each module has one clear reason to change.
 
-## 7. Exporter Output and Native Build Guide
+## 9. PS2 Exporter Output and Native Build Guide
 
-The exporter produces a normal native PS2 project. The build compiles the generated and selected native sources with the PS2SDK flags, adds only discovered include/library flags, and produces `<name>.elf`. Debug and Release use the same project structure; Release may strip symbols after a successful link.
+The current PS2 exporter produces a normal native PS2 project. The build compiles the generated and selected native sources with the PS2SDK flags, adds only discovered include/library flags, and produces `<name>.elf`. Debug and Release use the same project structure; Release may strip symbols after a successful link.
 
 A developer diagnosing an export should inspect, in order:
 
@@ -677,7 +732,7 @@ A developer diagnosing an export should inspect, in order:
 
 The generated files are build artifacts. Fix the exporter or the native node source rather than editing generated files manually.
 
-## 8. Generated Code Quality
+## 10. Generated Code Quality
 
 Generated C/C++ should be readable enough to diagnose a failed export. Use stable names, typed values, comments for generated sections, and clear ownership of generated resources.
 
@@ -693,7 +748,7 @@ Generated code must:
 
 If a generated representation is not sufficient for a feature, improve the exporter or the native runtime module deliberately. Do not silently fall back to interpreting the original Rebax data on PS2.
 
-## 9. Review Checklist
+## 11. Review Checklist
 
 Before merging a contribution, verify:
 
@@ -704,13 +759,13 @@ Before merging a contribution, verify:
 - [ ] Dynamic or slow work is non-blocking in the editor.
 - [ ] Generated files are produced by generators, not hand-edited.
 - [ ] The project builds cleanly from a clean state.
-- [ ] The exporter generates a native PS2 project and native build inputs.
+- [ ] The current PS2 exporter generates a native PS2 project and native build inputs.
 - [ ] The exported ELF does not require a Rebax-specific project interpreter.
 - [ ] Only required node types, assets, and runtime modules are exported.
 - [ ] Debug and Release use the same native architecture.
 - [ ] Export failures are reported and do not produce false success.
 - [ ] The submitted patch contains only files relevant to the current change.
 
-## 10. Scope of This Document
+## 12. Scope of This Document
 
-This document defines the direction and rules for future work. It does not by itself claim that every exporter feature described above is already complete. When implementing a missing capability, update the exporter incrementally while preserving the Native PS2 output contract described in Sections 5 and 6.
+This document defines the long-term architectural direction and the rules for future work. It does not claim that every target or exporter feature described here is already implemented. The detailed PS2 sections document the current PS2 export contract; do not copy PS2-specific assumptions into shared modules or other target implementations. When adding a target, introduce its own runtime and export path while preserving working PS2 behavior.
