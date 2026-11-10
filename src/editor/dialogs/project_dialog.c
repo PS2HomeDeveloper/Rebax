@@ -21,9 +21,9 @@
 #include "scene_tabs.h"
 #include "loading_screen.h"
 #include "file_manager.h" /* Browse button opens the built-in file browser instead of relying on an external system dialog */
-#include "ui_theme.h"
-#include "ui_common.h"
-#include "ui_dialog.h"
+#include "theme.h"
+#include "base.h"
+#include "dialog.h"
 
 #define DIALOG_WIDTH   420
 #define DIALOG_HEIGHT  240

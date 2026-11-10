@@ -370,10 +370,12 @@ static void set_env(const char *name, const char *value) {
 #endif
 }
 
-static void setup_environment(const char *ps2dev_root) {
+static void setup_environment(const char *ps2dev_root, const char *ps2sdk_root, const char *gskit_root) {
     snprintf(g_ps2dev, sizeof(g_ps2dev), "%s", ps2dev_root);
-    snprintf(g_ps2sdk, sizeof(g_ps2sdk), "%s/ps2sdk", ps2dev_root);
-    snprintf(g_gskit, sizeof(g_gskit), "%s/gsKit", ps2dev_root);
+    if (ps2sdk_root && ps2sdk_root[0]) snprintf(g_ps2sdk, sizeof(g_ps2sdk), "%s", ps2sdk_root);
+    else snprintf(g_ps2sdk, sizeof(g_ps2sdk), "%s/ps2sdk", ps2dev_root);
+    if (gskit_root && gskit_root[0]) snprintf(g_gskit, sizeof(g_gskit), "%s", gskit_root);
+    else snprintf(g_gskit, sizeof(g_gskit), "%s/gsKit", ps2dev_root);
     set_env("PS2DEV", g_ps2dev);
     set_env("PS2SDK", g_ps2sdk);
     set_env("GSKIT", g_gskit);
@@ -903,7 +905,7 @@ int ps2_build_start(const ps2_build_config_t *config) {
     g_failed = 0;
     memset(g_slots, 0, sizeof(g_slots));
 
-    setup_environment(config->ps2dev_root);
+    setup_environment(config->ps2dev_root, config->ps2sdk_root, config->gskit_root);
     g_parallel = detect_parallel_jobs(config->parallel_jobs);
 
     int ok;

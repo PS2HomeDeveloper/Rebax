@@ -15,14 +15,15 @@
 #include <stdio.h>
 
 #include "window.h"
-#include "ui_project_center.h"
+#include "project_center.h"
 #include "project_dialog.h"
+#include "packages_dialog.h"
 #include "loading_screen.h"
 #include "editor_workspace.h"
 #include "app_state.h"
 #include "rebax_paths.h" /* Rebax working directory + first-run setup for tools and node resources */
 #include "file_manager.h" /* Built-in file manager - opened from anywhere in the engine, drawn on top of everything */
-#include "ui_dialog.h"
+#include "dialog.h"
 #include "android_storage.h"
 
 /* ------------------------------------------------------------
@@ -31,7 +32,9 @@
  * #include "project_manager.h"
  * ------------------------------------------------------------ */
 
-int main(void) {
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
     /* Previously smaller size to fit mobile screens inside Termux:X11 -
      * window will be resizable later anyway */
     if (!window_init("Rebax_Engine", 900, 560)) {
@@ -103,6 +106,11 @@ int main(void) {
                 }
                 project_dialog_draw(window_get_width(), window_get_height());
             }
+
+            if (packages_dialog_is_open()) {
+                packages_dialog_update(window_get_width(), window_get_height());
+                packages_dialog_draw(window_get_width(), window_get_height());
+            }
         }
 
         /* Built-in file browser (file_manager) - always on top of everything else,
@@ -119,6 +127,7 @@ int main(void) {
 
     editor_workspace_shutdown();
     project_dialog_shutdown();
+    packages_dialog_shutdown();
     ui_project_center_shutdown();
     file_manager_shutdown();
     ui_dialog_shutdown();

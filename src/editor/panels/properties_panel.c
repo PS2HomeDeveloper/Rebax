@@ -27,8 +27,8 @@
 #include "text_field.h"
 #include "file_manager.h"
 #include "current_scene.h"
-#include "ui_theme.h"
-#include "ui_scrollbar.h"
+#include "theme.h"
+#include "scrollbar.h"
 #include "path_utils.h"
 
 #define ROW_HEIGHT      22

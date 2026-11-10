@@ -1,7 +1,7 @@
 /* Scene tree display panel. Data and saving are in scene_data, general rendering in ui_tree. */
 #include "scene_tree_panel.h"
 #include "scene_data.h"
-#include "ui_tree.h"
+#include "tree.h"
 #include "icon_atlas.h"
 #include "node_registry.h"
 #include "properties_panel.h"

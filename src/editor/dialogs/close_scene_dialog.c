@@ -15,9 +15,9 @@
 #include "window.h"
 #include "font.h"
 #include "labeled_button.h"
-#include "ui_theme.h"
-#include "ui_common.h"
-#include "ui_dialog.h"
+#include "theme.h"
+#include "base.h"
+#include "dialog.h"
 
 #define DIALOG_WIDTH   360
 #define DIALOG_HEIGHT  140

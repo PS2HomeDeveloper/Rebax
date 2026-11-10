@@ -7,35 +7,70 @@
 #include "rebax_fs.h"
 #include "export_internal.h"
 
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+
+static const char *const NODE_SOURCE_DIRS[] = {
+    "src/nodes", "src/common", "include/nodes", "include/common", "include/core"
+};
+#define NODE_SOURCE_DIR_COUNT ((int)(sizeof(NODE_SOURCE_DIRS) / sizeof(NODE_SOURCE_DIRS[0])))
+
+static char g_sdk_name[64] = "ps2";
+
+void node_source_use(const char *sdk_name) {
+    snprintf(g_sdk_name, sizeof(g_sdk_name), "%s", sdk_name);
+}
+
 #if defined(__ANDROID__)
 #include "asset_files.h"
-#define NODE_ASSET_DIR "sdks/rebax"
+
+static void asset_path(char *out, size_t cap, int dir, const char *name) {
+    snprintf(out, cap, "sdks/rebax/%s/%s/%s", g_sdk_name, NODE_SOURCE_DIRS[dir], name);
+}
 
 int node_source_list(node_source_name_cb callback, void *user) {
-    return asset_file_list(NODE_ASSET_DIR "/", callback, user);
+    char prefix[1600];
+    snprintf(prefix, sizeof(prefix), "sdks/rebax/%s/%s/", g_sdk_name, NODE_SOURCE_DIRS[0]);
+    return asset_file_list(prefix, callback, user);
 }
 
 int node_source_copy(const char *name, const char *dest_path) {
     char asset[1600];
-    snprintf(asset, sizeof(asset), NODE_ASSET_DIR "/%s", name);
-    return asset_file_copy(asset, dest_path);
+    for (int d = 0; d < NODE_SOURCE_DIR_COUNT; d++) {
+        asset_path(asset, sizeof(asset), d, name);
+        if (asset_file_copy(asset, dest_path)) return 1;
+    }
+    return 0;
 }
 
 char *node_source_read(const char *name, long *out_size) {
     char asset[1600];
-    size_t size = 0;
-    snprintf(asset, sizeof(asset), NODE_ASSET_DIR "/%s", name);
-    char *data = (char *)asset_file_read(asset, &size);
-    if (data && out_size) *out_size = (long)size;
-    return data;
+    for (int d = 0; d < NODE_SOURCE_DIR_COUNT; d++) {
+        size_t size = 0;
+        asset_path(asset, sizeof(asset), d, name);
+        char *data = (char *)asset_file_read(asset, &size);
+        if (data) {
+            if (out_size) *out_size = (long)size;
+            return data;
+        }
+    }
+    return NULL;
 }
 
 #else
 #include <dirent.h>
-#pragma GCC diagnostic ignored "-Wformat-truncation"
+
+static int find_file(const char *name, char *out, size_t cap) {
+    for (int d = 0; d < NODE_SOURCE_DIR_COUNT; d++) {
+        snprintf(out, cap, "%s/%s/%s/%s", rebax_node_resources_dir(), g_sdk_name, NODE_SOURCE_DIRS[d], name);
+        if (rebax_fs_exists(out)) return 1;
+    }
+    return 0;
+}
 
 int node_source_list(node_source_name_cb callback, void *user) {
-    DIR *dir = opendir(rebax_node_resources_dir());
+    char dir_path[1600];
+    snprintf(dir_path, sizeof(dir_path), "%s/%s/%s", rebax_node_resources_dir(), g_sdk_name, NODE_SOURCE_DIRS[0]);
+    DIR *dir = opendir(dir_path);
     if (dir == NULL) return 0;
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) callback(entry->d_name, user);
@@ -45,13 +80,13 @@ int node_source_list(node_source_name_cb callback, void *user) {
 
 int node_source_copy(const char *name, const char *dest_path) {
     char src[1600];
-    snprintf(src, sizeof(src), "%s/%s", rebax_node_resources_dir(), name);
+    if (!find_file(name, src, sizeof(src))) return 0;
     return rebax_fs_copy_file(src, dest_path);
 }
 
 char *node_source_read(const char *name, long *out_size) {
     char src[1600];
-    snprintf(src, sizeof(src), "%s/%s", rebax_node_resources_dir(), name);
+    if (!find_file(name, src, sizeof(src))) return NULL;
     return export_read_whole_file(src, out_size);
 }
 #endif

@@ -66,19 +66,5 @@ void rebax_fs_basename_no_ext(const char *path, char *out, int out_size);
  * copy, points inside path itself */
 const char *rebax_fs_extension(const char *path);
 
-/* ------------------------------------------------------------
- * Extracts a full .tar.xz archive into a destination folder - the only public
- * function any other file in the project needs (literally the same result as
- * "tar -xJf", with no differences in output). Internally: xz decompression
- * via the adopted xz_embedded library (the same xz decompressor used in the
- * real Linux kernel toolchain - identical quality/accuracy, no compromises),
- * then a tar format parser (USTAR + GNU longname extension for long paths)
- * implemented from scratch here (the tar format itself is simple - fixed 512
- * byte header blocks, nothing requiring an external library).
- *
- * Returns 1 on successful full extraction, 0 on failure (corrupt archive,
- * disk space, unsupported tar header format - PAX extended headers are not
- * supported currently, only ustar + GNU longname) */
-int rebax_fs_extract_tar_xz(const char *xz_path, const char *dest_dir);
 
 #endif /* REBAX_FS_H */

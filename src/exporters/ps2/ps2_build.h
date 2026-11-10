@@ -14,6 +14,8 @@ typedef enum {
 typedef struct {
     ps2_build_kind_t kind;
     const char *ps2dev_root;
+    const char *ps2sdk_root;
+    const char *gskit_root;
     const char *work_dir;
     const char *output;
 

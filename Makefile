@@ -1,6 +1,5 @@
 BUILD_DIR := build
 .DEFAULT_GOAL := all
-OBJ_DIR := $(BUILD_DIR)/obj
 OUTPUT_DIR := $(BUILD_DIR)/output
 APK_DIR := $(BUILD_DIR)/apk
 APK_STAGE := $(APK_DIR)/stage
@@ -12,10 +11,23 @@ ifeq ($(OS),Windows_NT)
 else
   RTOOL_EXE :=
 endif
-RTOOL := $(RTOOL_DIR)/build_tool$(RTOOL_EXE)
+RTOOL_OBJ_DIR := $(RTOOL_DIR)/obj
+RTOOL_BIN_DIR := $(RTOOL_DIR)/bin
+RTOOL := $(RTOOL_BIN_DIR)/build_tool$(RTOOL_EXE)
+CACHE_DIR := build-cache
+ifeq ($(OS),Windows_NT)
+  NATIVE = $(subst /,\,$(1))
+  RMTREE = if exist $(call NATIVE,$(1)) rmdir /s /q $(call NATIVE,$(1))
+  MKTREE = if not exist $(call NATIVE,$(1)) mkdir $(call NATIVE,$(1))
+else
+  NATIVE = $(1)
+  RMTREE = rm -rf $(1)
+  MKTREE = mkdir -p $(1)
+endif
 RTOOL_C_SOURCES := $(wildcard $(RTOOL_SRC_DIR)/*.c)
 RTOOL_SOURCES := $(RTOOL_C_SOURCES) $(wildcard $(RTOOL_SRC_DIR)/*.h)
 RBX_TOOL_READY ?= 0
+RBX_BOOT := 0
 
 ifeq ($(OS),Windows_NT)
   NULL_DEV := nul
@@ -74,11 +86,11 @@ ifneq ($(findstring aarch64,$(HOST_MACHINE)),)
 else ifneq ($(findstring arm64,$(HOST_MACHINE)),)
   HOST_ARCH := arm64
 else ifneq ($(findstring armv7,$(HOST_MACHINE)),)
-  HOST_ARCH := armeabi-v7a
+  HOST_ARCH := arm
 else ifneq ($(findstring armv8l,$(HOST_MACHINE)),)
-  HOST_ARCH := armeabi-v7a
+  HOST_ARCH := arm
 else ifneq ($(findstring armv6,$(HOST_MACHINE)),)
-  HOST_ARCH := armeabi-v7a
+  HOST_ARCH := arm
 else ifneq ($(findstring x86_64,$(HOST_MACHINE)),)
   HOST_ARCH := x86_64
 else ifneq ($(findstring amd64,$(HOST_MACHINE)),)
@@ -102,10 +114,88 @@ ifeq ($(HOST_PLATFORM),android)
 endif
 endif
 
+ifeq ($(HOST_PLATFORM),android)
+  ifeq ($(HOST_ARCH),arm)
+    HOST_ARCH := armeabi-v7a
+  endif
+endif
+ifeq ($(HOST_PLATFORM),ios)
+  ifeq ($(HOST_ARCH),x86_64)
+    HOST_ARCH := x86_64
+  endif
+endif
+
+ifeq ($(RBX_TOOL_READY),0)
+  ifeq ($(HOSTCC),)
+    RBX_BOOT := 1
+  endif
+endif
+
+ifeq ($(RBX_BOOT),1)
+  ifneq ($(filter $(HOST_PLATFORM),linux windows android),$(HOST_PLATFORM))
+    $(error No C compiler was found. On $(HOST_PLATFORM) install the system compiler first)
+  endif
+  BOOT_ID := $(HOST_PLATFORM)-$(HOST_ARCH)
+  BOOT_SDK := sdks/$(BOOT_ID)
+  BOOT_CLANG_ROOT := toolchains/$(HOST_PLATFORM)/$(HOST_ARCH)
+  HOSTCC := $(BOOT_CLANG_ROOT)/clang/bin/clang$(RTOOL_EXE)
+  BOOT_CLANG_OK := $(BOOT_CLANG_ROOT)/.clang-ok
+  BOOT_SDK_OK := $(BOOT_SDK)/.sdk-ok
+  BOOT_TRIPLE_linux-x86_64 := x86_64-linux-musl
+  BOOT_TRIPLE_linux-arm64 := aarch64-linux-musl
+  BOOT_TRIPLE_linux-x86 := i686-linux-musl
+  BOOT_TRIPLE_linux-arm := armv7-linux-musleabihf
+  BOOT_TRIPLE_windows-x86_64 := x86_64-w64-mingw32
+  BOOT_TRIPLE_windows-x86 := i686-w64-mingw32
+  BOOT_TRIPLE_windows-arm64 := aarch64-w64-mingw32
+  BOOT_TRIPLE_windows-arm := armv7-w64-mingw32
+  BOOT_TRIPLE_android-arm64-v8a := aarch64-linux-android21
+  BOOT_TRIPLE_android-armeabi-v7a := armv7a-linux-androideabi21
+  BOOT_TRIPLE_android-x86 := i686-linux-android21
+  BOOT_TRIPLE_android-x86_64 := x86_64-linux-android21
+  BOOT_LIBDIR_android-arm64-v8a := aarch64-linux-android
+  BOOT_LIBDIR_android-armeabi-v7a := arm-linux-androideabi
+  BOOT_LIBDIR_android-x86 := i686-linux-android
+  BOOT_LIBDIR_android-x86_64 := x86_64-linux-android
+  BOOT_TRIPLE := $(BOOT_TRIPLE_$(BOOT_ID))
+  BOOT_LIBDIR := $(BOOT_LIBDIR_$(BOOT_ID))
+  ifeq ($(HOST_PLATFORM),linux)
+    BOOT_CFLAGS := --target=$(BOOT_TRIPLE) -nostdlibinc -isystem $(BOOT_SDK)/runtime/include -isystem $(BOOT_SDK)/standard/include
+    BOOT_LDPRE := --target=$(BOOT_TRIPLE) -nostdlib -static -fuse-ld=lld -Wl,--eh-frame-hdr $(BOOT_SDK)/standard/lib/crt1.o $(BOOT_SDK)/standard/lib/crti.o
+    BOOT_LDPOST := -L$(BOOT_SDK)/runtime/lib -L$(BOOT_SDK)/standard/lib -lc -lgcc $(BOOT_SDK)/standard/lib/crtn.o
+  else ifeq ($(HOST_PLATFORM),windows)
+    BOOT_CFLAGS := --target=$(BOOT_TRIPLE) --sysroot=$(BOOT_SDK)/standard
+    BOOT_LDPRE := --target=$(BOOT_TRIPLE) --sysroot=$(BOOT_SDK)/standard -fuse-ld=lld -static -nodefaultlibs
+    BOOT_LDPOST = -L$(BOOT_SDK)/runtime/lib $(wildcard $(BOOT_SDK)/runtime/lib/libclang_rt.builtins-*.a) -lmingw32 -lmingwex -lmoldname -lmsvcrt -lkernel32 -ladvapi32 -lshell32 -luser32
+  else
+    BOOT_CFLAGS := --target=$(BOOT_TRIPLE) --sysroot=$(BOOT_SDK)/standard -fPIC
+    BOOT_LDPRE := --target=$(BOOT_TRIPLE) --sysroot=$(BOOT_SDK)/standard -fuse-ld=lld -nodefaultlibs
+    BOOT_LDPOST = -L$(BOOT_SDK)/standard/usr/lib/$(BOOT_LIBDIR)/21 -L$(BOOT_SDK)/standard/usr/lib/$(BOOT_LIBDIR) $(wildcard $(BOOT_SDK)/runtime/lib/$(BOOT_LIBDIR)/libclang_rt.builtins-*.a) -lc -ldl
+  endif
+endif
+
+ifeq ($(RBX_TOOL_READY),0)
+  ifeq ($(filter -j%,$(MAKEFLAGS))$(findstring jobserver,$(MAKEFLAGS)),)
+    RBX_JOBS := $(or $(NUMBER_OF_PROCESSORS),$(shell nproc 2>$(NULL_DEV)),2)
+    MAKEFLAGS += -j$(RBX_JOBS)
+  endif
+endif
+
+ifeq ($(RBX_TOOL_READY),0)
+  ifneq ($(wildcard $(RTOOL)),)
+    ifneq ($(strip $(shell $(call NATIVE,$(RTOOL)) ok 2>$(NULL_DEV))),ok)
+      $(info The build tool does not run on this machine - rebuilding it)
+      $(shell $(call RMTREE,$(RTOOL_OBJ_DIR)))
+      $(shell $(call RMTREE,$(RTOOL_BIN_DIR)))
+    endif
+  endif
+endif
+
 TERMUX_PREFIX := $(if $(PREFIX),$(PREFIX),/data/data/com.termux/files/usr)
 ENGINE_VERSION := v1.0.0
 
-ALL_TARGET_GOALS := android-arm64 android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 macos-arm64 macos-x86_64 ios-arm64 ios-x86_64 linux-arm64 linux-x86 linux-x86_64 windows-arm64 windows-x86 windows-x86_64
+TARGET_GOALS := linux-x86_64 linux-x86 linux-arm64 linux-arm windows-x86_64 windows-x86 windows-arm64 windows-arm android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 macos-arm64 macos-x86_64 ios-arm64 ios-x86_64
+ALL_TARGET_GOALS := $(TARGET_GOALS) android-arm64
 APK_VARIANT_GOALS := $(foreach g,$(ALL_TARGET_GOALS),$(g).APK $(g)-APK) apk APK
 GOALS_RAW := $(MAKECMDGOALS)
 WANT_APK := 0
@@ -115,60 +205,16 @@ endif
 GOALS := $(filter-out apk APK,$(GOALS_RAW))
 GOALS := $(patsubst %.APK,%,$(GOALS))
 GOALS := $(patsubst %-APK,%,$(GOALS))
-SELECTED_GOAL := $(filter $(ALL_TARGET_GOALS),$(GOALS))
+SELECTED_GOAL := $(firstword $(filter $(ALL_TARGET_GOALS),$(GOALS)))
+ifeq ($(SELECTED_GOAL),android-arm64)
+  SELECTED_GOAL := android-arm64-v8a
+endif
 
-TARGET_PLATFORM :=
-TARGET_ARCH :=
+TARGET_PLATFORM := $(HOST_PLATFORM)
+TARGET_ARCH := $(HOST_ARCH)
 ifneq ($(SELECTED_GOAL),)
-  ifeq ($(SELECTED_GOAL),android-arm64)
-    TARGET_PLATFORM := android
-    TARGET_ARCH := arm64-v8a
-  else ifeq ($(SELECTED_GOAL),android-arm64-v8a)
-    TARGET_PLATFORM := android
-    TARGET_ARCH := arm64-v8a
-  else ifeq ($(SELECTED_GOAL),android-armeabi-v7a)
-    TARGET_PLATFORM := android
-    TARGET_ARCH := armeabi-v7a
-  else ifeq ($(SELECTED_GOAL),android-x86)
-    TARGET_PLATFORM := android
-    TARGET_ARCH := x86
-  else ifeq ($(SELECTED_GOAL),android-x86_64)
-    TARGET_PLATFORM := android
-    TARGET_ARCH := x86_64
-  else ifeq ($(SELECTED_GOAL),macos-arm64)
-    TARGET_PLATFORM := macos
-    TARGET_ARCH := arm64
-  else ifeq ($(SELECTED_GOAL),macos-x86_64)
-    TARGET_PLATFORM := macos
-    TARGET_ARCH := x86_64
-  else ifeq ($(SELECTED_GOAL),ios-arm64)
-    TARGET_PLATFORM := ios
-    TARGET_ARCH := arm64
-  else ifeq ($(SELECTED_GOAL),ios-x86_64)
-    TARGET_PLATFORM := ios
-    TARGET_ARCH := x86_64
-  else ifeq ($(SELECTED_GOAL),linux-arm64)
-    TARGET_PLATFORM := linux
-    TARGET_ARCH := arm64
-  else ifeq ($(SELECTED_GOAL),linux-x86)
-    TARGET_PLATFORM := linux
-    TARGET_ARCH := x86
-  else ifeq ($(SELECTED_GOAL),linux-x86_64)
-    TARGET_PLATFORM := linux
-    TARGET_ARCH := x86_64
-  else ifeq ($(SELECTED_GOAL),windows-arm64)
-    TARGET_PLATFORM := windows
-    TARGET_ARCH := arm64
-  else ifeq ($(SELECTED_GOAL),windows-x86)
-    TARGET_PLATFORM := windows
-    TARGET_ARCH := x86
-  else ifeq ($(SELECTED_GOAL),windows-x86_64)
-    TARGET_PLATFORM := windows
-    TARGET_ARCH := x86_64
-  endif
-else
-  TARGET_PLATFORM := $(HOST_PLATFORM)
-  TARGET_ARCH := $(HOST_ARCH)
+  TARGET_PLATFORM := $(firstword $(subst -, ,$(SELECTED_GOAL)))
+  TARGET_ARCH := $(patsubst $(TARGET_PLATFORM)-%,%,$(SELECTED_GOAL))
 endif
 
 TARGET_SUFFIX := $(TARGET_PLATFORM)_$(TARGET_ARCH)
@@ -176,8 +222,9 @@ TARGET_NAME := Rebax_Engine_$(ENGINE_VERSION)_$(TARGET_SUFFIX)
 ifeq ($(TARGET_PLATFORM),windows)
   TARGET_NAME := $(TARGET_NAME).exe
 endif
+OBJ_DIR := $(BUILD_DIR)/obj/$(TARGET_PLATFORM)-$(TARGET_ARCH)
+ENV_MK := $(BUILD_DIR)/env-$(TARGET_PLATFORM)-$(TARGET_ARCH).mk
 TARGET := $(OUTPUT_DIR)/$(TARGET_NAME)
-LIBS_DEST := $(OUTPUT_DIR)/libs
 ifeq ($(TARGET_PLATFORM),ios)
   IOS_DIR := $(BUILD_DIR)/ios
   IOS_APP := $(IOS_DIR)/Payload/Rebax.app
@@ -185,24 +232,8 @@ ifeq ($(TARGET_PLATFORM),ios)
   IOS_PKG := $(OUTPUT_DIR)/Rebax_Engine_$(ENGINE_VERSION)_ios_$(TARGET_ARCH).$(IOS_PKG_EXT)
   IOS_PLATFORM := $(if $(filter arm64,$(TARGET_ARCH)),iPhoneOS,iPhoneSimulator)
   TARGET := $(IOS_DIR)/$(TARGET_NAME)
-  LIBS_DEST := $(IOS_DIR)/libs
 endif
 APK_OUT := $(OUTPUT_DIR)/Rebax_Engine_$(ENGINE_VERSION)_android_$(TARGET_ARCH).apk
-
-EMBED_ASM_FIXUP =
-ifeq ($(TARGET_PLATFORM),windows)
-  ifeq ($(TARGET_ARCH),x86)
-    EMBED_ASM_FIXUP = $(RTOOL) replace $@.S _binary __binary
-  endif
-endif
-
-CC_NEEDED := 1
-ifeq ($(strip $(filter-out clean generate gen-icons gen-node-registry gen-node-editor-registry gen-node-archive rebax-build-tool,$(or $(MAKECMDGOALS),$(.DEFAULT_GOAL)))),)
-  CC_NEEDED := 0
-endif
-ifeq ($(RBX_TOOL_READY),0)
-  CC_NEEDED := 0
-endif
 
 ifeq ($(WANT_APK),1)
   ifneq ($(TARGET_PLATFORM),android)
@@ -210,135 +241,15 @@ ifeq ($(WANT_APK),1)
   endif
 endif
 
-ifneq ($(filter macos ios,$(HOST_PLATFORM)),)
-  MACOS_SDK := $(shell xcrun --sdk macosx --show-sdk-path 2>$(NULL_DEV))
-  IOS_SDK := $(shell xcrun --sdk iphoneos --show-sdk-path 2>$(NULL_DEV))
-  IOS_SIM_SDK := $(shell xcrun --sdk iphonesimulator --show-sdk-path 2>$(NULL_DEV))
-endif
-WIN_LLVM_MINGW_ROOT := $(firstword $(sort $(wildcard llvm-mingw-extracted/*)))
-
-ANDROID_NDK_ROOTS := $(ANDROID_NDK_HOME) $(ANDROID_NDK_ROOT) $(ANDROID_NDK) $(ANDROID_HOME)/ndk $(ANDROID_SDK_ROOT)/ndk $(ANDROID_SDK)/ndk $(HOME)/Android/Sdk/ndk $(HOME)/Library/Android/sdk/ndk $(HOME)/.android/sdk/ndk $(TERMUX_PREFIX)/opt/android-ndk $(TERMUX_PREFIX)/opt/android-sdk/ndk $(TERMUX_PREFIX)/share/android-ndk /opt/android-ndk /opt/android-sdk/ndk /opt/android/sdk/ndk /usr/lib/android-ndk /usr/lib/android-sdk/ndk /usr/local/lib/android/sdk/ndk
 ANDROID_SDK_ROOTS := $(ANDROID_HOME) $(ANDROID_SDK_ROOT) $(ANDROID_SDK) $(HOME)/Android/Sdk $(HOME)/Library/Android/sdk $(HOME)/.android/sdk $(TERMUX_PREFIX)/opt/android-sdk $(TERMUX_PREFIX)/share/android-sdk /opt/android-sdk /opt/android /usr/lib/android-sdk /usr/local/lib/android/sdk
-ANDROID_NDK_ROOT := $(lastword $(sort $(wildcard $(ANDROID_NDK_ROOTS)) $(wildcard $(addsuffix /*,$(ANDROID_NDK_ROOTS)))))
-ANDROID_NDK_BIN := $(lastword $(sort $(wildcard $(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/*/bin)))
 ANDROID_SDK_ROOT := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOTS))))
 ANDROID_BUILD_TOOLS := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOT)/build-tools/*)))
 ANDROID_PLATFORM_DIR := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOT)/platforms/*)))
 ANDROID_JAR := $(if $(ANDROID_PLATFORM_DIR),$(ANDROID_PLATFORM_DIR)/android.jar,$(firstword $(wildcard $(ANDROID_SDK_ROOT)/platforms/android-*/android.jar)))
 APK_TARGET_SDK := 28
 
-ANDROID_TRIPLE :=
-ifeq ($(TARGET_PLATFORM),android)
-  ifeq ($(TARGET_ARCH),armeabi-v7a)
-    ANDROID_TRIPLE := armv7a-linux-androideabi
-  else ifeq ($(TARGET_ARCH),arm64-v8a)
-    ANDROID_TRIPLE := aarch64-linux-android
-  else ifeq ($(TARGET_ARCH),x86)
-    ANDROID_TRIPLE := i686-linux-android
-  else
-    ANDROID_TRIPLE := x86_64-linux-android
-  endif
-endif
-
-CC_CANDIDATES :=
-CC_REQUIRE :=
-CC_FORBID :=
-ifeq ($(TARGET_PLATFORM),android)
-  ifeq ($(TARGET_ARCH),arm64-v8a)
-    CC_REQUIRE := android aarch64
-    CC_CANDIDATES += $(foreach p,$(wildcard $(ANDROID_NDK_BIN)/aarch64-linux-android*-clang),$(p)::dump)
-    CC_CANDIDATES += $(foreach p,$(wildcard $(TERMUX_PREFIX)/bin/aarch64-linux-android*-clang),$(p)::dump)
-    CC_CANDIDATES += aarch64-linux-android21-clang::dump aarch64-linux-android24-clang::dump aarch64-linux-android29-clang::dump aarch64-linux-android33-clang::dump aarch64-linux-android35-clang::dump aarch64-linux-android-legacy-gcc::dump clang::dump cc::dump gcc::dump
-    CC_CANDIDATES += clang:--target=aarch64-linux-android21:link clang:--target=aarch64-linux-android24:link clang:--target=aarch64-linux-android29:link clang:--target=aarch64-linux-android33:link
-  else ifeq ($(TARGET_ARCH),armeabi-v7a)
-    CC_REQUIRE := android armv7
-    CC_CANDIDATES += $(foreach p,$(wildcard $(ANDROID_NDK_BIN)/armv7a-linux-androideabi*-clang),$(p)::dump)
-    CC_CANDIDATES += $(foreach p,$(wildcard $(TERMUX_PREFIX)/bin/armv7a-linux-androideabi*-clang),$(p)::dump)
-    CC_CANDIDATES += armv7a-linux-androideabi21-clang::dump armv7a-linux-androideabi29-clang::dump arm-linux-androideabi-gcc::dump clang::dump cc::dump
-    CC_CANDIDATES += clang:--target=armv7a-linux-androideabi21:link clang:--target=armv7a-linux-androideabi29:link
-  else ifeq ($(TARGET_ARCH),x86)
-    CC_REQUIRE := android i686
-    CC_CANDIDATES += $(foreach p,$(wildcard $(ANDROID_NDK_BIN)/i686-linux-android*-clang),$(p)::dump)
-    CC_CANDIDATES += $(foreach p,$(wildcard $(TERMUX_PREFIX)/bin/i686-linux-android*-clang),$(p)::dump)
-    CC_CANDIDATES += i686-linux-android21-clang::dump i686-linux-android29-clang::dump clang::dump cc::dump
-    CC_CANDIDATES += clang:--target=i686-linux-android21:link clang:--target=i686-linux-android29:link
-  else
-    CC_REQUIRE := android x86_64
-    CC_CANDIDATES += $(foreach p,$(wildcard $(ANDROID_NDK_BIN)/x86_64-linux-android*-clang),$(p)::dump)
-    CC_CANDIDATES += $(foreach p,$(wildcard $(TERMUX_PREFIX)/bin/x86_64-linux-android*-clang),$(p)::dump)
-    CC_CANDIDATES += x86_64-linux-android21-clang::dump x86_64-linux-android29-clang::dump clang::dump cc::dump
-    CC_CANDIDATES += clang:--target=x86_64-linux-android21:link clang:--target=x86_64-linux-android29:link
-  endif
-else ifeq ($(TARGET_PLATFORM),windows)
-  ifeq ($(TARGET_ARCH),x86)
-    CC_REQUIRE := mingw i686
-    CC_CANDIDATES += i686-w64-mingw32-gcc::dump $(WIN_LLVM_MINGW_ROOT)/bin/i686-w64-mingw32-clang::dump clang:--target=i686-w64-mingw32:link
-  else ifeq ($(TARGET_ARCH),arm64)
-    CC_REQUIRE := mingw aarch64
-    CC_CANDIDATES += aarch64-w64-mingw32-gcc::dump $(WIN_LLVM_MINGW_ROOT)/bin/aarch64-w64-mingw32-clang::dump clang:--target=aarch64-w64-mingw32:link
-  else
-    CC_REQUIRE := mingw x86_64
-    CC_CANDIDATES += x86_64-w64-mingw32-gcc::dump $(WIN_LLVM_MINGW_ROOT)/bin/x86_64-w64-mingw32-clang::dump gcc::dump cc::dump clang:--target=x86_64-w64-mingw32:link
-  endif
-else ifeq ($(TARGET_PLATFORM),macos)
-  CC_CANDIDATES += clang:-arch~$(TARGET_ARCH)~-isysroot~$(MACOS_SDK)~-mmacosx-version-min=11.0:link cc:-arch~$(TARGET_ARCH)~-isysroot~$(MACOS_SDK)~-mmacosx-version-min=11.0:link
-else ifeq ($(TARGET_PLATFORM),ios)
-  ifeq ($(TARGET_ARCH),x86_64)
-    CC_CANDIDATES += clang:-arch~x86_64~-isysroot~$(IOS_SIM_SDK)~-mios-simulator-version-min=13.0:link cc:-arch~x86_64~-isysroot~$(IOS_SIM_SDK)~-mios-simulator-version-min=13.0:link
-  else
-    CC_CANDIDATES += clang:-arch~arm64~-isysroot~$(IOS_SDK)~-mios-version-min=13.0:link cc:-arch~arm64~-isysroot~$(IOS_SDK)~-mios-version-min=13.0:link
-  endif
-else ifeq ($(TARGET_ARCH),arm64)
-  CC_REQUIRE := linux aarch64
-  CC_FORBID := android
-  CC_CANDIDATES += aarch64-linux-gnu-gcc::dump aarch64-unknown-linux-gnu-gcc::dump aarch64-linux-musl-gcc::dump gcc::dump cc::dump clang::dump clang:--target=aarch64-linux-gnu:dump
-else ifeq ($(TARGET_ARCH),x86)
-  CC_REQUIRE := linux
-  CC_FORBID := android x86_64 aarch64
-  CC_CANDIDATES += i686-linux-gnu-gcc::dump i386-linux-gnu-gcc::dump gcc:-m32:link clang:-m32:link clang:--target=i686-linux-gnu:dump
-else
-  CC_REQUIRE := linux x86_64
-  CC_FORBID := android
-  CC_CANDIDATES += gcc::dump cc::dump clang::dump x86_64-linux-gnu-gcc::dump clang:--target=x86_64-linux-gnu:dump
-endif
-
-CC_SPEC := $(if $(filter 1,$(RBX_TOOL_READY)),$(shell $(RTOOL) cc-select $(BUILD_DIR)/.ccprobe --require $(CC_REQUIRE) --forbid $(CC_FORBID) --candidates $(CC_CANDIDATES)))
-TARGET_CC := $(firstword $(subst |, ,$(CC_SPEC)))
-TARGET_CC_FLAGS := $(subst ~, ,$(word 2,$(subst |, ,$(CC_SPEC))))
-USER_CC_SPEC := $(if $(filter environment command line,$(origin REBAX_CC)),$(REBAX_CC),$(if $(filter environment command line,$(origin CC)),$(CC),))
-ifneq ($(strip $(USER_CC_SPEC)),)
-  TARGET_CC := $(firstword $(USER_CC_SPEC))
-  TARGET_CC_FLAGS := $(wordlist 2,99,$(USER_CC_SPEC))
-endif
-TARGET_TRIPLE := $(ANDROID_TRIPLE)
-ifeq ($(TARGET_PLATFORM),windows)
-  ifeq ($(TARGET_ARCH),x86)
-    TARGET_TRIPLE := i686-w64-mingw32
-  else ifeq ($(TARGET_ARCH),x86_64)
-    TARGET_TRIPLE := x86_64-w64-mingw32
-  else
-    TARGET_TRIPLE := aarch64-w64-mingw32
-  endif
-endif
-
-CC_CHECK_RESULT := $(if $(and $(filter 1,$(RBX_TOOL_READY)),$(TARGET_CC)),$(shell $(RTOOL) cc-check $(BUILD_DIR)/.ccprobe $(TARGET_CC) $(TARGET_CC_FLAGS)))
-CC_CHECK_STATUS := $(patsubst rbax_cc_exit=%,%,$(lastword $(CC_CHECK_RESULT)))
-CC_CHECK_LOG := $(filter-out $(lastword $(CC_CHECK_RESULT)),$(CC_CHECK_RESULT))
-TARGET_LDFLAGS :=
-ifeq ($(TARGET_PLATFORM),macos)
-  ifeq ($(TARGET_ARCH),arm64)
-    TARGET_LDFLAGS := -Wl,-ld_classic
-  endif
-endif
-
-ifeq ($(TARGET_PLATFORM),ios)
-  TARGET_LDFLAGS := -Wl,-rpath,@executable_path/Frameworks
-endif
-
 RTOOL_PLATFORM_CFLAGS :=
-ifeq ($(TARGET_PLATFORM),macos)
-  RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
-else ifeq ($(TARGET_PLATFORM),ios)
+ifneq ($(filter macos ios,$(HOST_PLATFORM)),)
   RTOOL_PLATFORM_CFLAGS := -D_DARWIN_C_SOURCE
 endif
 
@@ -353,245 +264,181 @@ else ifeq ($(TARGET_ARCH),arm64-v8a)
   SDL2_EXPECT_ARCH := arm64
 endif
 
-define rbx_file_arch
-$(if $(filter 1,$(RBX_TOOL_READY)),$(shell $(RTOOL) file-arch $(1)))
-endef
-
-SDL2_PKG_NAME :=
 ifeq ($(RBX_TOOL_READY),1)
-  SDL2_PKG_NAME := $(firstword $(foreach p,sdl2 SDL2,$(if $(filter 1,$(shell $(RTOOL) pkg-config --exists $(p))),$(p))))
+  include $(ENV_MK)
 endif
-SDL2_PKG_CFLAGS := $(if $(SDL2_PKG_NAME),$(shell $(RTOOL) pkg-config --cflags $(SDL2_PKG_NAME)),)
-SDL2_PKG_LIBS := $(if $(SDL2_PKG_NAME),$(shell $(RTOOL) pkg-config --libs $(SDL2_PKG_NAME)),)
-SDL2_PKG_INCLUDEDIR := $(if $(SDL2_PKG_NAME),$(shell $(RTOOL) pkg-config --variable=includedir $(SDL2_PKG_NAME)),)
-SDL2_PKG_LIBDIR := $(if $(SDL2_PKG_NAME),$(shell $(RTOOL) pkg-config --variable=libdir $(SDL2_PKG_NAME)),)
-SDL2_INCLUDE_CANDIDATES := $(SDL2_PKG_INCLUDEDIR)/SDL2 $(SDL2_PKG_INCLUDEDIR) sdl2-$(TARGET_PLATFORM)-$(TARGET_ARCH)/include/SDL2 sdl2-$(TARGET_PLATFORM)-$(TARGET_ARCH)/include sdl2-$(TARGET_PLATFORM)/include/SDL2 sdl2-$(TARGET_PLATFORM)/include $(TERMUX_PREFIX)/include/SDL2 /usr/include/SDL2 /usr/local/include/SDL2 /opt/homebrew/include/SDL2 /opt/local/include/SDL2
-SDL2_INCLUDE_DIR := $(firstword $(foreach d,$(SDL2_INCLUDE_CANDIDATES),$(if $(wildcard $(d)/SDL.h),$(d))))
 
-SDL2_LIB_NAMES := libSDL2.so libSDL2.a libSDL2.dylib libSDL2.dll.a libSDL2.lib libSDL2.so.0 libSDL2-2.0.so libSDL2-2.0.so.0 libSDL2-2.0.0.dylib libSDL2.dll
-SDL2_LINK_NAMES := libSDL2.so libSDL2.a libSDL2.dylib libSDL2.dll.a libSDL2.lib
+MBEDTLS_SRCS := $(sort $(wildcard third_party/mbedtls/library/*.c))
+RTOOL_THIRD_PARTY := third_party/xz_embedded.c third_party/lzma2_encoder.c $(MBEDTLS_SRCS) $(wildcard src/network/*.c) src/filesystem/rebax_archive.c src/filesystem/rebax_fs_tree.c
+RTOOL_HEADERS := $(wildcard src/network/*.h) $(wildcard src/filesystem/*.h)
+RTOOL_INCLUDES := -Ithird_party -Ithird_party/mbedtls/include -Isrc/network -Isrc/filesystem
+RTOOL_LIBS := -lm
+ifeq ($(HOST_PLATFORM),windows)
+  RTOOL_LIBS += -lws2_32 -lbcrypt
+endif
+RTOOL_SRC_HEADERS := $(wildcard $(RTOOL_SRC_DIR)/*.h)
+RTOOL_ALL_SRCS := $(RTOOL_C_SOURCES) $(RTOOL_THIRD_PARTY)
+rtool_obj = $(RTOOL_OBJ_DIR)/o-$(subst /,-,$(1:.c=.o))
+RTOOL_OBJS := $(foreach s,$(RTOOL_ALL_SRCS),$(call rtool_obj,$(s)))
+RTOOL_CCFLAGS := -std=c99 -O1 -w -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) $(RTOOL_INCLUDES) $(BOOT_CFLAGS)
+RTOOL_BOOT_NEED := $(if $(filter 1,$(RBX_BOOT)),$(BOOT_CLANG_OK) $(BOOT_SDK_OK))
 
-ifeq ($(TARGET_PLATFORM),android)
-  SDL2_LIB_CANDIDATES := $(SDL2_PKG_LIBDIR) sdl2-android-$(TARGET_ARCH)/lib sdl2-android/lib $(TERMUX_PREFIX)/lib
-else ifeq ($(TARGET_PLATFORM),windows)
-  SDL2_LIB_CANDIDATES := $(SDL2_PKG_LIBDIR) sdl2-windows-$(TARGET_ARCH)/lib sdl2-windows/lib $(WIN_LLVM_MINGW_ROOT)/$(TARGET_TRIPLE)/lib /usr/$(TARGET_TRIPLE)/lib /usr/lib/$(TARGET_TRIPLE) $(TERMUX_PREFIX)/lib
-else ifeq ($(TARGET_PLATFORM),macos)
-  SDL2_LIB_CANDIDATES := $(SDL2_PKG_LIBDIR) sdl2-macos-$(TARGET_ARCH)/lib sdl2-macos/lib /opt/homebrew/lib /usr/local/lib /opt/local/lib $(TERMUX_PREFIX)/lib
-else ifeq ($(TARGET_PLATFORM),ios)
-  SDL2_LIB_CANDIDATES := $(SDL2_PKG_LIBDIR) sdl2-ios-$(TARGET_ARCH)/lib sdl2-ios/lib $(TERMUX_PREFIX)/lib
+define RTOOL_OBJ_RULE
+$(call rtool_obj,$(1)): $(1) $(if $(findstring third_party/,$(1)),,$(RTOOL_HEADERS) $(RTOOL_SRC_HEADERS)) | $(RTOOL_OBJ_DIR) $(RTOOL_BOOT_NEED)
+	@echo [tool] $(1)
+	@$(HOSTCC) $(RTOOL_CCFLAGS) -c $(1) -o $$@
+endef
+$(foreach s,$(RTOOL_ALL_SRCS),$(eval $(call RTOOL_OBJ_RULE,$(s))))
+
+$(RTOOL_OBJ_DIR) $(RTOOL_BIN_DIR):
+	@$(call MKTREE,$@)
+
+$(RTOOL): $(RTOOL_OBJS) | $(RTOOL_BIN_DIR)
+	@echo Linking $(RTOOL)
+	@$(HOSTCC) $(BOOT_LDPRE) $(RTOOL_OBJS) $(RTOOL_LIBS) $(BOOT_LDPOST) -o $@
+
+ifeq ($(RBX_BOOT),1)
+TOOLCHAINS_URL := https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/latest/download
+SDKS_URL := https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/latest/download
+ifeq ($(OS),Windows_NT)
+  BOOT_GET = curl.exe -L --fail -# --create-dirs -o $(1) $(2)
+  BOOT_DEL = -del /q $(subst /,\,$(1))
 else
-  SDL2_LIB_CANDIDATES := $(SDL2_PKG_LIBDIR) sdl2-linux-$(TARGET_ARCH)/lib sdl2-linux/lib sdl2-linux-$(TARGET_ARCH)/lib64 sdl2-linux/lib64 $(TERMUX_PREFIX)/lib/$(TARGET_TRIPLE) $(TERMUX_PREFIX)/lib /usr/lib/$(TARGET_TRIPLE) /usr/$(TARGET_TRIPLE)/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu /usr/lib/i386-linux-gnu /usr/lib/arm-linux-gnueabihf /usr/lib64 /usr/lib /usr/local/lib
+  BOOT_GET = curl -L --fail -# --create-dirs -o $(1) $(2)
+  BOOT_DEL = -rm -f $(1)
 endif
 
-SDL2_LIB_FILE := $(firstword $(foreach d,$(SDL2_LIB_CANDIDATES),$(foreach n,$(SDL2_LIB_NAMES),$(if $(wildcard $(d)/$(n)),$(if $(filter $(SDL2_EXPECT_ARCH) unknown,$(call rbx_file_arch,$(d)/$(n))),$(d)/$(n))))))
-SDL2_LIB_DIR := $(patsubst %/,%,$(dir $(SDL2_LIB_FILE)))
-SDL2_LIBS := $(if $(SDL2_PKG_LIBS),$(SDL2_PKG_LIBS),$(if $(SDL2_LIB_FILE),$(if $(filter $(notdir $(SDL2_LIB_FILE)),$(SDL2_LINK_NAMES)),-L$(SDL2_LIB_DIR) -lSDL2,$(SDL2_LIB_FILE))))
-ICONV_LIB_NAMES := libiconv.so libiconv.so.2 libiconv.so.3
-ICONV_LIB_CANDIDATES := $(SDL2_LIB_DIR) $(SDL2_LIB_CANDIDATES)
-ICONV_LIB_FILE := $(firstword $(foreach d,$(ICONV_LIB_CANDIDATES),$(foreach n,$(ICONV_LIB_NAMES),$(if $(wildcard $(d)/$(n)),$(if $(filter $(SDL2_EXPECT_ARCH) unknown,$(call rbx_file_arch,$(d)/$(n))),$(d)/$(n))))))
-CXX_SHARED_LIB_CANDIDATES := $(SDL2_LIB_DIR) $(SDL2_LIB_CANDIDATES) $(foreach d,$(wildcard $(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/*/sysroot/usr/lib/$(ANDROID_TRIPLE)),$d) $(TERMUX_PREFIX)/lib
-CXX_SHARED_LIB_FILE := $(firstword $(foreach d,$(CXX_SHARED_LIB_CANDIDATES),$(if $(wildcard $(d)/libc++_shared.so),$(if $(filter $(SDL2_EXPECT_ARCH) unknown,$(call rbx_file_arch,$(d)/libc++_shared.so)),$(d)/libc++_shared.so))))
+$(BOOT_CLANG_OK):
+	@echo No C compiler found - downloading the compiler for $(BOOT_ID)
+	$(call BOOT_GET,$(BOOT_CLANG_ROOT)/clang.tar.xz,$(TOOLCHAINS_URL)/rebax-clang-$(BOOT_ID).tar.xz)
+	tar -xf $(BOOT_CLANG_ROOT)/clang.tar.xz -C $(BOOT_CLANG_ROOT)
+	$(call BOOT_DEL,$(BOOT_CLANG_ROOT)/clang.tar.xz)
+	@echo ok> $@
 
-ifeq ($(CC_NEEDED),1)
-  ifeq ($(strip $(TARGET_CC)),)
-    $(error No C compiler targeting $(TARGET_PLATFORM)-$(TARGET_ARCH) was found; install a toolchain for it and run make again)
-  endif
-  ifneq ($(CC_CHECK_STATUS),0)
-    $(error $(TARGET_CC) cannot compile and link a test program for $(TARGET_PLATFORM)-$(TARGET_ARCH): $(CC_CHECK_LOG))
-  endif
-  ifeq ($(strip $(SDL2_INCLUDE_DIR)),)
-    $(error SDL2 headers were not found for $(TARGET_PLATFORM)-$(TARGET_ARCH); install SDL2 with pkg-config support or place it in sdl2-$(TARGET_PLATFORM)/include)
-  endif
-  ifeq ($(strip $(SDL2_LIB_FILE)),)
-    $(error No SDL2 library matching $(TARGET_PLATFORM)-$(TARGET_ARCH) was found; install or provide SDL2 for that target)
-  endif
+$(BOOT_SDK_OK):
+	@echo Downloading the SDK for $(BOOT_ID)
+	$(call BOOT_GET,sdks/sdk.tar.xz,$(SDKS_URL)/rebax-sdk-$(BOOT_ID).tar.xz)
+	tar -xf sdks/sdk.tar.xz -C sdks
+	$(call BOOT_DEL,sdks/sdk.tar.xz)
+	@echo ok> $@
 endif
 
-SDL2_CFLAGS := $(SDL2_PKG_CFLAGS) -I$(SDL2_INCLUDE_DIR)
-
-ifeq ($(TARGET_PLATFORM),windows)
-  RUNTIME_LIBS := SDL2.dll
-  RUNTIME_DIRS := $(SDL2_LIB_DIR) sdl2-windows/bin sdl2-windows/lib
-else ifeq ($(TARGET_PLATFORM),android)
-  RUNTIME_LIBS := libSDL2.so
-  RUNTIME_DIRS := $(SDL2_LIB_DIR) sdl2-android/lib
-else ifeq ($(TARGET_PLATFORM),linux)
-  RUNTIME_LIBS := libSDL2-2.0.so.0
-  RUNTIME_DIRS := $(SDL2_LIB_DIR) sdl2-linux/lib /usr/lib/$(HOST_TRIPLE) /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
-else ifeq ($(TARGET_PLATFORM),macos)
-  RUNTIME_LIBS := libSDL2-2.0.0.dylib
-  RUNTIME_DIRS := $(SDL2_LIB_DIR) sdl2-macos/lib /opt/homebrew/lib /usr/local/lib
-else ifeq ($(TARGET_PLATFORM),ios)
-  RUNTIME_LIBS := libSDL2-2.0.0.dylib libSDL2-2.0.dylib libSDL2.dylib
-  RUNTIME_DIRS := $(SDL2_LIB_DIR) sdl2-ios/lib
-else
-  RUNTIME_LIBS :=
-  RUNTIME_DIRS :=
-endif
-
-$(RTOOL): $(RTOOL_SOURCES)
-	@echo Building $(RTOOL) with $(HOSTCC)
-	$(HOSTCC) -std=c99 -O2 -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) -o $@ $(RTOOL_C_SOURCES) -lm
-
-.PHONY: rebax-build-tool
-rebax-build-tool: $(RTOOL)
-PS2_TOOLCHAIN_RELEASE_BASE := https://github.com/PS2HomeDeveloper/Rebax-PS2-Toolchains/releases/download/1.0.0
-ENGINE_TOOLCHAIN_RELEASE_BASE := https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/download/1.0.0
-PS2_TOOLCHAINS_DIR := embedded/ps2/toolchains
-ENGINE_TOOLCHAINS_DIR := embedded/tools
-ifeq ($(TARGET_PLATFORM),android)
-  ifeq ($(TARGET_ARCH),arm64-v8a)
-    TOOLCHAIN_ASSET := rebax-toolchains-android-arm64-v8a.tar.xz
-  else ifeq ($(TARGET_ARCH),armeabi-v7a)
-    TOOLCHAIN_ASSET := rebax-toolchains-android-armeabi-v7a.tar.xz
-  else ifeq ($(TARGET_ARCH),x86_64)
-    TOOLCHAIN_ASSET := rebax-toolchains-android-x86_64.tar.xz
-  else
-    TOOLCHAIN_ASSET := rebax-toolchains-android-x86.tar.xz
-  endif
-else ifeq ($(TARGET_PLATFORM),ios)
-  ifeq ($(TARGET_ARCH),arm64)
-    TOOLCHAIN_ASSET := rebax-toolchains-ios-arm64.tar.xz
-  else
-    TOOLCHAIN_ASSET := rebax-toolchains-ios-x86_64.tar.xz
-  endif
-else ifeq ($(TARGET_PLATFORM),macos)
-  ifeq ($(TARGET_ARCH),arm64)
-    TOOLCHAIN_ASSET := rebax-toolchains-macos-arm64.tar.xz
-  else
-    TOOLCHAIN_ASSET := rebax-toolchains-macos-x86_64.tar.xz
-  endif
-else ifeq ($(TARGET_PLATFORM),windows)
-  ifeq ($(TARGET_ARCH),arm64)
-    TOOLCHAIN_ASSET := rebax-toolchains-windows-arm64.tar.xz
-  else ifeq ($(TARGET_ARCH),x86_64)
-    TOOLCHAIN_ASSET := rebax-toolchains-windows-x86_64.tar.xz
-  else
-    TOOLCHAIN_ASSET := rebax-toolchains-windows-x86.tar.xz
-  endif
-else ifeq ($(TARGET_ARCH),arm64)
-  TOOLCHAIN_ASSET := rebax-toolchains-linux-arm64.tar.xz
-else ifeq ($(TARGET_ARCH),x86)
-  TOOLCHAIN_ASSET := rebax-toolchains-linux-x86.tar.xz
-else
-  TOOLCHAIN_ASSET := rebax-toolchains-linux-x86_64.tar.xz
-endif
-PS2_TOOLCHAIN_ASSET := $(subst rebax-toolchains-,rebax-PS2-toolchains-,$(TOOLCHAIN_ASSET))
-PS2_TOOLCHAIN_REQUIRED := $(PS2_TOOLCHAINS_DIR)/ps2dev.tar.xz
-TOOLCHAIN_REQUIRED := $(PS2_TOOLCHAIN_REQUIRED)
-ENGINE_TOOLCHAIN_PREPARE := prepare-engine-toolchain
-ifeq ($(TARGET_PLATFORM),ios)
-  TOOLCHAIN_REQUIRED :=
-  ENGINE_TOOLCHAIN_PREPARE :=
-endif
-PS2_TOOLCHAIN_ASSET_URL := $(PS2_TOOLCHAIN_RELEASE_BASE)/$(PS2_TOOLCHAIN_ASSET)
-ENGINE_TOOLCHAIN_ASSET_URL := $(ENGINE_TOOLCHAIN_RELEASE_BASE)/$(TOOLCHAIN_ASSET)
-PS2_TOOLCHAIN_TMP := $(BUILD_DIR)/.$(PS2_TOOLCHAIN_ASSET).part
-ENGINE_TOOLCHAIN_TMP := $(BUILD_DIR)/.$(TOOLCHAIN_ASSET).part
-
-.PHONY: prepare-ps2-toolchain prepare-engine-toolchain
-prepare-ps2-toolchain: $(RTOOL) | $(BUILD_DIR)
-	@$(RTOOL) toolchain $(PS2_TOOLCHAINS_DIR) $(PS2_TOOLCHAIN_ASSET_URL) $(PS2_TOOLCHAIN_TMP) $(PS2_TOOLCHAIN_REQUIRED)
-
-prepare-engine-toolchain: $(RTOOL) | $(BUILD_DIR)
-	@$(RTOOL) toolchain $(ENGINE_TOOLCHAINS_DIR) $(ENGINE_TOOLCHAIN_ASSET_URL) $(ENGINE_TOOLCHAIN_TMP)
-
-$(PS2_TOOLCHAIN_REQUIRED): prepare-ps2-toolchain
+.PHONY: rebax-build-tool tool
+rebax-build-tool tool: $(RTOOL)
 
 SRC_DIR := src
-EMBEDDED_DIR := embedded
-EMBEDDED_PS2_DIR := $(EMBEDDED_DIR)/ps2
-ICON_SRC_DIR := $(EMBEDDED_DIR)/resources/images/icons/icons_src
-ICON_ATLAS_DIR := $(EMBEDDED_DIR)/resources/images/icons
+GEN_DIR := $(BUILD_DIR)/generated
+RESOURCES_DIR := resources
+ICON_SRC_DIR := $(RESOURCES_DIR)/images/icons/icons_src
+ICON_ATLAS_DIR := $(RESOURCES_DIR)/images/icons
+ICON_NAMES_HEADER := $(GEN_DIR)/icon_names.h
+ICON_ATLAS_HEADER := $(GEN_DIR)/icon_atlas_pages.h
 ICON_ATLAS_PNGS := $(sort $(wildcard $(ICON_ATLAS_DIR)/icons[0-9]*.png))
-ICON_NAMES_HEADER := $(SRC_DIR)/icon_names.h
-ICON_ATLAS_HEADER := $(SRC_DIR)/icon_atlas_pages.h
 ICON_SOURCE_FILES := $(sort $(wildcard $(ICON_SRC_DIR)/*.png))
 rwildcard = $(filter-out $(patsubst %/,%,$(wildcard $1*/)),$(wildcard $1$2)) $(foreach d,$(wildcard $1*/),$(call rwildcard,$d,$2))
-NODE_SRC_DIR := $(EMBEDDED_PS2_DIR)/sdk/nodes
-NODE_EDITOR_SRC_DIR := $(SRC_DIR)/nodes_editor
+NODE_SRC_DIR := sdks/rebax/ps2/src/nodes
+NODE_EDITOR_SRC_DIR := $(SRC_DIR)/editor/nodes
 NODE_SOURCE_FILES := $(sort $(wildcard $(NODE_SRC_DIR)/*.c))
-NODE_SOURCE_ALL_FILES := $(call rwildcard,$(NODE_SRC_DIR)/,*)
 NODE_EDITOR_SOURCE_FILES := $(sort $(wildcard $(NODE_EDITOR_SRC_DIR)/*.c))
-NODE_REGISTRY_GENERATED := $(SRC_DIR)/node_registry_generated.h
-NODE_EDITOR_REGISTRY_GENERATED := $(SRC_DIR)/node_editor_registry_generated.h
-NODE_TYPES_HEADER := $(SRC_DIR)/node_types.h
-NODE_ARCHIVE := $(EMBEDDED_PS2_DIR)/sdk/nodes.tar.xz
+NODE_REGISTRY_GENERATED := $(GEN_DIR)/node_registry_generated.h
+NODE_EDITOR_REGISTRY_GENERATED := $(GEN_DIR)/node_editor_registry_generated.h
+NODE_TYPES_HEADER := $(GEN_DIR)/node_types.h
 SRCS := $(call rwildcard,$(SRC_DIR)/,*.c)
 SRC_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
-EMBEDDED_RESOURCE_FILES := $(sort $(call rwildcard,$(EMBEDDED_DIR)/resources/,*))
-ifeq ($(TARGET_PLATFORM),android)
-  EMBEDDED_FILES :=
-else ifeq ($(TARGET_PLATFORM),ios)
-  EMBEDDED_FILES := $(sort $(filter-out $(ICON_SRC_DIR)/%,$(EMBEDDED_RESOURCE_FILES)) $(ICON_ATLAS_PNGS))
-else
-  EMBEDDED_FILES := $(sort $(filter-out $(ICON_SRC_DIR)/%,$(EMBEDDED_RESOURCE_FILES)) $(TOOLCHAIN_REQUIRED) $(ICON_ATLAS_PNGS) $(NODE_ARCHIVE))
-endif
-EMBEDDED_OBJS := $(patsubst $(EMBEDDED_DIR)/%,$(OBJ_DIR)/embedded/%.o,$(EMBEDDED_FILES))
-OBJS := $(SRC_OBJS) $(EMBEDDED_OBJS)
-DEPS := $(SRC_OBJS:.o=.d)
+THIRD_PARTY_SRCS := third_party/xz_embedded.c $(MBEDTLS_SRCS)
+CACHE_OBJ := $(CACHE_DIR)/obj/$(TARGET_PLATFORM)-$(TARGET_ARCH)
+THIRD_PARTY_OBJS := $(patsubst third_party/%.c,$(CACHE_OBJ)/third_party/%.o,$(THIRD_PARTY_SRCS))
+OBJS := $(SRC_OBJS) $(THIRD_PARTY_OBJS)
+DEPS := $(SRC_OBJS:.o=.d) $(THIRD_PARTY_OBJS:.o=.d)
 
-.PHONY: all clean run generate bundle-runtime-libs gen-icons gen-node-registry gen-node-editor-registry gen-node-archive \
+.PHONY: all clean clean-tool clean-cache clean-all objects libs engine-objs third-party-objs run generate bundle-runtime-libs bundle-resources bundle-packages gen-icons gen-node-registry gen-node-editor-registry \
   build-selected apk-selected apk-package ios-package \
   $(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS)
 
-$(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS): all
+$(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) objects libs: all
 
-all: $(RTOOL) $(TOOLCHAIN_REQUIRED) $(ENGINE_TOOLCHAIN_PREPARE) generate
-		+$(MAKE) --no-print-directory RBX_TOOL_READY=1 HOST_PLATFORM=$(HOST_PLATFORM) HOST_ARCH=$(HOST_ARCH) HOST_TRIPLE=$(HOST_TRIPLE) TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) WANT_APK=$(WANT_APK) $(if $(filter 1,$(WANT_APK)),apk-selected,build-selected)
+SUB_GOAL := $(if $(filter 1,$(WANT_APK)),apk-selected,build-selected)
+ifneq ($(filter objects,$(MAKECMDGOALS)),)
+  SUB_GOAL := engine-objs
+endif
+ifneq ($(filter libs,$(MAKECMDGOALS)),)
+  SUB_GOAL := third-party-objs
+endif
 
-build-selected: $(TARGET) bundle-runtime-libs $(if $(filter ios,$(TARGET_PLATFORM)),ios-package)
+engine-objs: $(SRC_OBJS)
+third-party-objs: $(THIRD_PARTY_OBJS)
 
-ios-package: $(TARGET) bundle-runtime-libs | $(RTOOL)
+all: $(RTOOL) generate
+	@$(RTOOL) env $(TARGET_PLATFORM) $(TARGET_ARCH) $(HOST_PLATFORM) $(HOST_ARCH) $(ENV_MK)
+	+$(MAKE) --no-print-directory RBX_TOOL_READY=1 HOST_PLATFORM=$(HOST_PLATFORM) HOST_ARCH=$(HOST_ARCH) HOST_TRIPLE=$(HOST_TRIPLE) TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) WANT_APK=$(WANT_APK) $(SUB_GOAL)
+
+build-selected: $(TARGET) bundle-runtime-libs bundle-resources bundle-packages $(if $(filter ios,$(TARGET_PLATFORM)),ios-package)
+
+bundle-packages: $(TARGET) | $(RTOOL)
+	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree $(SDK_DIR) $(OUTPUT_DIR)/sdks/$(notdir $(SDK_DIR)))
+	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree sdks/rebax $(OUTPUT_DIR)/sdks/rebax)
+	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree $(CLANG_DIR) $(OUTPUT_DIR)/toolchains/clang)
+
+ios-package: $(TARGET) | $(RTOOL)
 	@$(RTOOL) rm $(IOS_DIR)/Payload
 	@$(RTOOL) cp $(TARGET) $(IOS_APP)/$(TARGET_NAME)
-	@$(RTOOL) copy-dir $(LIBS_DEST) $(IOS_APP)/Frameworks
+	@$(RTOOL) copy-dir $(RESOURCES_DIR) $(IOS_APP)/resources --skip icons_src
 	@$(RTOOL) ios-plist $(IOS_APP)/Info.plist $(ENGINE_VERSION) $(TARGET_NAME) $(IOS_PLATFORM)
-	@$(RTOOL) zip-dir $(IOS_PKG) $(IOS_DIR) Payload --exec $(TARGET_NAME) --exec .dylib
+	@$(RTOOL) zip-dir $(IOS_PKG) $(IOS_DIR) Payload --exec $(TARGET_NAME)
 
-apk-selected: $(TARGET) bundle-runtime-libs apk-package
+apk-selected: $(TARGET) apk-package
 
-generate: gen-icons gen-node-registry gen-node-editor-registry $(if $(filter android ios,$(TARGET_PLATFORM)),,gen-node-archive)
+generate: gen-icons gen-node-registry gen-node-editor-registry
 gen-icons: | $(RTOOL) $(BUILD_DIR)
+	@$(RTOOL) mkdir $(GEN_DIR)
 	@$(RTOOL) icon-names $(ICON_NAMES_HEADER) $(ICON_SOURCE_FILES)
 	@$(RTOOL) icon-atlas-pages $(ICON_ATLAS_DIR) $(ICON_ATLAS_HEADER) $(ICON_SOURCE_FILES)
 gen-node-registry: $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER)
 gen-node-editor-registry: $(NODE_EDITOR_REGISTRY_GENERATED)
-gen-node-archive: $(NODE_ARCHIVE)
 
 $(ICON_NAMES_HEADER): $(ICON_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
+	@$(RTOOL) mkdir $(GEN_DIR)
 	@$(RTOOL) icon-names $@ $(ICON_SOURCE_FILES)
-$(NODE_ARCHIVE): $(NODE_SOURCE_ALL_FILES) | $(RTOOL) $(BUILD_DIR)
-	@$(RTOOL) pack $@ $(EMBEDDED_PS2_DIR)/sdk nodes
+
 $(TARGET): $(OBJS) | $(RTOOL) $(OUTPUT_DIR)
 	$(if $(filter ios,$(TARGET_PLATFORM)),@$(RTOOL) mkdir $(IOS_DIR))
-	$(TARGET_CC) $(TARGET_CC_FLAGS) $(OBJS) -o $@ $(TARGET_LDFLAGS) $(LDFLAGS) $(LDLIBS)
+	$(TARGET_CC) $(TARGET_LDPRE) $(OBJS) $(TARGET_LDPOST) -o $@
 
 bundle-runtime-libs: $(TARGET) | $(RTOOL)
-	@$(RTOOL) bundle-libs $(LIBS_DEST) $(RUNTIME_LIBS) -- $(RUNTIME_DIRS)
+	$(if $(filter windows,$(TARGET_PLATFORM)),@$(RTOOL) cp $(SDK_DIR)/graphics/bin/SDL2.dll $(OUTPUT_DIR)/SDL2.dll)
+
+bundle-resources: $(TARGET) | $(RTOOL)
+	@$(RTOOL) copy-dir $(RESOURCES_DIR) $(OUTPUT_DIR)/resources --skip icons_src
 
 $(BUILD_DIR): | $(RTOOL)
 	@$(RTOOL) mkdir $@
 $(OUTPUT_DIR): | $(RTOOL)
 	@$(RTOOL) mkdir $@
 $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER): $(NODE_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
+	@$(RTOOL) mkdir $(GEN_DIR)
 	@$(RTOOL) node-registry $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(NODE_SOURCE_FILES)
 $(NODE_EDITOR_REGISTRY_GENERATED): $(NODE_EDITOR_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
+	@$(RTOOL) mkdir $(GEN_DIR)
 	@$(RTOOL) node-editor-registry $@ $(NODE_EDITOR_SOURCE_FILES)
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_REGISTRY_GENERATED) $(NODE_EDITOR_REGISTRY_GENERATED) | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
-	$(TARGET_CC) $(TARGET_CC_FLAGS) $(CFLAGS) -c $< -o $@
-$(OBJ_DIR)/embedded/%.o: $(EMBEDDED_DIR)/% | $(RTOOL)
+	$(TARGET_CC) $(TARGET_CFLAGS) $(CFLAGS) -c $< -o $@
+$(CACHE_OBJ)/third_party/%.o: third_party/%.c | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
-	@$(RTOOL) embed-asm $@.S $<
-	@$(EMBED_ASM_FIXUP)
-	$(TARGET_CC) $(TARGET_CC_FLAGS) -c $@.S -o $@
-clean: | $(RTOOL)
-	@$(RTOOL) rm $(BUILD_DIR) $(NODE_ARCHIVE) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(ICON_NAMES_HEADER) $(ICON_ATLAS_HEADER) $(ICON_ATLAS_PNGS)
+	$(TARGET_CC) $(TARGET_CFLAGS) $(CFLAGS) -c $< -o $@
+clean:
+	$(if $(wildcard $(RTOOL)),$(RTOOL) rm $(BUILD_DIR) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER) $(ICON_NAMES_HEADER) $(ICON_ATLAS_HEADER) $(ICON_ATLAS_PNGS))
+	@$(call RMTREE,$(BUILD_DIR))
+clean-tool:
+	@$(call RMTREE,$(RTOOL_OBJ_DIR))
+	@$(call RMTREE,$(RTOOL_BIN_DIR))
+clean-cache:
+	@$(call RMTREE,$(CACHE_DIR))
+clean-all: clean clean-cache clean-tool
 run: all
 	$(TARGET)
 -include $(DEPS)
-ANDROID_PAYLOAD_LIBS := -llog -landroid -lOpenSLES
+
 define rbx_which
 $(if $(filter 1,$(RBX_TOOL_READY)),$(shell $(RTOOL) which $(1)))
 endef
@@ -603,17 +450,12 @@ KEY_PASS ?= $(KEYSTORE_PASS)
 KEY_DNAME := CN=Rebax,O=Rebax,C=US
 APK_LIB_DIR := $(APK_STAGE)/lib/$(TARGET_ARCH)
 APK_ASSETS := $(APK_STAGE)/assets
+SDL2_LIB_FILE := $(SDK_DIR)/graphics/lib/libSDL2.so
+ICONV_LIB_FILE := $(SDK_DIR)/graphics/lib/libiconv.so
+CXX_SHARED_LIB_FILE := $(SDK_DIR)/runtime/lib/$(TARGET_LIBDIR)/libc++_shared.so
 
 ifeq ($(WANT_APK),1)
-  SDL2_JAVA_SOURCE_ROOTS := $(strip $(SDL2_ANDROID_JAVA_DIR) $(SDL2_SRC_DIR) $(SDL2_ANDROID_PROJECT) $(SDL2_ROOT) $(wildcard SDL2-*) $(wildcard sdl2-*) $(wildcard third_party/SDL2*) $(wildcard external/SDL2*) $(wildcard vendor/SDL2*) $(wildcard $(HOME)/SDL2*) $(wildcard $(HOME)/src/SDL2*) $(wildcard $(TERMUX_PREFIX)/opt/SDL2*) $(wildcard $(TERMUX_PREFIX)/share/SDL2*))
-  define rbx_sdl2_java_files
-$(foreach file,$(call rwildcard,$(1)/,*),$(if $(findstring /org/libsdl/app/,$(file)),$(if $(filter %.java,$(file)),$(file))))
-endef
-  ifneq ($(strip $(SDL2_JAVA_SOURCES)),)
-    SDL2_JAVA_SOURCES := $(sort $(SDL2_JAVA_SOURCES))
-  else
-    SDL2_JAVA_SOURCES := $(sort $(foreach root,$(SDL2_JAVA_SOURCE_ROOTS),$(call rbx_sdl2_java_files,$(root))))
-  endif
+  SDL2_JAVA_SOURCES := $(sort $(wildcard $(SDK_DIR)/graphics/java/org/libsdl/app/*.java))
   AAPT2 := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/aapt2 $(ANDROID_BUILD_TOOLS)/aapt2.exe $(ANDROID_BUILD_TOOLS)/aapt2.bat) $(call rbx_which,aapt2))
   AAPT := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/aapt $(ANDROID_BUILD_TOOLS)/aapt.exe $(ANDROID_BUILD_TOOLS)/aapt.bat) $(call rbx_which,aapt))
   ZIPALIGN := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/zipalign $(ANDROID_BUILD_TOOLS)/zipalign.exe) $(call rbx_which,zipalign))
@@ -631,7 +473,7 @@ endef
   APK_SIGNER_KIND := $(if $(CAN_SIGN),$(if $(APKSIGNER),apksigner,$(if $(JARSIGNER),jarsigner)))
 endif
 
-apk-package: $(TARGET) bundle-runtime-libs
+apk-package: $(OBJS)
 	@$(RTOOL) mkdir $(APK_DIR) $(OUTPUT_DIR)
 	@$(RTOOL) rm $(APK_STAGE)
 	@$(RTOOL) mkdir $(APK_STAGE) $(APK_LIB_DIR) $(APK_STAGE)/classes $(APK_STAGE)/dex
@@ -639,7 +481,7 @@ apk-package: $(TARGET) bundle-runtime-libs
 	@$(RTOOL) require-lib SDL2 $(SDL2_EXPECT_ARCH) $(SDL2_LIB_FILE)
 	@$(RTOOL) require-lib libiconv $(SDL2_EXPECT_ARCH) $(ICONV_LIB_FILE)
 	@$(RTOOL) require-lib libc++_shared $(SDL2_EXPECT_ARCH) $(CXX_SHARED_LIB_FILE)
-	$(if $(SDL2_JAVA_SOURCES),,$(error SDL2 Android Java sources org/libsdl/app were not found - set SDL2_ANDROID_JAVA_DIR to the SDL2 source folder))
+	$(if $(SDL2_JAVA_SOURCES),,$(error The SDL2 Java sources were not found in $(SDK_DIR)/graphics/java - rebuild the Android SDK package))
 	$(if $(JAVAC),,$(error javac was not found - install a JDK to build the APK))
 	$(if $(JAR),,$(error jar was not found - install a JDK to build the APK))
 	$(if $(wildcard $(ANDROID_JAR)),,$(error android.jar was not found - install an Android SDK platform to build the APK))
@@ -647,15 +489,18 @@ apk-package: $(TARGET) bundle-runtime-libs
 	@$(RTOOL) cp $(ICONV_LIB_FILE) $(APK_LIB_DIR)/libiconv.so
 	@$(RTOOL) cp $(CXX_SHARED_LIB_FILE) $(APK_LIB_DIR)/libc++_shared.so
 	@echo Copying assets
-	@$(RTOOL) copy-dir $(EMBEDDED_PS2_DIR)/toolchains $(APK_ASSETS)/ps2/toolchains
-	@$(RTOOL) copy-dir $(NODE_SRC_DIR) $(APK_ASSETS)/ps2/sdk/nodes
-	@$(RTOOL) copy-dir $(ENGINE_TOOLCHAINS_DIR) $(APK_ASSETS)/tools
-	@$(RTOOL) copy-dir $(EMBEDDED_DIR)/resources $(APK_ASSETS)/resources --skip icons_src
+	@$(RTOOL) copy-dir $(RESOURCES_DIR) $(APK_ASSETS)/resources --skip icons_src
+	@$(RTOOL) package-archive toolchains rebax-clang-android-$(TARGET_ARCH).tar.xz $(BUILD_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz
+	@$(RTOOL) package-archive sdks rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(BUILD_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz
+	@$(RTOOL) cp $(BUILD_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz $(APK_ASSETS)/packages/clang.tar.xz
+	@$(RTOOL) cp $(BUILD_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(APK_ASSETS)/packages/sdk-$(notdir $(SDK_DIR)).tar.xz
+	@$(RTOOL) copy-dir sdks/rebax $(APK_ASSETS)/sdks/rebax
+	@$(RTOOL) write-text $(APK_ASSETS)/packages/stamp.txt $(ENGINE_VERSION)-@time@
 	@$(RTOOL) asset-manifest $(APK_ASSETS) $(APK_ASSETS)/rebax_assets.txt
 	@echo Linking $(APK_LIB_DIR)/libmain.so
 	@$(RTOOL) android-entry $(APK_DIR)/rebax_android_entry.c
-	$(TARGET_CC) $(TARGET_CC_FLAGS) -fPIC -c $(APK_DIR)/rebax_android_entry.c -o $(APK_DIR)/rebax_android_entry.o
-	$(TARGET_CC) $(TARGET_CC_FLAGS) -shared -o $(APK_LIB_DIR)/libmain.so $(OBJS) $(APK_DIR)/rebax_android_entry.o $(TARGET_LDFLAGS) $(LDLIBS) $(ANDROID_PAYLOAD_LIBS)
+	$(TARGET_CC) $(TARGET_CFLAGS) -c $(APK_DIR)/rebax_android_entry.c -o $(APK_DIR)/rebax_android_entry.o
+	$(TARGET_CC) $(TARGET_LDPRE) -shared -o $(APK_LIB_DIR)/libmain.so $(OBJS) $(APK_DIR)/rebax_android_entry.o $(TARGET_LDPOST)
 	@echo Compiling the Android Java layer
 	$(JAVAC) -nowarn -encoding UTF-8 -source 8 -target 8 -classpath $(ANDROID_JAR) -d $(APK_STAGE)/classes $(SDL2_JAVA_SOURCES)
 	$(JAR) cf $(APK_STAGE)/classes.jar -C $(APK_STAGE)/classes .
@@ -667,7 +512,7 @@ apk-package: $(TARGET) bundle-runtime-libs
 	@echo Linking resources
 	$(if $(AAPT2),$(AAPT2) link -o $(APK_STAGE)/base.apk --manifest $(APK_STAGE)/AndroidManifest.xml -I $(ANDROID_JAR) --min-sdk-version 21 --target-sdk-version $(APK_TARGET_SDK) --auto-add-overlay,$(if $(AAPT),$(AAPT) package -f -M $(APK_STAGE)/AndroidManifest.xml -I $(ANDROID_JAR) -F $(APK_STAGE)/base.apk,$(error neither aapt2 nor aapt was found - install the Android SDK build-tools)))
 	@echo Adding classes.dex and the native libraries
-	$(JAR) ufM $(APK_STAGE)/base.apk -C $(APK_STAGE) classes.dex -C $(APK_STAGE) lib/$(TARGET_ARCH)/libmain.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libSDL2.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libiconv.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libc++_shared.so -C $(APK_STAGE) assets
+	$(JAR) ufM0 $(APK_STAGE)/base.apk -C $(APK_STAGE) classes.dex -C $(APK_STAGE) lib/$(TARGET_ARCH)/libmain.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libSDL2.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libiconv.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libc++_shared.so -C $(APK_STAGE) assets
 	@echo Aligning
 	$(if $(ZIPALIGN),$(ZIPALIGN) -f 4 $(APK_STAGE)/base.apk $(APK_STAGE)/aligned.apk,$(RTOOL) cp $(APK_STAGE)/base.apk $(APK_STAGE)/aligned.apk)
 	@echo Signing
@@ -681,10 +526,10 @@ apk-package: $(TARGET) bundle-runtime-libs
 	@$(RTOOL) rm $(APK_STAGE)
 	@echo APK ready: $(APK_OUT)
 
-CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) -MMD -MP $(SDL2_CFLAGS) $(ARCHIVE_CFLAGS)
+CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L $(addprefix -I,$(sort $(dir $(call rwildcard,$(SRC_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdks/rebax/ps2/include/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
 ifeq ($(TARGET_PLATFORM),android)
   CFLAGS += -fPIC
 endif
-$(OBJ_DIR)/xz_embedded.o: CFLAGS += -O3
-$(OBJ_DIR)/rebax_fs.o: CFLAGS += -O2
-LDLIBS := -lm $(SDL2_LIBS)
+$(CACHE_OBJ)/third_party/xz_embedded.o: CFLAGS += -O3
+$(CACHE_OBJ)/third_party/mbedtls/%.o: CFLAGS += -w -O2
+$(OBJ_DIR)/filesystem/rebax_fs.o: CFLAGS += -O2

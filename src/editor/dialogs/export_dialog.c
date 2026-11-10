@@ -26,10 +26,10 @@
 #include "text_field.h"
 #include "file_manager.h"
 #include "shape_provider.h"
-#include "ui_theme.h"
+#include "theme.h"
 #include "ps2_exporter.h"
-#include "ui_common.h"
-#include "ui_dialog.h"
+#include "base.h"
+#include "dialog.h"
 #include "android_storage.h"
 
 #define DIALOG_WIDTH    620

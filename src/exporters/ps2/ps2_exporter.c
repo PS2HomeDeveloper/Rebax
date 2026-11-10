@@ -75,6 +75,8 @@
 #include "current_project.h"
 #include "rebax_paths.h"
 #include "rebax_fs.h"
+#include "node_source.h"
+#include "rebax_fs.h"
 
 /* -Wformat-truncation: all warnings here are purely theoretical (GCC assumes the worst
  * case for the length of any source char[] regardless of its actual runtime content)
@@ -95,6 +97,48 @@ char g_exe_name[128];
 int g_is_release;
 char g_output_dir[1024];
 char g_ps2dev_root[1536];
+static char g_ps2sdk_root[1536];
+static char g_gskit_root[1536];
+
+static int pick_root(char *out, size_t cap, const char *const *bases, int base_count,
+                     const char *const *subs, const char *marker) {
+    char candidate[1700], probe[1800];
+    for (int b = 0; b < base_count; b++) {
+        for (int s = 0; subs[s] != NULL; s++) {
+            if (subs[s][0] == '\0') snprintf(candidate, sizeof(candidate), "%s", bases[b]);
+            else snprintf(candidate, sizeof(candidate), "%s/%s", bases[b], subs[s]);
+            snprintf(probe, sizeof(probe), "%s/%s", candidate, marker);
+            if (rebax_fs_exists(probe)) {
+                snprintf(out, cap, "%s", candidate);
+                return 1;
+            }
+        }
+    }
+    out[0] = '\0';
+    return 0;
+}
+
+static void resolve_ps2_roots(void) {
+    char gcc[1536], standard[1536], graphics[1536];
+    snprintf(gcc, sizeof(gcc), "%s/gcc-ps2", rebax_toolchains_dir());
+    snprintf(standard, sizeof(standard), "%s/ps2/standard", rebax_sdks_dir());
+    snprintf(graphics, sizeof(graphics), "%s/ps2/graphics", rebax_sdks_dir());
+
+    const char *dev_bases[] = { gcc };
+    const char *dev_subs[] = { "", "ps2dev", NULL };
+    if (!pick_root(g_ps2dev_root, sizeof(g_ps2dev_root), dev_bases, 1, dev_subs, "bin"))
+        snprintf(g_ps2dev_root, sizeof(g_ps2dev_root), "%s", gcc);
+
+    const char *sdk_bases[] = { standard, gcc };
+    const char *sdk_subs[] = { "", "ps2sdk", "ps2dev/ps2sdk", NULL };
+    if (!pick_root(g_ps2sdk_root, sizeof(g_ps2sdk_root), sdk_bases, 2, sdk_subs, "ee/include"))
+        snprintf(g_ps2sdk_root, sizeof(g_ps2sdk_root), "%s", standard);
+
+    const char *gs_bases[] = { graphics, gcc };
+    const char *gs_subs[] = { "", "gsKit", "ps2dev/gsKit", NULL };
+    if (!pick_root(g_gskit_root, sizeof(g_gskit_root), gs_bases, 2, gs_subs, "include"))
+        snprintf(g_gskit_root, sizeof(g_gskit_root), "%s", graphics);
+}
 char g_build_dir[1536];
 char g_nodes_src_dir[1536];
 char g_used_types[EXPORT_MAX_USED_TYPES][64];
@@ -130,12 +174,9 @@ int ps2_export_start(const char *exe_name, int is_release, const char *output_di
     strncpy(g_output_dir, output_dir, sizeof(g_output_dir) - 1);
     g_output_dir[sizeof(g_output_dir) - 1] = '\0';
 
-    /* The ps2dev environment and node sources are prepared in advance - extracted once
-     * at the engine's first run (see rebax_paths.h) - this file no longer extracts
-     * anything itself, it only reads from their fixed paths */
-    snprintf(g_ps2dev_root, sizeof(g_ps2dev_root), "%s/ps2dev", rebax_toolchain_dir());
-    strncpy(g_nodes_src_dir, rebax_node_resources_dir(), sizeof(g_nodes_src_dir) - 1);
-    g_nodes_src_dir[sizeof(g_nodes_src_dir) - 1] = '\0';
+    resolve_ps2_roots();
+    node_source_use("ps2");
+    snprintf(g_nodes_src_dir, sizeof(g_nodes_src_dir), "%s/rebax/ps2", rebax_sdks_dir());
 
     /* Export workspace - a fixed folder in the rebax tree (Temp/export), not
      * next to the executable nor inside the project folder - ensures reliable
@@ -322,6 +363,8 @@ void ps2_export_update(void) {
                 memset(&config, 0, sizeof(config));
                 config.kind = PS2_BUILD_EE_ELF;
                 config.ps2dev_root = g_ps2dev_root;
+                config.ps2sdk_root = g_ps2sdk_root;
+                config.gskit_root = g_gskit_root;
                 config.work_dir = src_dir;
                 config.output = output;
                 config.release = g_is_release;

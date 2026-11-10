@@ -13,7 +13,7 @@
 
 #include "loading_screen.h"
 #include "window.h"
-#include "ui_theme.h"
+#include "theme.h"
 
 #define DOT_COUNT        8
 #define DOT_SIZE         6   /* Normal dot size in pixels */

@@ -14,8 +14,8 @@
 #include "code_editor.h"
 #include "window.h"
 #include "font.h"
-#include "ui_common.h"
-#include "ui_theme.h"
+#include "base.h"
+#include "theme.h"
 #include "file_manager.h"
 #include "icon_atlas.h"
 

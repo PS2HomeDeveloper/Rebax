@@ -67,3 +67,22 @@ int asset_file_list(const char *dir_prefix, asset_file_name_cb callback, void *u
     free(manifest);
     return 1;
 }
+
+int asset_file_list_tree(const char *dir_prefix, asset_file_name_cb callback, void *user) {
+    size_t size = 0;
+    unsigned char *manifest = asset_file_read(ASSET_MANIFEST_PATH, &size);
+    if (!manifest) return 0;
+    size_t prefix_len = strlen(dir_prefix);
+    char *line = (char *)manifest;
+    while (*line) {
+        char *end = strchr(line, '\n');
+        if (end) *end = '\0';
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\r') line[--len] = '\0';
+        if (len > prefix_len && strncmp(line, dir_prefix, prefix_len) == 0) callback(line + prefix_len, user);
+        if (!end) break;
+        line = end + 1;
+    }
+    free(manifest);
+    return 1;
+}

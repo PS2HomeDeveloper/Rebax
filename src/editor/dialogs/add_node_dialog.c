@@ -16,10 +16,10 @@
 #include "node_registry.h"
 #include "text_field.h"
 #include "font.h"
-#include "ui_theme.h"
-#include "ui_common.h"
-#include "ui_selection.h"
-#include "ui_dialog.h"
+#include "theme.h"
+#include "base.h"
+#include "selection.h"
+#include "dialog.h"
 
 #define DIALOG_WIDTH     320
 #define DIALOG_HEIGHT    280
