@@ -12,8 +12,8 @@
 #ifndef LABELED_BUTTON_H
 #define LABELED_BUTTON_H
 
-#include "shape_provider.h"
-#include "font.h"
+#include "editor/ui/shape_provider.h"
+#include "editor/ui/font.h"
 
 typedef struct {
     shape_image_t      shape_img;    /* Button background pixels at the final size */

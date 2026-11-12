@@ -7,7 +7,7 @@
 #include <string.h>
 #include <stddef.h>
 
-#include "current_project.h"
+#include "project/current_project.h"
 
 #define MAX_PATH_LEN 1024
 

@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "rebax_fs.h"
+#include "filesystem/rebax_fs.h"
 
 #ifdef _WIN32
 #include <windows.h>

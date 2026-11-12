@@ -4,9 +4,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include "export_internal.h"
-#include "rebax_fs.h"
-#include "node_source.h"
+#include "exporters/common/export_internal.h"
+#include "filesystem/rebax_fs.h"
+#include "exporters/common/node_source.h"
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #define MAX_EXTRA_FLAGS EXPORT_MAX_EXTRA_FLAGS
 

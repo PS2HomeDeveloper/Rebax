@@ -18,9 +18,9 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#include "font.h"
+#include "editor/ui/font.h"
 
-#include "resource_files.h"
+#include "filesystem/resources.h"
 static unsigned char *g_font_regular_data;
 static unsigned char *g_font_bold_data;
 #define FONT_REGULAR_DATA g_font_regular_data

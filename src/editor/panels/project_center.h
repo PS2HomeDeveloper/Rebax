@@ -17,7 +17,7 @@
 #ifndef UI_PROJECT_CENTER_H
 #define UI_PROJECT_CENTER_H
 
-#include "theme.h"
+#include "editor/ui/theme.h"
 
 /* Rect: top-left corner point + width and height */
 typedef struct {

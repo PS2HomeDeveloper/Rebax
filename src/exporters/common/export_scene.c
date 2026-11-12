@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
-#include "export_internal.h"
+#include "exporters/common/export_internal.h"
 
 #define MAX_USED_TYPES EXPORT_MAX_USED_TYPES
 #define MAX_IMAGE_PATHS EXPORT_MAX_IMAGE_PATHS
@@ -135,7 +135,7 @@ void export_scene_walk_rscene_files(const char *dir_path, void (*on_file)(const 
  * the generic reader (node_instantiate in scene_runtime.c) uses it directly
  * ------------------------------------------------------------ */
 
-#include "node_registry.h"
+#include "dev_systems/nodes/runtime/node_registry.h"
 #include "stb_image.h" /* The actual implementation is defined once in icon_atlas.c only - here we only use the declarations (stbi_load) to convert project images at export time */
 
 

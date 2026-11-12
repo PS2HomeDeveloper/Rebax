@@ -9,7 +9,7 @@
 #include <string.h>
 #include <SDL.h>
 
-#include "window.h"
+#include "platform/common/window.h"
 
 static SDL_Window   *g_window   = NULL;
 static SDL_Renderer *g_renderer = NULL;

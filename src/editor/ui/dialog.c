@@ -1,9 +1,9 @@
 #include <stddef.h>
 
-#include "dialog.h"
-#include "shape_provider.h"
-#include "base.h"
-#include "theme.h"
+#include "editor/ui/dialog.h"
+#include "editor/ui/shape_provider.h"
+#include "editor/ui/base.h"
+#include "editor/ui/theme.h"
 
 static window_texture_t *g_backdrop_tex = NULL;
 static window_texture_t *g_close_bg_tex = NULL;

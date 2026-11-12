@@ -10,10 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "scene_tabs.h"
-#include "current_scene.h"
-#include "scene_data.h"
-#include "properties_panel.h"
+#include "editor/panels/scene_tabs.h"
+#include "scene/current_scene.h"
+#include "scene/scene_data.h"
+#include "editor/panels/properties.h"
 
 /* Same as SCENE_BUFFER_MAX in current_scene.c exactly - one scene
  * exported as text at the maximum realistically expected size */

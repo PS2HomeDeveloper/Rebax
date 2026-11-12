@@ -7,11 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "text_field.h"
-#include "window.h"
-#include "shape_provider.h"
-#include "font.h"
-#include "theme.h" /* For UI_COLOR_GRAY_MUTED */
+#include "editor/ui/text_field.h"
+#include "platform/common/window.h"
+#include "editor/ui/shape_provider.h"
+#include "editor/ui/font.h"
+#include "editor/ui/theme.h" /* For UI_COLOR_GRAY_MUTED */
 
 /* Corner radius for the text field - intentionally larger than the button's
  * (a text field is wide and flat, so a larger radius gives a clearer curve) */

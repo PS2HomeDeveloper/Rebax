@@ -18,7 +18,7 @@
 
 #include <errno.h>
 
-#include "project_create.h"
+#include "project/project_create.h"
 
 /* Creates a single directory if it doesn't already exist. Returns 1 on success (or
  * if the directory already existed), and 0 on true failure (permissions, etc.) */

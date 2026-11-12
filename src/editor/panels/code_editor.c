@@ -11,13 +11,13 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "code_editor.h"
-#include "window.h"
-#include "font.h"
-#include "base.h"
-#include "theme.h"
-#include "file_manager.h"
-#include "icon_atlas.h"
+#include "editor/panels/code_editor.h"
+#include "platform/common/window.h"
+#include "editor/ui/font.h"
+#include "editor/ui/base.h"
+#include "editor/ui/theme.h"
+#include "editor/panels/file_manager.h"
+#include "editor/ui/icon_atlas.h"
 
 #define CODE_EDITOR_CAPACITY 131072
 #define CODE_EDITOR_MAX_LINES 4096

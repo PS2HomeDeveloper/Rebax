@@ -5,7 +5,7 @@
 #ifndef UI_TREE_H
 #define UI_TREE_H
 
-#include "window.h"
+#include "platform/common/window.h"
 
 #define UI_TREE_ROW_HEIGHT 22
 #define UI_TREE_ICON_SIZE 16

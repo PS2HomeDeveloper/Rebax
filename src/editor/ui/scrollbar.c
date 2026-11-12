@@ -1,5 +1,5 @@
-#include "scrollbar.h"
-#include "window.h"
+#include "editor/ui/scrollbar.h"
+#include "platform/common/window.h"
 
 #define SCROLLBAR_MIN_THUMB  18
 #define SCROLLBAR_GRAB_PAD    3 /* Extra margin to make grabbing the handle easier */

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
-#include "export_internal.h"
+#include "exporters/common/export_internal.h"
 
 /* ------------------------------------------------------------
  * Static templates (do not change per project) - written as-is for each export:

@@ -12,11 +12,11 @@
 #ifndef UI_COMMON_H
 #define UI_COMMON_H
 
-#include "window.h"
-#include "font.h"
-#include "labeled_button.h"
-#include "shape_provider.h"
-#include "theme.h"
+#include "platform/common/window.h"
+#include "editor/ui/font.h"
+#include "editor/ui/labeled_button.h"
+#include "editor/ui/shape_provider.h"
+#include "editor/ui/theme.h"
 
 /* Unified button corner radius, and text padding inside the button */
 #define UI_BUTTON_RADIUS      3

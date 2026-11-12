@@ -14,17 +14,17 @@
 
 #include <stdio.h>
 
-#include "window.h"
-#include "project_center.h"
-#include "project_dialog.h"
-#include "packages_dialog.h"
-#include "loading_screen.h"
-#include "editor_workspace.h"
-#include "app_state.h"
-#include "rebax_paths.h" /* Rebax working directory + first-run setup for tools and node resources */
-#include "file_manager.h" /* Built-in file manager - opened from anywhere in the engine, drawn on top of everything */
-#include "dialog.h"
-#include "android_storage.h"
+#include "platform/common/window.h"
+#include "editor/panels/project_center.h"
+#include "editor/dialogs/project.h"
+#include "editor/dialogs/packages.h"
+#include "editor/ui/loading_screen.h"
+#include "editor/core/workspace.h"
+#include "core/app_state.h"
+#include "filesystem/storage_paths.h" /* Rebax working directory + first-run setup for tools and node resources */
+#include "editor/panels/file_manager.h" /* Built-in file manager - opened from anywhere in the engine, drawn on top of everything */
+#include "editor/ui/dialog.h"
+#include "platform/android/storage.h"
 
 /* ------------------------------------------------------------
  * In the future: additional library includes will be added here, e.g.:

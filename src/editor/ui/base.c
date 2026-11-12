@@ -2,7 +2,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "base.h"
+#include "editor/ui/base.h"
 
 window_texture_t *ui_make_text_texture(const char *text, font_weight_t weight,
                                         int pixel_size, int *out_w, int *out_h) {

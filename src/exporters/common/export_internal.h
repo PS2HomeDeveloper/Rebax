@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <sys/types.h>
-#include "node_registry.h"
+#include "dev_systems/nodes/runtime/node_registry.h"
 
 enum { EXPORT_MAX_USED_TYPES = 64, EXPORT_MAX_IMAGE_PATHS = 64,
        EXPORT_MAX_PROPS_PER_NODE = 32, EXPORT_MAX_NODES_PER_SCENE = 128,

@@ -1,7 +1,7 @@
 #include <stddef.h>
 
-#include "selection.h"
-#include "base.h"
+#include "editor/ui/selection.h"
+#include "editor/ui/base.h"
 
 #define UI_SELECTION_HOVER_ALPHA     0.25
 #define UI_SELECTION_SELECTED_ALPHA  0.55

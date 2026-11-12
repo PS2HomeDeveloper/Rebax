@@ -11,7 +11,7 @@
 #ifndef UI_SELECTION_H
 #define UI_SELECTION_H
 
-#include "window.h"
+#include "platform/common/window.h"
 
 /* Light hover shading. Returns NULL on failure */
 window_texture_t *ui_selection_make_hover(int w, int h, int corner_radius);

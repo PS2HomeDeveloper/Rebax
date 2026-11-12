@@ -1,6 +1,6 @@
 #include <ctype.h>
 #include <string.h>
-#include "path_utils.h"
+#include "filesystem/path_utils.h"
 
 int path_utils_compare_names(const void *a, const void *b) {
     return strcmp(*(const char * const *)a, *(const char * const *)b);

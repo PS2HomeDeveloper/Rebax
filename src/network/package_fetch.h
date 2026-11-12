@@ -1,7 +1,7 @@
 #ifndef REBAX_PACKAGE_FETCH_H
 #define REBAX_PACKAGE_FETCH_H
 
-#include "rebax_archive.h"
+#include "filesystem/rebax_archive.h"
 
 typedef struct {
     rebax_progress_fn on_download;

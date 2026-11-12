@@ -5,9 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "icon_atlas_pages.h"
-#include "resource_files.h"
-#include "icon_atlas.h"
-#include "window.h"
+#include "filesystem/resources.h"
+#include "editor/ui/icon_atlas.h"
+#include "platform/common/window.h"
 
 #define ATLAS_COLS 16
 #define CELL_SIZE 16

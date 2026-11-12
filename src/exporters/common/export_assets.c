@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include "export_internal.h"
+#include "exporters/common/export_internal.h"
 #include "stb_image.h"
 
 static int export_path_has_ext(const char *path, const char *ext) {

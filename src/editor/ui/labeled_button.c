@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "labeled_button.h"
+#include "editor/ui/labeled_button.h"
 
 labeled_button_t labeled_button_create(const char *text, font_weight_t weight,
                                         int font_pixel_size,

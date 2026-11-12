@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "package_manager.h"
+#include "packages/package_manager.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,11 +14,11 @@
 
 #include <SDL.h>
 
-#include "https_client.h"
-#include "package_fetch.h"
-#include "rebax_fs.h"
-#include "rebax_paths.h"
-#include "resource_files.h"
+#include "network/https_client.h"
+#include "network/package_fetch.h"
+#include "filesystem/rebax_fs.h"
+#include "filesystem/storage_paths.h"
+#include "filesystem/resources.h"
 
 #define TOOLCHAINS_URL "https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/latest/download"
 #define SDKS_URL "https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/latest/download"

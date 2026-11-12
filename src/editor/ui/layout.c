@@ -1,6 +1,6 @@
-#include "layout.h"
-#include "window.h"
-#include "theme.h"
+#include "editor/ui/layout.h"
+#include "platform/common/window.h"
+#include "editor/ui/theme.h"
 
 void ui_layout_draw_panel(int x, int y, int w, int h, int tab_height) {
     if (w <= 0 || h <= 0) return;

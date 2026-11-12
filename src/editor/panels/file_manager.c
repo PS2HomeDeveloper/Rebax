@@ -37,23 +37,23 @@
 #define REBAX_MKDIR(path, mode) mkdir(path, mode)
 #endif
 
-#include "image_loader.h" /* Supports all image formats our engine supports - stb_image internally for PNG/JPEG/BMP/TGA/TIFF, and our own decoders for RAW/TIM2/TIM */
+#include "formats/image_decoder.h" /* Supports all image formats our engine supports - stb_image internally for PNG/JPEG/BMP/TGA/TIFF, and our own decoders for RAW/TIM2/TIM */
 
-#include "file_manager.h"
-#include "window.h"
-#include "shape_provider.h"
-#include "icon_atlas.h"
-#include "labeled_button.h"
-#include "text_field.h"
-#include "font.h"
-#include "current_project.h"
-#include "theme.h"
-#include "base.h"
-#include "selection.h"
-#include "dialog.h"
-#include "path_utils.h"
-#include "file_icons.h"
-#include "android_storage.h"
+#include "editor/panels/file_manager.h"
+#include "platform/common/window.h"
+#include "editor/ui/shape_provider.h"
+#include "editor/ui/icon_atlas.h"
+#include "editor/ui/labeled_button.h"
+#include "editor/ui/text_field.h"
+#include "editor/ui/font.h"
+#include "project/current_project.h"
+#include "editor/ui/theme.h"
+#include "editor/ui/base.h"
+#include "editor/ui/selection.h"
+#include "editor/ui/dialog.h"
+#include "filesystem/path_utils.h"
+#include "editor/ui/file_icons.h"
+#include "platform/android/storage.h"
 
 /* ------------------------------------------------------------
  * Layout constants

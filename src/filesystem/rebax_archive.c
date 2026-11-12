@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "rebax_archive.h"
+#include "filesystem/rebax_archive.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +12,7 @@
 #include <unistd.h>
 #endif
 
-#include "rebax_fs.h"
+#include "filesystem/rebax_fs.h"
 #include "xz_embedded.h"
 
 #define IN_CHUNK (64u * 1024u)

@@ -1,80 +1,93 @@
 # Rebax
 
-**Rebax is an open-source game development environment built to make creating games more accessible, flexible, and connected.**
+Rebax is a 2D and 3D game engine and editor for creating games and applications that run on the **PlayStation 2**.
 
-The project brings the essential parts of game development into one place: a visual editor, scene and node workflows, asset and project management, and tools that help turn a project into a playable build.
+The project aims to bring together tools from the **PS2 Developer Community** and transform traditionally command-line-based workflows into an easy-to-use graphical application.
 
-Rebax is being developed with a long-term goal: to grow into a capable, extensible engine where developers can work visually or closer to the code, without being locked into a single way of building their games.
+Rebax is designed to simplify the development process by providing a graphical interface and hiding unnecessary low-level details, allowing developers to focus on creating their games and applications rather than manually managing complex toolchain commands.
 
-## Vision
+## Export Formats
 
-Game development involves many different tasks and tools. Rebax aims to bring these workflows together in a clear and approachable environment, while keeping the underlying project and development process open to developers.
+Rebax supports exporting projects in the following formats:
 
-The goal is not simply to provide an editor, but to build an engine that can evolve with its users and support projects of different sizes and styles.
+- **ISO**
+- **Raw ELF**
 
-## Core Principles
+## Build Requirements
 
-- **Accessible workflow** — make common development tasks understandable and straightforward.
-- **Flexible development** — support visual workflows alongside code-oriented development.
-- **Modular architecture** — keep engine systems and editor components organized so they can grow independently.
-- **Extensibility** — make it possible to expand the engine with new node types, tools, resources, and platform capabilities.
-- **Open development** — keep the project transparent and welcome feedback, testing, and contributions.
+The following requirements are needed to build Rebax.
 
-## What Rebax Brings Together
+### 1. Internet Connection
 
-- **Visual editor** for working with projects, scenes, viewports, and object properties.
-- **Scene and node system** for organizing game objects and their behavior.
-- **2D and 3D workflows** as foundations for building different kinds of experiences.
-- **Code-oriented tools** for developers who want more direct control over their projects.
-- **Project and asset management** to keep development resources organized.
-- **Build and export workflow** designed to connect the editor project with the environments it targets.
+An active internet connection is required to download the appropriate toolchain package during the build process.
 
-These areas form the foundation of the project and will continue to develop over time.
+### 2. GCC or Clang
 
-## Project Status
+A C compiler such as **GCC** or **Clang** is required to compile the project's C source files and produce the Rebax executable.
 
-Rebax is an actively evolving project. Its editor, engine systems, development workflows, and platform support are being built and improved incrementally.
+### 3. Make
 
-Some parts are more mature than others, and available functionality may change as the architecture develops. Builds and features should therefore be considered work in progress unless they are explicitly marked as stable.
+**GNU Make** is required to run the project's build system and compile Rebax.
 
-Feedback, testing across different environments, and clear bug reports are especially valuable at this stage.
+### 4. SDL2
 
-## Project Structure
+The **SDL2** library is required for Rebax's graphical interface, window management, input handling, and other platform-level functionality.
 
-The repository is organized around a few main areas:
+### 5. wget or curl
 
-- `src/` — engine, editor, project, and application source code.
-- `sdks/` — development interfaces and runtime components.
-- `resources/` — resources used by the application.
-- `tools/` and `rebax_build_tool/` — supporting development and build utilities.
-- `toolchains/` — platform toolchains used by the build process.
-- `third_party/` — external libraries and dependencies.
-- `examples/` and `docs/` — example projects and documentation as they grow.
-- `tests/` — project tests.
+Either **wget** or **curl** is required to download the prebuilt toolchain package corresponding to the target architecture.
 
-The structure may evolve as Rebax grows; these directories describe the main responsibilities rather than a fixed public API.
+## Installing the Requirements
 
-## Getting Started
+### Linux
 
-The source code and build instructions are maintained in this repository. Start by cloning the project and reviewing the build configuration:
+### Windows
 
-```sh
-git clone https://github.com/PS2HomeDeveloper/Rebax.git
-cd Rebax
-```
+### macOS
 
-A C compiler, GNU Make, SDL2 development files, and the download utilities required by the build process are needed. Additional dependencies may be required depending on the host environment and build target.
+### Android
 
-## Contributing
+## Building
 
-Contributions and constructive feedback are welcome. Before making substantial changes, review [CONTRIBUTING.md](CONTRIBUTING.md) and the existing project structure.
+## Usage
 
-When reporting an issue, include the steps to reproduce it, the environment in which it occurred, and relevant error output or logs. This makes problems easier to understand and resolve.
+## Notes
 
-## Third-Party Software
+### Platform Support and Testing
 
-Rebax uses external libraries and tools. Their license information is provided with the relevant components and in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Rebax is built for Windows, Linux, macOS, Android and iOS. All builds are produced automatically by GitHub Actions, but the maintainer does not have every kind of device, so the amount of real testing differs between platforms.
+
+| Platform | How it is tested |
+| --- | --- |
+| Android | Tested on a real device, including the full PlayStation 2 export. |
+| Linux | Tested on Termux:X11 on an Android phone and on a Linux desktop in GitHub Codespaces (Xvfb, XFCE, x11vnc and noVNC). |
+| Windows | Tested in an emulated environment. |
+| macOS | Built by GitHub Actions only. Not tested on a real Mac. |
+| iOS | Built by GitHub Actions only. Not tested on a real device. |
+
+macOS and iOS are experimental and are not guaranteed to work. Bug reports and test results for any platform are welcome.
+
+### Reporting Problems
+
+Each time you start an export, Rebax writes a log file that records every step. If the export fails or Rebax closes by itself, attach this file to your report. If the program crashed, the last line of the file starts with `CRASH` and shows where it stopped.
+
+The file is overwritten on every export. It is located at:
+
+| Platform | Log file |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\Rebax\export_log.txt` |
+| Linux | `~/.local/share/Rebax/export_log.txt` |
+| macOS | `~/Library/Application Support/Rebax/export_log.txt` |
+| Android | `Rebax_export_log.txt` in the main storage folder (`/storage/emulated/0/`) |
+
+Exporting is not supported on iOS, so it does not create a log there.
+
+### iOS
+
+- The iOS package (`.ipa`) is **not signed**. It cannot be installed on a device as downloaded. It must be signed first, either with your own Apple ID or developer account, or with a sideloading tool such as AltStore or Sideloadly. Signing is up to whoever installs it.
+- The iOS build is experimental. It has not been tested on a real device and is not guaranteed to work.
+- **Exporting is not supported on iOS.** iOS does not allow apps to run other programs, so the export toolchains cannot run there. On iOS you can create and edit projects, then copy the project folder to a PC, Mac or Linux computer and export it from there. The app stores its files in its Documents folder, which should be available in the Files app.
 
 ## License
 
-Rebax is released under the [MIT License](LICENSE).
+Rebax is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.

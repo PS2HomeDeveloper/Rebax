@@ -11,9 +11,9 @@
 
 #include <math.h>
 
-#include "loading_screen.h"
-#include "window.h"
-#include "theme.h"
+#include "editor/ui/loading_screen.h"
+#include "platform/common/window.h"
+#include "editor/ui/theme.h"
 
 #define DOT_COUNT        8
 #define DOT_SIZE         6   /* Normal dot size in pixels */

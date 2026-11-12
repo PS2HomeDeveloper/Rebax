@@ -8,8 +8,8 @@
 #include <unistd.h>
 #endif
 
-#include "project_catalog.h"
-#include "rebax_paths.h"
+#include "project/project_catalog.h"
+#include "filesystem/storage_paths.h"
 
 static project_catalog_entry_t g_entries[PROJECT_CATALOG_MAX];
 static int g_count;

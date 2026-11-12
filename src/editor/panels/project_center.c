@@ -3,19 +3,19 @@
 #include <string.h>
 #include <time.h>
 
-#include "project_center.h"
-#include "window.h"
-#include "font.h"
-#include "base.h"
-#include "project_dialog.h"
-#include "packages_dialog.h"
-#include "project_catalog.h"
-#include "file_manager.h"
-#include "current_project.h"
-#include "app_state.h"
-#include "scene_tabs.h"
-#include "scene_data.h"
-#include "current_scene.h"
+#include "editor/panels/project_center.h"
+#include "platform/common/window.h"
+#include "editor/ui/font.h"
+#include "editor/ui/base.h"
+#include "editor/dialogs/project.h"
+#include "editor/dialogs/packages.h"
+#include "project/project_catalog.h"
+#include "editor/panels/file_manager.h"
+#include "project/current_project.h"
+#include "core/app_state.h"
+#include "editor/panels/scene_tabs.h"
+#include "scene/scene_data.h"
+#include "scene/current_scene.h"
 
 #define ROW_HEIGHT 58
 #define LIST_PADDING 18

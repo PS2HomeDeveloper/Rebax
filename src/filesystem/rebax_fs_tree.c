@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "rebax_fs.h"
-#include "rebax_fs_tree.h"
+#include "filesystem/rebax_fs.h"
+#include "filesystem/rebax_fs_tree.h"
 
 #ifdef _WIN32
 #include <windows.h>

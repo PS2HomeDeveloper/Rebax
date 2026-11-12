@@ -1,7 +1,7 @@
 #ifndef REBAX_HTTPS_CLIENT_H
 #define REBAX_HTTPS_CLIENT_H
 
-#include "rebax_archive.h"
+#include "filesystem/rebax_archive.h"
 
 void rebax_https_set_ca_file(const char *path);
 void rebax_https_set_ca_pem(const unsigned char *pem, unsigned long length);

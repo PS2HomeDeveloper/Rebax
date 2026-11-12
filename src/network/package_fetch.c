@@ -1,12 +1,12 @@
-#include "package_fetch.h"
+#include "network/package_fetch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "file_hash.h"
-#include "https_client.h"
-#include "rebax_fs.h"
+#include "network/file_hash.h"
+#include "network/https_client.h"
+#include "filesystem/rebax_fs.h"
 
 static int read_whole(const char *path, char **out) {
     FILE *f = fopen(path, "rb");

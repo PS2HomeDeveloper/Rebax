@@ -4,7 +4,7 @@
  * ============================================================
  */
 
-#include "app_state.h"
+#include "core/app_state.h"
 
 static app_screen_t g_current_screen = APP_SCREEN_PROJECT_CENTER;
 

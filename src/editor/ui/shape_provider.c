@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "shape_provider.h"
+#include "editor/ui/shape_provider.h"
 
 /* The signed distance between a point and a rounded-rect centered at the origin.
  * Negative = inside the shape, positive = outside, zero = exactly on the edge.

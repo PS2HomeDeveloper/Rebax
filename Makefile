@@ -1,6 +1,6 @@
 BUILD_DIR := build
 .DEFAULT_GOAL := all
-OUTPUT_DIR := $(BUILD_DIR)/output
+OUTPUT_ROOT := $(BUILD_DIR)/output
 APK_DIR := $(BUILD_DIR)/apk
 APK_STAGE := $(APK_DIR)/stage
 
@@ -14,7 +14,7 @@ endif
 RTOOL_OBJ_DIR := $(RTOOL_DIR)/obj
 RTOOL_BIN_DIR := $(RTOOL_DIR)/bin
 RTOOL := $(RTOOL_BIN_DIR)/build_tool$(RTOOL_EXE)
-CACHE_DIR := build-cache
+CACHE_DIR := build_cache
 ifeq ($(OS),Windows_NT)
   NATIVE = $(subst /,\,$(1))
   RMTREE = if exist $(call NATIVE,$(1)) rmdir /s /q $(call NATIVE,$(1))
@@ -137,7 +137,7 @@ ifeq ($(RBX_BOOT),1)
   endif
   BOOT_ID := $(HOST_PLATFORM)-$(HOST_ARCH)
   BOOT_SDK := sdks/$(BOOT_ID)
-  BOOT_CLANG_ROOT := toolchains/$(HOST_PLATFORM)/$(HOST_ARCH)
+  BOOT_CLANG_ROOT := toolchains/$(HOST_PLATFORM)-$(HOST_ARCH)
   HOSTCC := $(BOOT_CLANG_ROOT)/clang/bin/clang$(RTOOL_EXE)
   BOOT_CLANG_OK := $(BOOT_CLANG_ROOT)/.clang-ok
   BOOT_SDK_OK := $(BOOT_SDK)/.sdk-ok
@@ -218,22 +218,29 @@ ifneq ($(SELECTED_GOAL),)
 endif
 
 TARGET_SUFFIX := $(TARGET_PLATFORM)_$(TARGET_ARCH)
-TARGET_NAME := Rebax_Engine_$(ENGINE_VERSION)_$(TARGET_SUFFIX)
+WANT_APK_FORCE := $(filter android,$(TARGET_PLATFORM))
+ifneq ($(WANT_APK_FORCE),)
+  WANT_APK := 1
+endif
+PRODUCT := Rebax-Engine-$(ENGINE_VERSION)-$(TARGET_PLATFORM)-$(TARGET_ARCH)
+OUTPUT_DIR := $(OUTPUT_ROOT)/$(PRODUCT)
+TARGET_NAME := $(PRODUCT)
 ifeq ($(TARGET_PLATFORM),windows)
   TARGET_NAME := $(TARGET_NAME).exe
 endif
-OBJ_DIR := $(BUILD_DIR)/obj/$(TARGET_PLATFORM)-$(TARGET_ARCH)
-ENV_MK := $(BUILD_DIR)/env-$(TARGET_PLATFORM)-$(TARGET_ARCH).mk
+OBJ_DIR := $(BUILD_DIR)/obj/$(TARGET_PLATFORM)_$(TARGET_ARCH)
+ENV_DIR := $(BUILD_DIR)/env
+ENV_MK := $(ENV_DIR)/$(TARGET_PLATFORM)_$(TARGET_ARCH).mk
 TARGET := $(OUTPUT_DIR)/$(TARGET_NAME)
 ifeq ($(TARGET_PLATFORM),ios)
   IOS_DIR := $(BUILD_DIR)/ios
   IOS_APP := $(IOS_DIR)/Payload/Rebax.app
   IOS_PKG_EXT := $(if $(filter arm64,$(TARGET_ARCH)),ipa,zip)
-  IOS_PKG := $(OUTPUT_DIR)/Rebax_Engine_$(ENGINE_VERSION)_ios_$(TARGET_ARCH).$(IOS_PKG_EXT)
+  IOS_PKG := $(OUTPUT_ROOT)/$(PRODUCT).$(IOS_PKG_EXT)
   IOS_PLATFORM := $(if $(filter arm64,$(TARGET_ARCH)),iPhoneOS,iPhoneSimulator)
   TARGET := $(IOS_DIR)/$(TARGET_NAME)
 endif
-APK_OUT := $(OUTPUT_DIR)/Rebax_Engine_$(ENGINE_VERSION)_android_$(TARGET_ARCH).apk
+APK_OUT := $(OUTPUT_ROOT)/$(PRODUCT).apk
 
 ifeq ($(WANT_APK),1)
   ifneq ($(TARGET_PLATFORM),android)
@@ -241,12 +248,12 @@ ifeq ($(WANT_APK),1)
   endif
 endif
 
-ANDROID_SDK_ROOTS := $(ANDROID_HOME) $(ANDROID_SDK_ROOT) $(ANDROID_SDK) $(HOME)/Android/Sdk $(HOME)/Library/Android/sdk $(HOME)/.android/sdk $(TERMUX_PREFIX)/opt/android-sdk $(TERMUX_PREFIX)/share/android-sdk /opt/android-sdk /opt/android /usr/lib/android-sdk /usr/local/lib/android/sdk
-ANDROID_SDK_ROOT := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOTS))))
-ANDROID_BUILD_TOOLS := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOT)/build-tools/*)))
-ANDROID_PLATFORM_DIR := $(lastword $(sort $(wildcard $(ANDROID_SDK_ROOT)/platforms/*)))
-ANDROID_JAR := $(if $(ANDROID_PLATFORM_DIR),$(ANDROID_PLATFORM_DIR)/android.jar,$(firstword $(wildcard $(ANDROID_SDK_ROOT)/platforms/android-*/android.jar)))
 APK_TARGET_SDK := 28
+APK_MIN_SDK := 24
+APK_PACKAGE := org.rebax.engine
+APK_LABEL := Rebax
+KEYS_DIR := keystore
+TOOLS_FILES := $(wildcard tools/*)
 
 RTOOL_PLATFORM_CFLAGS :=
 ifneq ($(filter macos ios,$(HOST_PLATFORM)),)
@@ -269,9 +276,9 @@ ifeq ($(RBX_TOOL_READY),1)
 endif
 
 MBEDTLS_SRCS := $(sort $(wildcard third_party/mbedtls/library/*.c))
-RTOOL_THIRD_PARTY := third_party/xz_embedded.c third_party/lzma2_encoder.c $(MBEDTLS_SRCS) $(wildcard src/network/*.c) src/filesystem/rebax_archive.c src/filesystem/rebax_fs_tree.c
-RTOOL_HEADERS := $(wildcard src/network/*.h) $(wildcard src/filesystem/*.h)
-RTOOL_INCLUDES := -Ithird_party -Ithird_party/mbedtls/include -Isrc/network -Isrc/filesystem
+RTOOL_THIRD_PARTY := third_party/xz_embedded.c third_party/lzma2_encoder.c $(MBEDTLS_SRCS) $(wildcard src/network/*.c) src/filesystem/rebax_archive.c src/filesystem/rebax_fs_tree.c $(wildcard src/libraries/apk/*.c)
+RTOOL_HEADERS := $(wildcard src/network/*.h) $(wildcard src/filesystem/*.h) $(wildcard src/libraries/apk/*.h)
+RTOOL_INCLUDES := -Ithird_party -Ithird_party/mbedtls/include -Isrc
 RTOOL_LIBS := -lm
 ifeq ($(HOST_PLATFORM),windows)
   RTOOL_LIBS += -lws2_32 -lbcrypt
@@ -308,18 +315,34 @@ else
   BOOT_DEL = -rm -f $(1)
 endif
 
+BOOT_CLANG_ARCHIVE := $(firstword $(wildcard $(BOOT_CLANG_ROOT)/rebax-clang-$(BOOT_ID).tar.xz $(BOOT_CLANG_ROOT)/clang.tar.xz))
+ifeq ($(BOOT_CLANG_ARCHIVE),)
+  BOOT_CLANG_ARCHIVE := $(BOOT_CLANG_ROOT)/clang.tar.xz
+  BOOT_CLANG_DOWNLOAD := 1
+endif
+
+BOOT_SDK_ARCHIVE := $(firstword $(wildcard sdks/rebax-sdk-$(BOOT_ID).tar.xz sdks/sdk.tar.xz))
+ifeq ($(BOOT_SDK_ARCHIVE),)
+  BOOT_SDK_ARCHIVE := sdks/sdk.tar.xz
+  BOOT_SDK_DOWNLOAD := 1
+endif
+
 $(BOOT_CLANG_OK):
-	@echo No C compiler found - downloading the compiler for $(BOOT_ID)
-	$(call BOOT_GET,$(BOOT_CLANG_ROOT)/clang.tar.xz,$(TOOLCHAINS_URL)/rebax-clang-$(BOOT_ID).tar.xz)
-	tar -xf $(BOOT_CLANG_ROOT)/clang.tar.xz -C $(BOOT_CLANG_ROOT)
-	$(call BOOT_DEL,$(BOOT_CLANG_ROOT)/clang.tar.xz)
+	@echo Installing compiler for $(BOOT_ID)
+ifeq ($(BOOT_CLANG_DOWNLOAD),1)
+	$(call BOOT_GET,$(BOOT_CLANG_ARCHIVE),$(TOOLCHAINS_URL)/rebax-clang-$(BOOT_ID).tar.xz)
+endif
+	tar -xf $(BOOT_CLANG_ARCHIVE) -C $(BOOT_CLANG_ROOT)
+	$(call BOOT_DEL,$(BOOT_CLANG_ARCHIVE))
 	@echo ok> $@
 
 $(BOOT_SDK_OK):
-	@echo Downloading the SDK for $(BOOT_ID)
-	$(call BOOT_GET,sdks/sdk.tar.xz,$(SDKS_URL)/rebax-sdk-$(BOOT_ID).tar.xz)
-	tar -xf sdks/sdk.tar.xz -C sdks
-	$(call BOOT_DEL,sdks/sdk.tar.xz)
+	@echo Installing SDK for $(BOOT_ID)
+ifeq ($(BOOT_SDK_DOWNLOAD),1)
+	$(call BOOT_GET,$(BOOT_SDK_ARCHIVE),$(SDKS_URL)/rebax-sdk-$(BOOT_ID).tar.xz)
+endif
+	tar -xf $(BOOT_SDK_ARCHIVE) -C sdks
+	$(call BOOT_DEL,$(BOOT_SDK_ARCHIVE))
 	@echo ok> $@
 endif
 
@@ -336,8 +359,9 @@ ICON_ATLAS_HEADER := $(GEN_DIR)/icon_atlas_pages.h
 ICON_ATLAS_PNGS := $(sort $(wildcard $(ICON_ATLAS_DIR)/icons[0-9]*.png))
 ICON_SOURCE_FILES := $(sort $(wildcard $(ICON_SRC_DIR)/*.png))
 rwildcard = $(filter-out $(patsubst %/,%,$(wildcard $1*/)),$(wildcard $1$2)) $(foreach d,$(wildcard $1*/),$(call rwildcard,$d,$2))
-NODE_SRC_DIR := sdks/rebax/ps2/src/nodes
-NODE_EDITOR_SRC_DIR := $(SRC_DIR)/editor/nodes
+NODE_SDK_DIR := sdks/rebax/ps2
+NODE_SRC_DIR := $(NODE_SDK_DIR)/nodes/src
+NODE_EDITOR_SRC_DIR := $(SRC_DIR)/dev_systems/nodes/editor
 NODE_SOURCE_FILES := $(sort $(wildcard $(NODE_SRC_DIR)/*.c))
 NODE_EDITOR_SOURCE_FILES := $(sort $(wildcard $(NODE_EDITOR_SRC_DIR)/*.c))
 NODE_REGISTRY_GENERATED := $(GEN_DIR)/node_registry_generated.h
@@ -346,7 +370,7 @@ NODE_TYPES_HEADER := $(GEN_DIR)/node_types.h
 SRCS := $(call rwildcard,$(SRC_DIR)/,*.c)
 SRC_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
 THIRD_PARTY_SRCS := third_party/xz_embedded.c $(MBEDTLS_SRCS)
-CACHE_OBJ := $(CACHE_DIR)/obj/$(TARGET_PLATFORM)-$(TARGET_ARCH)
+CACHE_OBJ := $(CACHE_DIR)/obj/$(TARGET_PLATFORM)_$(TARGET_ARCH)
 THIRD_PARTY_OBJS := $(patsubst third_party/%.c,$(CACHE_OBJ)/third_party/%.o,$(THIRD_PARTY_SRCS))
 OBJS := $(SRC_OBJS) $(THIRD_PARTY_OBJS)
 DEPS := $(SRC_OBJS:.o=.d) $(THIRD_PARTY_OBJS:.o=.d)
@@ -368,7 +392,20 @@ endif
 engine-objs: $(SRC_OBJS)
 third-party-objs: $(THIRD_PARTY_OBJS)
 
-all: $(RTOOL) generate
+ifeq ($(OS),Windows_NT)
+.PHONY: install-local-packages
+install-local-packages:
+	@if exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz (tar -xf toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz -C toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y toolchains\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz) else if exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang.tar.xz (tar -xf toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang.tar.xz -C toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y toolchains\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\clang.tar.xz)
+	@if exist sdks\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz (tar -xf sdks\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz -C sdks && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\rebax-sdk-$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH).tar.xz) else if exist sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\sdk.tar.xz (tar -xf sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\sdk.tar.xz -C sdks && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\sdk.tar.xz) else if exist sdks\\sdk.tar.xz (tar -xf sdks\\sdk.tar.xz -C sdks && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\sdk.tar.xz $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)
+else
+.PHONY: install-local-packages
+install-local-packages:
+	@clang_archive=""; for f in "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/clang.tar.xz"; do if [ -f "$$f" ]; then clang_archive="$$f"; break; fi; done; if [ -n "$$clang_archive" ]; then echo "Installing local Clang archive: $$clang_archive"; tar -xf "$$clang_archive" -C "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)" && mkdir -p $(CACHE_DIR)/packages && mv -f "$$clang_archive" $(CACHE_DIR)/packages/rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
+	@sdk_archive=""; for f in "sdks/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)/sdk.tar.xz" "sdks/sdk.tar.xz"; do if [ -f "$$f" ]; then sdk_archive="$$f"; break; fi; done; if [ -n "$$sdk_archive" ]; then echo "Installing local SDK archive: $$sdk_archive"; tar -xf "$$sdk_archive" -C sdks && mkdir -p $(CACHE_DIR)/packages && mv -f "$$sdk_archive" $(CACHE_DIR)/packages/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
+endif
+
+all: $(RTOOL) generate install-local-packages
+	@$(RTOOL) mkdir $(ENV_DIR)
 	@$(RTOOL) env $(TARGET_PLATFORM) $(TARGET_ARCH) $(HOST_PLATFORM) $(HOST_ARCH) $(ENV_MK)
 	+$(MAKE) --no-print-directory RBX_TOOL_READY=1 HOST_PLATFORM=$(HOST_PLATFORM) HOST_ARCH=$(HOST_ARCH) HOST_TRIPLE=$(HOST_TRIPLE) TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) WANT_APK=$(WANT_APK) $(SUB_GOAL)
 
@@ -378,6 +415,8 @@ bundle-packages: $(TARGET) | $(RTOOL)
 	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree $(SDK_DIR) $(OUTPUT_DIR)/sdks/$(notdir $(SDK_DIR)))
 	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree sdks/rebax $(OUTPUT_DIR)/sdks/rebax)
 	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree $(CLANG_DIR) $(OUTPUT_DIR)/toolchains/clang)
+	$(if $(or $(filter ios,$(TARGET_PLATFORM)),$(TOOLS_FILES)),,@$(RTOOL) mkdir $(OUTPUT_DIR)/tools)
+	$(if $(and $(TOOLS_FILES),$(filter-out ios,$(TARGET_PLATFORM))),@$(RTOOL) copy-tree tools $(OUTPUT_DIR)/tools)
 
 ios-package: $(TARGET) | $(RTOOL)
 	@$(RTOOL) rm $(IOS_DIR)/Payload
@@ -386,7 +425,7 @@ ios-package: $(TARGET) | $(RTOOL)
 	@$(RTOOL) ios-plist $(IOS_APP)/Info.plist $(ENGINE_VERSION) $(TARGET_NAME) $(IOS_PLATFORM)
 	@$(RTOOL) zip-dir $(IOS_PKG) $(IOS_DIR) Payload --exec $(TARGET_NAME)
 
-apk-selected: $(TARGET) apk-package
+apk-selected: apk-package
 
 generate: gen-icons gen-node-registry gen-node-editor-registry
 gen-icons: | $(RTOOL) $(BUILD_DIR)
@@ -405,7 +444,7 @@ $(TARGET): $(OBJS) | $(RTOOL) $(OUTPUT_DIR)
 	$(TARGET_CC) $(TARGET_LDPRE) $(OBJS) $(TARGET_LDPOST) -o $@
 
 bundle-runtime-libs: $(TARGET) | $(RTOOL)
-	$(if $(filter windows,$(TARGET_PLATFORM)),@$(RTOOL) cp $(SDK_DIR)/graphics/bin/SDL2.dll $(OUTPUT_DIR)/SDL2.dll)
+	$(if $(and $(filter windows,$(TARGET_PLATFORM)),$(if $(wildcard $(SDK_DIR)/graphics/lib/libSDL2.a),,1)),@$(RTOOL) cp $(SDK_DIR)/graphics/bin/SDL2.dll $(OUTPUT_DIR)/SDL2.dll)
 
 bundle-resources: $(TARGET) | $(RTOOL)
 	@$(RTOOL) copy-dir $(RESOURCES_DIR) $(OUTPUT_DIR)/resources --skip icons_src
@@ -439,94 +478,46 @@ run: all
 	$(TARGET)
 -include $(DEPS)
 
-define rbx_which
-$(if $(filter 1,$(RBX_TOOL_READY)),$(shell $(RTOOL) which $(1)))
-endef
-
-KEYSTORE ?= $(CURDIR)/rebax-debug.keystore
-KEYSTORE_PASS ?= android
-KEY_ALIAS ?= rebax
-KEY_PASS ?= $(KEYSTORE_PASS)
-KEY_DNAME := CN=Rebax,O=Rebax,C=US
 APK_LIB_DIR := $(APK_STAGE)/lib/$(TARGET_ARCH)
 APK_ASSETS := $(APK_STAGE)/assets
 SDL2_LIB_FILE := $(SDK_DIR)/graphics/lib/libSDL2.so
 ICONV_LIB_FILE := $(SDK_DIR)/graphics/lib/libiconv.so
 CXX_SHARED_LIB_FILE := $(SDK_DIR)/runtime/lib/$(TARGET_LIBDIR)/libc++_shared.so
 
-ifeq ($(WANT_APK),1)
-  SDL2_JAVA_SOURCES := $(sort $(wildcard $(SDK_DIR)/graphics/java/org/libsdl/app/*.java))
-  AAPT2 := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/aapt2 $(ANDROID_BUILD_TOOLS)/aapt2.exe $(ANDROID_BUILD_TOOLS)/aapt2.bat) $(call rbx_which,aapt2))
-  AAPT := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/aapt $(ANDROID_BUILD_TOOLS)/aapt.exe $(ANDROID_BUILD_TOOLS)/aapt.bat) $(call rbx_which,aapt))
-  ZIPALIGN := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/zipalign $(ANDROID_BUILD_TOOLS)/zipalign.exe) $(call rbx_which,zipalign))
-  APKSIGNER := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/apksigner $(ANDROID_BUILD_TOOLS)/apksigner.bat) $(call rbx_which,apksigner))
-  D8 := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/d8 $(ANDROID_BUILD_TOOLS)/d8.bat) $(call rbx_which,d8))
-  DX := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/dx $(ANDROID_BUILD_TOOLS)/dx.bat) $(call rbx_which,dx))
-  D8_JAR := $(firstword $(wildcard $(ANDROID_BUILD_TOOLS)/lib/d8.jar))
-  JAVAC := $(firstword $(wildcard $(JAVA_HOME)/bin/javac $(JAVA_HOME)/bin/javac.exe $(TERMUX_PREFIX)/opt/openjdk/bin/javac) $(call rbx_which,javac))
-  JAVA := $(firstword $(wildcard $(JAVA_HOME)/bin/java $(JAVA_HOME)/bin/java.exe $(TERMUX_PREFIX)/opt/openjdk/bin/java) $(call rbx_which,java))
-  JAR := $(firstword $(wildcard $(JAVA_HOME)/bin/jar $(JAVA_HOME)/bin/jar.exe $(TERMUX_PREFIX)/opt/openjdk/bin/jar) $(call rbx_which,jar))
-  KEYTOOL := $(firstword $(wildcard $(JAVA_HOME)/bin/keytool $(JAVA_HOME)/bin/keytool.exe $(TERMUX_PREFIX)/opt/openjdk/bin/keytool) $(call rbx_which,keytool))
-  JARSIGNER := $(firstword $(wildcard $(JAVA_HOME)/bin/jarsigner $(JAVA_HOME)/bin/jarsigner.exe $(TERMUX_PREFIX)/opt/openjdk/bin/jarsigner) $(call rbx_which,jarsigner))
-  KS_MISSING := $(if $(wildcard $(KEYSTORE)),,1)
-  CAN_SIGN := $(if $(or $(wildcard $(KEYSTORE)),$(KEYTOOL)),1)
-  APK_SIGNER_KIND := $(if $(CAN_SIGN),$(if $(APKSIGNER),apksigner,$(if $(JARSIGNER),jarsigner)))
-endif
+DEX_FILE := $(SDK_DIR)/graphics/dex/classes.dex
 
 apk-package: $(OBJS)
-	@$(RTOOL) mkdir $(APK_DIR) $(OUTPUT_DIR)
+	@$(RTOOL) mkdir $(APK_DIR) $(OUTPUT_ROOT)
 	@$(RTOOL) rm $(APK_STAGE)
-	@$(RTOOL) mkdir $(APK_STAGE) $(APK_LIB_DIR) $(APK_STAGE)/classes $(APK_STAGE)/dex
+	@$(RTOOL) mkdir $(APK_STAGE) $(APK_LIB_DIR)
 	@echo Packaging $(APK_OUT)
 	@$(RTOOL) require-lib SDL2 $(SDL2_EXPECT_ARCH) $(SDL2_LIB_FILE)
 	@$(RTOOL) require-lib libiconv $(SDL2_EXPECT_ARCH) $(ICONV_LIB_FILE)
 	@$(RTOOL) require-lib libc++_shared $(SDL2_EXPECT_ARCH) $(CXX_SHARED_LIB_FILE)
-	$(if $(SDL2_JAVA_SOURCES),,$(error The SDL2 Java sources were not found in $(SDK_DIR)/graphics/java - rebuild the Android SDK package))
-	$(if $(JAVAC),,$(error javac was not found - install a JDK to build the APK))
-	$(if $(JAR),,$(error jar was not found - install a JDK to build the APK))
-	$(if $(wildcard $(ANDROID_JAR)),,$(error android.jar was not found - install an Android SDK platform to build the APK))
+	$(if $(wildcard $(DEX_FILE)),,$(error classes.dex was not found in $(SDK_DIR)/graphics/dex - download the latest Android SDK package))
 	@$(RTOOL) cp $(SDL2_LIB_FILE) $(APK_LIB_DIR)/libSDL2.so
 	@$(RTOOL) cp $(ICONV_LIB_FILE) $(APK_LIB_DIR)/libiconv.so
 	@$(RTOOL) cp $(CXX_SHARED_LIB_FILE) $(APK_LIB_DIR)/libc++_shared.so
+	@$(RTOOL) cp $(DEX_FILE) $(APK_STAGE)/classes.dex
 	@echo Copying assets
 	@$(RTOOL) copy-dir $(RESOURCES_DIR) $(APK_ASSETS)/resources --skip icons_src
-	@$(RTOOL) package-archive toolchains rebax-clang-android-$(TARGET_ARCH).tar.xz $(BUILD_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz
-	@$(RTOOL) package-archive sdks rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(BUILD_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz
-	@$(RTOOL) cp $(BUILD_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz $(APK_ASSETS)/packages/clang.tar.xz
-	@$(RTOOL) cp $(BUILD_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(APK_ASSETS)/packages/sdk-$(notdir $(SDK_DIR)).tar.xz
+	@$(RTOOL) package-archive toolchains rebax-clang-android-$(TARGET_ARCH).tar.xz $(CACHE_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz
+	@$(RTOOL) package-archive sdks rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(CACHE_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz
+	@$(RTOOL) cp $(CACHE_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz $(APK_ASSETS)/packages/clang.tar.xz
+	@$(RTOOL) cp $(CACHE_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(APK_ASSETS)/packages/sdk-$(notdir $(SDK_DIR)).tar.xz
 	@$(RTOOL) copy-dir sdks/rebax $(APK_ASSETS)/sdks/rebax
+	$(if $(TOOLS_FILES),@$(RTOOL) copy-dir tools $(APK_ASSETS)/tools)
 	@$(RTOOL) write-text $(APK_ASSETS)/packages/stamp.txt $(ENGINE_VERSION)-@time@
 	@$(RTOOL) asset-manifest $(APK_ASSETS) $(APK_ASSETS)/rebax_assets.txt
 	@echo Linking $(APK_LIB_DIR)/libmain.so
 	@$(RTOOL) android-entry $(APK_DIR)/rebax_android_entry.c
 	$(TARGET_CC) $(TARGET_CFLAGS) -c $(APK_DIR)/rebax_android_entry.c -o $(APK_DIR)/rebax_android_entry.o
 	$(TARGET_CC) $(TARGET_LDPRE) -shared -o $(APK_LIB_DIR)/libmain.so $(OBJS) $(APK_DIR)/rebax_android_entry.o $(TARGET_LDPOST)
-	@echo Compiling the Android Java layer
-	$(JAVAC) -nowarn -encoding UTF-8 -source 8 -target 8 -classpath $(ANDROID_JAR) -d $(APK_STAGE)/classes $(SDL2_JAVA_SOURCES)
-	$(JAR) cf $(APK_STAGE)/classes.jar -C $(APK_STAGE)/classes .
-	@echo Generating classes.dex
-	$(if $(D8),$(D8) --release --min-api 21 --lib $(ANDROID_JAR) --output $(APK_STAGE)/dex $(APK_STAGE)/classes.jar,$(if $(and $(D8_JAR),$(JAVA)),$(JAVA) -cp $(D8_JAR) com.android.tools.r8.D8 --release --min-api 21 --lib $(ANDROID_JAR) --output $(APK_STAGE)/dex $(APK_STAGE)/classes.jar,$(if $(DX),$(DX) --dex --output=$(APK_STAGE)/dex/classes.dex $(APK_STAGE)/classes.jar,$(error neither d8 nor dx was found - install the Android SDK build-tools))))
-	@$(RTOOL) cp $(APK_STAGE)/dex/classes.dex $(APK_STAGE)/classes.dex
-	@echo Writing AndroidManifest.xml
-	@$(RTOOL) android-manifest $(APK_STAGE)/AndroidManifest.xml $(patsubst v%,%,$(ENGINE_VERSION)) $(APK_TARGET_SDK)
-	@echo Linking resources
-	$(if $(AAPT2),$(AAPT2) link -o $(APK_STAGE)/base.apk --manifest $(APK_STAGE)/AndroidManifest.xml -I $(ANDROID_JAR) --min-sdk-version 21 --target-sdk-version $(APK_TARGET_SDK) --auto-add-overlay,$(if $(AAPT),$(AAPT) package -f -M $(APK_STAGE)/AndroidManifest.xml -I $(ANDROID_JAR) -F $(APK_STAGE)/base.apk,$(error neither aapt2 nor aapt was found - install the Android SDK build-tools)))
-	@echo Adding classes.dex and the native libraries
-	$(JAR) ufM0 $(APK_STAGE)/base.apk -C $(APK_STAGE) classes.dex -C $(APK_STAGE) lib/$(TARGET_ARCH)/libmain.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libSDL2.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libiconv.so -C $(APK_STAGE) lib/$(TARGET_ARCH)/libc++_shared.so -C $(APK_STAGE) assets
-	@echo Aligning
-	$(if $(ZIPALIGN),$(ZIPALIGN) -f 4 $(APK_STAGE)/base.apk $(APK_STAGE)/aligned.apk,$(RTOOL) cp $(APK_STAGE)/base.apk $(APK_STAGE)/aligned.apk)
-	@echo Signing
-	$(if $(and $(KEYTOOL),$(KS_MISSING)),$(KEYTOOL) -genkeypair -keystore $(KEYSTORE) -storepass $(KEYSTORE_PASS) -alias $(KEY_ALIAS) -keypass $(KEY_PASS) -keyalg RSA -keysize 2048 -validity 10000 -dname $(KEY_DNAME))
-	$(if $(filter apksigner,$(APK_SIGNER_KIND)),$(APKSIGNER) sign --ks $(KEYSTORE) --ks-pass pass:$(KEYSTORE_PASS) --key-pass pass:$(KEY_PASS) --ks-key-alias $(KEY_ALIAS) --out $(APK_STAGE)/final.apk $(APK_STAGE)/aligned.apk)
-	$(if $(filter jarsigner,$(APK_SIGNER_KIND)),$(RTOOL) cp $(APK_STAGE)/aligned.apk $(APK_STAGE)/final.apk)
-	$(if $(filter jarsigner,$(APK_SIGNER_KIND)),$(JARSIGNER) -keystore $(KEYSTORE) -storepass $(KEYSTORE_PASS) -keypass $(KEY_PASS) -sigalg SHA256withRSA -digestalg SHA-256 $(APK_STAGE)/final.apk $(KEY_ALIAS))
-	$(if $(APK_SIGNER_KIND),,@echo Warning no signing tool was found so the APK stays unsigned)
-	$(if $(APK_SIGNER_KIND),,$(RTOOL) cp $(APK_STAGE)/aligned.apk $(APK_STAGE)/final.apk)
-	@$(RTOOL) cp $(APK_STAGE)/final.apk $(APK_OUT)
+	@$(RTOOL) apk-pack $(APK_STAGE) $(APK_OUT) $(KEYS_DIR) $(APK_PACKAGE) $(APK_LABEL) $(patsubst v%,%,$(ENGINE_VERSION)) 1 $(APK_MIN_SDK) $(APK_TARGET_SDK)
 	@$(RTOOL) rm $(APK_STAGE)
 	@echo APK ready: $(APK_OUT)
 
-CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L $(addprefix -I,$(sort $(dir $(call rwildcard,$(SRC_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdks/rebax/ps2/include/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
+CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
 ifeq ($(TARGET_PLATFORM),android)
   CFLAGS += -fPIC
 endif

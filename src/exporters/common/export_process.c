@@ -9,12 +9,12 @@
 #if defined(_WIN32)
 #include <io.h>
 #endif
-#include "export_internal.h"
+#include "exporters/common/export_internal.h"
 
 #include <signal.h>
 #include <stdint.h>
 #include <sys/stat.h>
-#include "rebax_paths.h"
+#include "filesystem/storage_paths.h"
 #if defined(_WIN32)
 #include <windows.h>
 #endif

@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include "export_internal.h"
-#include "rebax_fs.h"
+#include "exporters/common/export_internal.h"
+#include "filesystem/rebax_fs.h"
 
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 

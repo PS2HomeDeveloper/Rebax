@@ -65,11 +65,12 @@
 #include <string.h>
 #include <time.h>
 
-#include "rebax_archive.h"
+#include "filesystem/rebax_archive.h"
 #include "rebax_fs.h"
-#include "rebax_fs_tree.h"
+#include "filesystem/rebax_fs_tree.h"
 #include "rebax_env.h"
 #include "lzma2_encoder.h"
+#include "libraries/apk/apk_pack.h"
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -1730,25 +1731,22 @@ static int cmd_android_entry(int argc, char **argv) {
     return 0;
 }
 
-static int cmd_android_manifest(int argc, char **argv) {
-    if (argc != 5) die("usage: android-manifest <out.xml> <version_name> <target_sdk>");
-    ensure_parent_dir(argv[2]);
-    char text[4096];
-    snprintf(text, sizeof(text),
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-        "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"org.rebax.engine\" android:versionCode=\"1\" android:versionName=\"%s\">"
-        "<uses-sdk android:minSdkVersion=\"21\" android:targetSdkVersion=\"%s\"/>"
-        "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>"
-        "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>"
-        "<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\"/>"
-        "<uses-feature android:glEsVersion=\"0x00020000\" android:required=\"true\"/>"
-        "<application android:label=\"Rebax\" android:allowBackup=\"true\" android:requestLegacyExternalStorage=\"true\" android:extractNativeLibs=\"true\" android:hasCode=\"true\">"
-        "<activity android:name=\"org.libsdl.app.SDLActivity\" android:exported=\"true\" android:launchMode=\"singleTop\" android:screenOrientation=\"landscape\" android:configChanges=\"keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode\" android:theme=\"@android:style/Theme.NoTitleBar.Fullscreen\">"
-        "<intent-filter><action android:name=\"android.intent.action.MAIN\"/><category android:name=\"android.intent.category.LAUNCHER\"/></intent-filter>"
-        "<meta-data android:name=\"android.app.lib_name\" android:value=\"main\"/>"
-        "</activity></application></manifest>",
-        argv[3], argv[4]);
-    if (!write_text_file(argv[2], text)) die("cannot write '%s'", argv[2]);
+static int cmd_apk_pack(int argc, char **argv) {
+    if (argc != 11) die("usage: apk-pack <stage_dir> <out.apk> <keys_dir> <package> <label> <version_name> <version_code> <min_sdk> <target_sdk>");
+    apk_pack_config_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.stage_dir = argv[2];
+    cfg.out_path = argv[3];
+    cfg.keys_dir = argv[4];
+    cfg.package_name = argv[5];
+    cfg.app_label = argv[6];
+    cfg.version_name = argv[7];
+    cfg.version_code = (uint32_t)strtoul(argv[8], NULL, 10);
+    cfg.min_sdk = (uint32_t)strtoul(argv[9], NULL, 10);
+    cfg.target_sdk = (uint32_t)strtoul(argv[10], NULL, 10);
+    ensure_parent_dir(cfg.out_path);
+    char err[512];
+    if (!apk_pack(&cfg, err, sizeof(err))) die("%s", err);
     return 0;
 }
 
@@ -2172,7 +2170,7 @@ static void usage(void) {
           "  node-editor-registry <out.h> <node_editor.c>...\n"
           "  file-arch <file>                        print x86_64, x86, arm64, arm, unknown or none\n"
           "  android-entry <out.c>                   write the SDL_main wrapper source\n"
-          "  android-manifest <out.xml> <version> <target_sdk>\n"
+          "  apk-pack <stage_dir> <out.apk> <keys_dir> <package> <label> <version_name> <version_code> <min_sdk> <target_sdk>\n"
           "  require-lib <label> <arch> <path>       check that a library exists for the arch\n"
           "  copy-dir <src> <dst> [--skip name]...   copy a directory tree, skipping parts named <name>\n"
           "  asset-manifest <dir> <out_file>         list every file under <dir>, one relative path per line\n"
@@ -2200,7 +2198,7 @@ int main(int argc, char **argv) {
     if (strcmp(cmd, "node-editor-registry") == 0) return cmd_node_editor_registry(argc, argv);
     if (strcmp(cmd, "file-arch") == 0) return cmd_file_arch(argc, argv);
     if (strcmp(cmd, "android-entry") == 0) return cmd_android_entry(argc, argv);
-    if (strcmp(cmd, "android-manifest") == 0) return cmd_android_manifest(argc, argv);
+    if (strcmp(cmd, "apk-pack") == 0) return cmd_apk_pack(argc, argv);
     if (strcmp(cmd, "require-lib") == 0) return cmd_require_lib(argc, argv);
     if (strcmp(cmd, "copy-dir") == 0) return cmd_copy_dir(argc, argv);
     if (strcmp(cmd, "copy-tree") == 0) return cmd_copy_tree(argc, argv);

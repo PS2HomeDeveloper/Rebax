@@ -1,9 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "tabs.h"
-#include "base.h"
-#include "theme.h"
+#include "editor/ui/tabs.h"
+#include "editor/ui/base.h"
+#include "editor/ui/theme.h"
 
 static void free_cache(ui_tab_cache_t *cache) {
     if (cache->label_tex != NULL) window_destroy_texture(cache->label_tex);

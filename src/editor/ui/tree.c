@@ -1,12 +1,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "tree.h"
-#include "font.h"
-#include "icon_atlas.h"
-#include "scrollbar.h"
-#include "selection.h"
-#include "base.h"
+#include "editor/ui/tree.h"
+#include "editor/ui/font.h"
+#include "editor/ui/icon_atlas.h"
+#include "editor/ui/scrollbar.h"
+#include "editor/ui/selection.h"
+#include "editor/ui/base.h"
 
 static void ui_tree_free_cache_item(ui_tree_cache_item_t *item) {
     if (item->name_tex != NULL) window_destroy_texture(item->name_tex);

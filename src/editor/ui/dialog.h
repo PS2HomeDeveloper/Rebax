@@ -1,7 +1,7 @@
 #ifndef UI_DIALOG_H
 #define UI_DIALOG_H
 
-#include "window.h"
+#include "platform/common/window.h"
 
 void ui_dialog_draw_backdrop(int window_w, int window_h);
 void ui_dialog_draw_frame(int x, int y, int w, int h);

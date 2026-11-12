@@ -2,7 +2,7 @@
 #ifndef UI_TABS_H
 #define UI_TABS_H
 
-#include "window.h"
+#include "platform/common/window.h"
 
 typedef struct {
     const char *label;
