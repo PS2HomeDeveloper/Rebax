@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdarg.h>
@@ -8,7 +22,7 @@
 #include "network/https_client.h"
 #include "network/package_fetch.h"
 #include "rebax_env.h"
-#include "rebax_fs.h"
+#include "filesystem/rebax_fs.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -114,36 +128,6 @@ static int run(char *const argv[], const char *out_path) {
 #endif
 }
 
-static int run_visible(char *const argv[]) {
-#ifdef _WIN32
-    char line[FLAGS_CAP];
-    line[0] = '\0';
-    for (int i = 0; argv[i]; i++) append(line, sizeof(line), "%s\"%s\"", i ? " " : "", argv[i]);
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    if (!CreateProcessA(NULL, line, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) return -1;
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD code = 1;
-    GetExitCodeProcess(pi.hProcess, &code);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    return (int)code;
-#else
-    fflush(stdout);
-    pid_t pid = fork();
-    if (pid < 0) return -1;
-    if (pid == 0) {
-        execvp(argv[0], argv);
-        _exit(127);
-    }
-    int status = 0;
-    if (waitpid(pid, &status, 0) < 0) return -1;
-    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-#endif
-}
-
 static int find_in_path(const char *name, char *out, size_t cap) {
     const char *path = getenv("PATH");
     if (!path) return 0;
@@ -225,6 +209,28 @@ static void fetch(const char *base_url, const char *file_name, const char *extra
         rebax_fs_remove_recursive(check_dir);
         fail("the package %s is incomplete", file_name);
     }
+}
+
+static int use_local_archive(const char *const *names, const char *extract_dir, const char *check_dir, const char *const *required) {
+    static const char *const places[] = { "", "sdks/", "toolchains/", "packages/" };
+    char path[PATH_CAP], err[512];
+    for (int n = 0; names[n]; n++) {
+        for (int p = 0; p < 4; p++) {
+            snprintf(path, sizeof(path), "%s%s", places[p], names[n]);
+            if (!rebax_fs_exists(path)) continue;
+            printf("Extracting %s\n", path);
+            fflush(stdout);
+            rebax_fs_mkdir_p(extract_dir);
+            if (!rebax_archive_extract_tar_xz(path, extract_dir, NULL, NULL, err, sizeof(err))) {
+                rebax_fs_remove_recursive(check_dir);
+                fail("%s (%s)", err, path);
+            }
+            if (rebax_fs_is_dir(check_dir) && has_children(check_dir, required)) return 1;
+            rebax_fs_remove_recursive(check_dir);
+            fail("the package %s is incomplete", path);
+        }
+    }
+    return 0;
 }
 
 typedef struct {
@@ -390,23 +396,27 @@ int rebax_env_main(int argc, char **argv) {
     snprintf(sdk, sizeof(sdk), "sdks/%s", t->sdk);
     static const char *const sdk_need[] = { "standard", "runtime", "graphics", NULL };
     snprintf(url, sizeof(url), "rebax-sdk-%s.tar.xz", t->sdk);
+    if (!(rebax_fs_is_dir(sdk) && has_children(sdk, sdk_need))) {
+        char n1[PATH_CAP], n2[PATH_CAP];
+        snprintf(n1, sizeof(n1), "%s.tar.xz", t->sdk);
+        snprintf(n2, sizeof(n2), "sdk-%s.tar.xz", t->sdk);
+        const char *const names[] = { url, n1, n2, NULL };
+        use_local_archive(names, "sdks", sdk, sdk_need);
+    }
     fetch(SDKS_URL, url, "sdks", sdk, sdk_need);
 
     clang_dir[0] = '\0';
-    if (!ios) {
-        static const char *const clang_need[] = { "bin", NULL };
-        snprintf(clang_dir, sizeof(clang_dir), "toolchains/%s-%s/clang", tp, ta);
-        snprintf(extract, sizeof(extract), "toolchains/%s-%s", tp, ta);
-        snprintf(url, sizeof(url), "rebax-clang-%s-%s.tar.xz", tp, ta);
-        fetch(TOOLCHAINS_URL, url, extract, clang_dir, clang_need);
-    }
+    if (!ios) snprintf(clang_dir, sizeof(clang_dir), "toolchains/%s-%s/clang", tp, ta);
     char host_clang_dir[PATH_CAP];
-    if (self) {
-        snprintf(host_clang_dir, sizeof(host_clang_dir), "%s", clang_dir);
-    } else {
-        static const char *const clang_need[] = { "bin", NULL };
-        snprintf(host_clang_dir, sizeof(host_clang_dir), "toolchains/%s-%s/clang", hp, ha);
-        (void)clang_need;
+    snprintf(host_clang_dir, sizeof(host_clang_dir), "toolchains/%s-%s/clang", hp, ha);
+    {
+        static const char *const host_need[] = { "bin", NULL };
+        snprintf(extract, sizeof(extract), "toolchains/%s-%s", hp, ha);
+        snprintf(url, sizeof(url), "rebax-clang-%s-%s.tar.xz", hp, ha);
+        if (!(rebax_fs_is_dir(host_clang_dir) && has_children(host_clang_dir, host_need))) {
+            const char *const names[] = { url, NULL };
+            use_local_archive(names, extract, host_clang_dir, host_need);
+        }
     }
 
     builtins[0] = '\0';
@@ -425,12 +435,11 @@ int rebax_env_main(int argc, char **argv) {
         "";
 #endif
 
-    if (self) {
-        snprintf(cc, sizeof(cc), "%s/bin/clang%s", host_clang_dir, exe_ext);
-        if (!rebax_fs_exists(cc)) fail("the downloaded clang is missing: %s", cc);
+    snprintf(cc, sizeof(cc), "%s/bin/clang%s", host_clang_dir, exe_ext);
+    if (rebax_fs_exists(cc)) {
         clang_flags(&f, t, sdk, builtins, empty);
         write_env(out, cc, "clang", &f, sdk, clang_dir, t);
-        printf("Compiler: %s (downloaded clang)\n", cc);
+        printf("Compiler: %s (clang package)\n", cc);
         return 0;
     }
 
@@ -456,7 +465,7 @@ int rebax_env_main(int argc, char **argv) {
         }
     }
 
-    fail("no compiler found for %s-%s: install clang with lld, or a gcc that builds for that target", tp, ta);
+    fail("no compiler found for %s-%s: install clang with lld, a gcc that builds for that target, or place rebax-clang-%s-%s.tar.xz next to the project", tp, ta, hp, ha);
     return 1;
 }
 

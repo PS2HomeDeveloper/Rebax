@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * tree.h - generic UI tree: rendering, selection, hover and scrolling.
  * The panel passes only the row data; their meaning and logic remain outside the library.
  */
@@ -7,7 +21,7 @@
 
 #include "platform/common/window.h"
 
-#define UI_TREE_ROW_HEIGHT 22
+#define UI_TREE_ROW_HEIGHT 26
 #define UI_TREE_ICON_SIZE 16
 #define UI_TREE_ROW_PAD 6
 #define UI_TREE_INDENT_STEP 14

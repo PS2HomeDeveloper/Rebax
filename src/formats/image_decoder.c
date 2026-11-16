@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * image_loader.c (nodes_editor)
  * ============================================================
@@ -29,6 +43,7 @@
 #include <ctype.h>
 #include <strings.h> /* strcasecmp */
 
+#include "filesystem/path_utils.h"
 #include "formats/image_decoder.h"
 #include "stb_image.h" /* No STB_IMAGE_IMPLEMENTATION here - icon_atlas.c defines it once for the whole project */
 
@@ -40,13 +55,6 @@
 #define PSM_16S  0x0A
 #define PSM_T8   0x13
 #define PSM_T4   0x14
-
-static int ends_with(const char *path, const char *ext) {
-    size_t path_len = strlen(path);
-    size_t ext_len = strlen(ext);
-    if (ext_len > path_len) return 0;
-    return strcasecmp(path + (path_len - ext_len), ext) == 0;
-}
 
 static unsigned int read_u32le(const unsigned char *p) {
     return (unsigned int)p[0] | ((unsigned int)p[1] << 8)
@@ -376,17 +384,17 @@ static unsigned char *load_tim(const char *path, int *out_width, int *out_height
 
 unsigned char *image_loader_editor_load(const char *path, int *out_width, int *out_height,
                                          int raw_width, int raw_height, int raw_psm) {
-    if (ends_with(path, ".png") || ends_with(path, ".jpg") || ends_with(path, ".jpeg") ||
-        ends_with(path, ".bmp") || ends_with(path, ".tga") ||
-        ends_with(path, ".tif") || ends_with(path, ".tiff")) {
+    if (path_utils_has_suffix_ci(path, ".png") || path_utils_has_suffix_ci(path, ".jpg") || path_utils_has_suffix_ci(path, ".jpeg") ||
+        path_utils_has_suffix_ci(path, ".bmp") || path_utils_has_suffix_ci(path, ".tga") ||
+        path_utils_has_suffix_ci(path, ".tif") || path_utils_has_suffix_ci(path, ".tiff")) {
         return load_generic(path, out_width, out_height);
-    } else if (ends_with(path, ".raw")) {
+    } else if (path_utils_has_suffix_ci(path, ".raw")) {
         unsigned char *result = load_raw(path, raw_width, raw_height, raw_psm);
         if (result != NULL) { *out_width = raw_width; *out_height = raw_height; }
         return result;
-    } else if (ends_with(path, ".tm2") || ends_with(path, ".tim2")) {
+    } else if (path_utils_has_suffix_ci(path, ".tm2") || path_utils_has_suffix_ci(path, ".tim2")) {
         return load_tim2(path, out_width, out_height);
-    } else if (ends_with(path, ".tim")) {
+    } else if (path_utils_has_suffix_ci(path, ".tim")) {
         return load_tim(path, out_width, out_height);
     }
 

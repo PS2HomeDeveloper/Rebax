@@ -181,15 +181,6 @@ ifeq ($(RBX_TOOL_READY),0)
   endif
 endif
 
-ifeq ($(RBX_TOOL_READY),0)
-  ifneq ($(wildcard $(RTOOL)),)
-    ifneq ($(strip $(shell $(call NATIVE,$(RTOOL)) ok 2>$(NULL_DEV))),ok)
-      $(info The build tool does not run on this machine - rebuilding it)
-      $(shell $(call RMTREE,$(RTOOL_OBJ_DIR)))
-      $(shell $(call RMTREE,$(RTOOL_BIN_DIR)))
-    endif
-  endif
-endif
 
 TERMUX_PREFIX := $(if $(PREFIX),$(PREFIX),/data/data/com.termux/files/usr)
 ENGINE_VERSION := v1.0.0
@@ -276,8 +267,8 @@ ifeq ($(RBX_TOOL_READY),1)
 endif
 
 MBEDTLS_SRCS := $(sort $(wildcard third_party/mbedtls/library/*.c))
-RTOOL_THIRD_PARTY := third_party/xz_embedded.c third_party/lzma2_encoder.c $(MBEDTLS_SRCS) $(wildcard src/network/*.c) src/filesystem/rebax_archive.c src/filesystem/rebax_fs_tree.c $(wildcard src/libraries/apk/*.c)
-RTOOL_HEADERS := $(wildcard src/network/*.h) $(wildcard src/filesystem/*.h) $(wildcard src/libraries/apk/*.h)
+RTOOL_THIRD_PARTY := third_party/xz_embedded.c $(MBEDTLS_SRCS) $(wildcard src/network/*.c) src/filesystem/rebax_archive.c src/filesystem/rebax_fs.c src/filesystem/rebax_fs_tree.c src/filesystem/path_utils.c $(wildcard src/libraries/apk/*.c) $(wildcard src/libraries/bytes/*.c) $(wildcard src/libraries/zip/*.c)
+RTOOL_HEADERS := $(wildcard src/network/*.h) $(wildcard src/filesystem/*.h) $(wildcard src/libraries/apk/*.h) $(wildcard src/libraries/bytes/*.h) $(wildcard src/libraries/zip/*.h)
 RTOOL_INCLUDES := -Ithird_party -Ithird_party/mbedtls/include -Isrc
 RTOOL_LIBS := -lm
 ifeq ($(HOST_PLATFORM),windows)
@@ -290,6 +281,7 @@ RTOOL_OBJS := $(foreach s,$(RTOOL_ALL_SRCS),$(call rtool_obj,$(s)))
 RTOOL_CCFLAGS := -std=c99 -O1 -w -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) $(RTOOL_INCLUDES) $(BOOT_CFLAGS)
 RTOOL_BOOT_NEED := $(if $(filter 1,$(RBX_BOOT)),$(BOOT_CLANG_OK) $(BOOT_SDK_OK))
 
+ifeq ($(wildcard $(RTOOL)),)
 define RTOOL_OBJ_RULE
 $(call rtool_obj,$(1)): $(1) $(if $(findstring third_party/,$(1)),,$(RTOOL_HEADERS) $(RTOOL_SRC_HEADERS)) | $(RTOOL_OBJ_DIR) $(RTOOL_BOOT_NEED)
 	@echo [tool] $(1)
@@ -303,6 +295,10 @@ $(RTOOL_OBJ_DIR) $(RTOOL_BIN_DIR):
 $(RTOOL): $(RTOOL_OBJS) | $(RTOOL_BIN_DIR)
 	@echo Linking $(RTOOL)
 	@$(HOSTCC) $(BOOT_LDPRE) $(RTOOL_OBJS) $(RTOOL_LIBS) $(BOOT_LDPOST) -o $@
+else
+$(if $(filter Windows_NT,$(OS)),,$(shell chmod +x $(RTOOL) 2>/dev/null))
+$(RTOOL):
+endif
 
 ifeq ($(RBX_BOOT),1)
 TOOLCHAINS_URL := https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/latest/download
@@ -404,7 +400,7 @@ install-local-packages:
 	@sdk_archive=""; for f in "sdks/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)/sdk.tar.xz" "sdks/sdk.tar.xz"; do if [ -f "$$f" ]; then sdk_archive="$$f"; break; fi; done; if [ -n "$$sdk_archive" ]; then echo "Installing local SDK archive: $$sdk_archive"; tar -xf "$$sdk_archive" -C sdks && mkdir -p $(CACHE_DIR)/packages && mv -f "$$sdk_archive" $(CACHE_DIR)/packages/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
 endif
 
-all: $(RTOOL) generate install-local-packages
+all: $(RTOOL) generate
 	@$(RTOOL) mkdir $(ENV_DIR)
 	@$(RTOOL) env $(TARGET_PLATFORM) $(TARGET_ARCH) $(HOST_PLATFORM) $(HOST_ARCH) $(ENV_MK)
 	+$(MAKE) --no-print-directory RBX_TOOL_READY=1 HOST_PLATFORM=$(HOST_PLATFORM) HOST_ARCH=$(HOST_ARCH) HOST_TRIPLE=$(HOST_TRIPLE) TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) WANT_APK=$(WANT_APK) $(SUB_GOAL)
@@ -412,9 +408,7 @@ all: $(RTOOL) generate install-local-packages
 build-selected: $(TARGET) bundle-runtime-libs bundle-resources bundle-packages $(if $(filter ios,$(TARGET_PLATFORM)),ios-package)
 
 bundle-packages: $(TARGET) | $(RTOOL)
-	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree $(SDK_DIR) $(OUTPUT_DIR)/sdks/$(notdir $(SDK_DIR)))
 	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree sdks/rebax $(OUTPUT_DIR)/sdks/rebax)
-	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree $(CLANG_DIR) $(OUTPUT_DIR)/toolchains/clang)
 	$(if $(or $(filter ios,$(TARGET_PLATFORM)),$(TOOLS_FILES)),,@$(RTOOL) mkdir $(OUTPUT_DIR)/tools)
 	$(if $(and $(TOOLS_FILES),$(filter-out ios,$(TARGET_PLATFORM))),@$(RTOOL) copy-tree tools $(OUTPUT_DIR)/tools)
 
@@ -501,13 +495,9 @@ apk-package: $(OBJS)
 	@$(RTOOL) cp $(DEX_FILE) $(APK_STAGE)/classes.dex
 	@echo Copying assets
 	@$(RTOOL) copy-dir $(RESOURCES_DIR) $(APK_ASSETS)/resources --skip icons_src
-	@$(RTOOL) package-archive toolchains rebax-clang-android-$(TARGET_ARCH).tar.xz $(CACHE_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz
-	@$(RTOOL) package-archive sdks rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(CACHE_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz
-	@$(RTOOL) cp $(CACHE_DIR)/packages/rebax-clang-android-$(TARGET_ARCH).tar.xz $(APK_ASSETS)/packages/clang.tar.xz
-	@$(RTOOL) cp $(CACHE_DIR)/packages/rebax-sdk-$(notdir $(SDK_DIR)).tar.xz $(APK_ASSETS)/packages/sdk-$(notdir $(SDK_DIR)).tar.xz
-	@$(RTOOL) copy-dir sdks/rebax $(APK_ASSETS)/sdks/rebax
-	$(if $(TOOLS_FILES),@$(RTOOL) copy-dir tools $(APK_ASSETS)/tools)
-	@$(RTOOL) write-text $(APK_ASSETS)/packages/stamp.txt $(ENGINE_VERSION)-@time@
+		@$(RTOOL) copy-dir sdks/rebax $(APK_ASSETS)/sdks/rebax
+		$(if $(TOOLS_FILES),@$(RTOOL) copy-dir tools $(APK_ASSETS)/tools)
+		@$(RTOOL) write-text $(APK_ASSETS)/rebax_sources_stamp.txt $(ENGINE_VERSION)-@time@
 	@$(RTOOL) asset-manifest $(APK_ASSETS) $(APK_ASSETS)/rebax_assets.txt
 	@echo Linking $(APK_LIB_DIR)/libmain.so
 	@$(RTOOL) android-entry $(APK_DIR)/rebax_android_entry.c
@@ -517,7 +507,7 @@ apk-package: $(OBJS)
 	@$(RTOOL) rm $(APK_STAGE)
 	@echo APK ready: $(APK_OUT)
 
-CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
+CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdks/rebax/common/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
 ifeq ($(TARGET_PLATFORM),android)
   CFLAGS += -fPIC
 endif

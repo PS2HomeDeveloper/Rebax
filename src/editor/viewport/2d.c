@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* 2D editor camera, expandable virtual-world scrollbars, and transform gizmos. */
 #include <stdlib.h>
 #include <math.h>
@@ -10,6 +24,7 @@
 #include "dev_systems/nodes/runtime/node_registry.h"
 #include "node_types.h"
 #include "editor/panels/properties.h"
+#include "project/current_project.h"
 #include "dev_systems/nodes/editor/sprite2d.h"
 
 #define BG_R 0x2B
@@ -25,8 +40,6 @@
 #define AXIS_Y_G 200
 #define AXIS_Y_B 90
 #define GRID_SPACING 32
-#define REFERENCE_WIDTH 640
-#define REFERENCE_HEIGHT 448
 #define ZOOM_MIN 0.1f
 #define ZOOM_MAX 8.0f
 #define ZOOM_WHEEL_MULT 1.15f
@@ -399,9 +412,12 @@ void viewport_2d_draw(int x, int y, int w, int h) {
     window_fill_rect(x, origin_y - 1, view_w, 2, AXIS_X_R, AXIS_X_G, AXIS_X_B);
     window_fill_rect(origin_x - 1, y, 2, view_h, AXIS_Y_R, AXIS_Y_G, AXIS_Y_B);
 
-    int left = origin_x - (int)(REFERENCE_WIDTH * g_zoom / 2.0f);
-    int top = origin_y - (int)(REFERENCE_HEIGHT * g_zoom / 2.0f);
-    int frame_w = (int)(REFERENCE_WIDTH * g_zoom), frame_h = (int)(REFERENCE_HEIGHT * g_zoom);
+    const project_settings_t *settings = current_project_get_settings();
+    int reference_width = settings != NULL ? settings->display_width : 640;
+    int reference_height = settings != NULL ? settings->display_height : 448;
+    int left = origin_x - (int)(reference_width * g_zoom / 2.0f);
+    int top = origin_y - (int)(reference_height * g_zoom / 2.0f);
+    int frame_w = (int)(reference_width * g_zoom), frame_h = (int)(reference_height * g_zoom);
     window_fill_rect(left, top, frame_w, 2, 245, 190, 55);
     window_fill_rect(left, top + frame_h - 2, frame_w, 2, 245, 190, 55);
     window_fill_rect(left, top, 2, frame_h, 245, 190, 55);

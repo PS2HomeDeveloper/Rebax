@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +24,8 @@
 
 #include "project/project_catalog.h"
 #include "filesystem/storage_paths.h"
+#include "filesystem/rebax_fs.h"
+#include "project/project_file.h"
 
 static project_catalog_entry_t g_entries[PROJECT_CATALOG_MAX];
 static int g_count;
@@ -21,34 +37,22 @@ static void catalog_path(char *out, size_t cap) {
 
 int project_catalog_is_valid(const char *project_path) {
     if (project_path == NULL || project_path[0] == '\0') return 0;
-    struct stat st;
-    if (stat(project_path, &st) != 0 || !S_ISDIR(st.st_mode)) return 0;
-    char marker[PROJECT_CATALOG_PATH_MAX + 32];
-    snprintf(marker, sizeof(marker), "%s/project.rebax", project_path);
-    if (stat(marker, &st) != 0 || !S_ISREG(st.st_mode)) return 0;
-    char assets[PROJECT_CATALOG_PATH_MAX + 16];
-    snprintf(assets, sizeof(assets), "%s/Assets", project_path);
-    return stat(assets, &st) == 0 && S_ISDIR(st.st_mode);
+    project_settings_t settings;
+    return project_file_load(project_path, &settings, NULL, 0);
 }
 
 static int save_catalog(void) {
-    char path[1024], temp[1050];
+    char path[1024];
+    static char text[PROJECT_CATALOG_MAX * (PROJECT_CATALOG_PATH_MAX + PROJECT_CATALOG_NAME_MAX + 40)];
     catalog_path(path, sizeof(path));
-    snprintf(temp, sizeof(temp), "%s.tmp", path);
-    FILE *f = fopen(temp, "w");
-    if (f == NULL) return 0;
-    int ok = 1;
+    size_t used = 0;
     for (int i = 0; i < g_count; i++) {
-        if (fprintf(f, "%lld\t%s\t%s\n", g_entries[i].last_opened,
-                    g_entries[i].name, g_entries[i].path) < 0) { ok = 0; break; }
+        int n = snprintf(text + used, sizeof(text) - used, "%lld\t%s\t%s\n", g_entries[i].last_opened,
+                         g_entries[i].name, g_entries[i].path);
+        if (n < 0 || (size_t)n >= sizeof(text) - used) return 0;
+        used += (size_t)n;
     }
-    if (fclose(f) != 0) ok = 0;
-    if (!ok) { remove(temp); return 0; }
-#if defined(_WIN32)
-    remove(path);
-#endif
-    if (rename(temp, path) != 0) { remove(temp); return 0; }
-    return 1;
+    return rebax_fs_write_atomic(path, text, used);
 }
 
 int project_catalog_load(void) {
@@ -85,21 +89,10 @@ const project_catalog_entry_t *project_catalog_get(int index) {
 
 int project_catalog_add(const char *project_path) {
     project_catalog_load();
-    if (!project_catalog_is_valid(project_path)) return 0;
-    char name[PROJECT_CATALOG_NAME_MAX] = "Project";
-    char marker[PROJECT_CATALOG_PATH_MAX + 32], line[512];
-    snprintf(marker, sizeof(marker), "%s/project.rebax", project_path);
-    FILE *f = fopen(marker, "r");
-    if (f != NULL) {
-        while (fgets(line, sizeof(line), f) != NULL) {
-            if (strncmp(line, "name=", 5) == 0) {
-                line[strcspn(line, "\r\n")] = '\0';
-                if (line[5] != '\0') snprintf(name, sizeof(name), "%s", line + 5);
-                break;
-            }
-        }
-        fclose(f);
-    }
+    project_settings_t settings;
+    if (!project_file_load(project_path, &settings, NULL, 0)) return 0;
+    char name[PROJECT_CATALOG_NAME_MAX];
+    snprintf(name, sizeof(name), "%s", settings.name);
     int found = -1;
     for (int i = 0; i < g_count; i++) if (strcmp(g_entries[i].path, project_path) == 0) { found = i; break; }
     if (found < 0) {

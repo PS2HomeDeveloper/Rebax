@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * window.c
  * ============================================================
@@ -16,6 +30,27 @@ static SDL_Renderer *g_renderer = NULL;
 static int g_should_close = 0;
 static int g_width  = 0;
 static int g_height = 0;
+static int g_inset_left = 0;
+static int g_inset_top = 0;
+static int g_inset_right = 0;
+static int g_inset_bottom = 0;
+
+static void apply_window_size(int raw_width, int raw_height) {
+#if defined(__ANDROID__)
+    int side = raw_height / 24;
+    int bottom = raw_height / 36;
+    if (raw_width - 2 * side > 0 && raw_height - side - bottom > 0) {
+        g_inset_left = side;
+        g_inset_right = side;
+        g_inset_top = side;
+        g_inset_bottom = bottom;
+    } else {
+        g_inset_left = g_inset_right = g_inset_top = g_inset_bottom = 0;
+    }
+#endif
+    g_width = raw_width - g_inset_left - g_inset_right;
+    g_height = raw_height - g_inset_top - g_inset_bottom;
+}
 
 /* mouse state */
 static int g_mouse_x = 0;
@@ -36,6 +71,8 @@ static float g_delta_time = 0.0f;
 
 /* text input received this frame only */
 static char g_text_input_buffer[64] = "";
+static int g_text_input_wanted = 0;
+static int g_text_input_suppressed = 0;
 
 /* control keys - each is 1 only on the first frame of the press */
 static int g_key_backspace = 0;
@@ -54,17 +91,26 @@ static int g_key_tab       = 0;
 static int g_key_save      = 0;
 static int g_key_f         = 0; /* frame the selected node with the 3D editor camera */
 
+#if defined(__ANDROID__)
+#define REBAX_WINDOW_EXTRA_FLAGS SDL_WINDOW_FULLSCREEN_DESKTOP
+#else
+#define REBAX_WINDOW_EXTRA_FLAGS 0
+#endif
+
 int window_init(const char *title, int width, int height) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 0;
     }
 
+#if defined(__ANDROID__)
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#endif
     g_window = SDL_CreateWindow(
         title,
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         width, height,
-        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
+        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | REBAX_WINDOW_EXTRA_FLAGS
     );
     if (g_window == NULL) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -83,8 +129,7 @@ int window_init(const char *title, int width, int height) {
         return 0;
     }
 
-    g_width  = width;
-    g_height = height;
+    apply_window_size(width, height);
     g_should_close = 0;
     g_last_frame_ticks = SDL_GetTicks();
     return 1;
@@ -92,6 +137,16 @@ int window_init(const char *title, int width, int height) {
 
 int window_should_close(void) {
     return g_should_close;
+}
+
+static void begin_frame_area(void) {
+    if (g_renderer == NULL) return;
+    if (g_inset_left == 0 && g_inset_top == 0 && g_inset_right == 0 && g_inset_bottom == 0) return;
+    SDL_RenderSetViewport(g_renderer, NULL);
+    SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+    SDL_RenderClear(g_renderer);
+    SDL_Rect safe_area = { g_inset_left, g_inset_top, g_width, g_height };
+    SDL_RenderSetViewport(g_renderer, &safe_area);
 }
 
 void window_poll_events(void) {
@@ -113,15 +168,26 @@ void window_poll_events(void) {
     g_key_enter = g_key_up = g_key_down = g_key_tab = g_key_save = 0;
     g_key_f = 0;
 
+    if (g_window != NULL) {
+        int w = 0, h = 0;
+        SDL_GetWindowSize(g_window, &w, &h);
+        if (w > 0 && h > 0) apply_window_size(w, h);
+    }
+
+    if (g_text_input_wanted && !SDL_IsTextInputActive()) {
+        g_text_input_suppressed = 1;
+        g_text_input_wanted = 0;
+    }
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             g_should_close = 1;
         } else if (event.type == SDL_WINDOWEVENT
                    && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-            g_width  = event.window.data1;
-            g_height = event.window.data2;
+            apply_window_size(event.window.data1, event.window.data2);
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+            g_text_input_suppressed = 0;
             if (event.button.button == SDL_BUTTON_LEFT) {
                 g_mouse_left_just_pressed = 1;
                 g_mouse_left_down = 1;
@@ -143,8 +209,8 @@ void window_poll_events(void) {
         } else if (event.type == SDL_MOUSEWHEEL) {
             g_mouse_wheel_delta += event.wheel.y;
         } else if (event.type == SDL_MOUSEMOTION) {
-            g_mouse_x = event.motion.x;
-            g_mouse_y = event.motion.y;
+            g_mouse_x = event.motion.x - g_inset_left;
+            g_mouse_y = event.motion.y - g_inset_top;
             g_mouse_delta_x += event.motion.xrel;
             g_mouse_delta_y += event.motion.yrel;
         } else if (event.type == SDL_TEXTINPUT) {
@@ -172,9 +238,20 @@ void window_poll_events(void) {
             }
         }
     }
+    begin_frame_area();
 }
 
 void window_clear(unsigned char r, unsigned char g, unsigned char b) {
+    if (g_inset_left != 0 || g_inset_top != 0 || g_inset_right != 0 || g_inset_bottom != 0) {
+        SDL_RenderSetViewport(g_renderer, NULL);
+        SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+        SDL_RenderClear(g_renderer);
+        SDL_Rect safe_area = { g_inset_left, g_inset_top, g_width, g_height };
+        SDL_RenderSetViewport(g_renderer, &safe_area);
+        SDL_SetRenderDrawColor(g_renderer, r, g, b, 255);
+        SDL_RenderFillRect(g_renderer, NULL);
+        return;
+    }
     SDL_SetRenderDrawColor(g_renderer, r, g, b, 255);
     SDL_RenderClear(g_renderer);
 }
@@ -294,8 +371,15 @@ void window_set_relative_mouse_mode(int enabled) {
 
 float window_get_delta_time(void) { return g_delta_time; }
 
-void window_start_text_input(void) { SDL_StartTextInput(); }
-void window_stop_text_input(void)  { SDL_StopTextInput(); }
+void window_start_text_input(void) {
+    if (g_text_input_suppressed) return;
+    g_text_input_wanted = 1;
+    if (!SDL_IsTextInputActive()) SDL_StartTextInput();
+}
+void window_stop_text_input(void) {
+    g_text_input_wanted = 0;
+    if (SDL_IsTextInputActive()) SDL_StopTextInput();
+}
 
 const char *window_text_input_this_frame(void) { return g_text_input_buffer; }
 

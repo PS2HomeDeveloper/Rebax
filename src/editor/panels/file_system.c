@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* File system: path data construction, while display and interaction are in ui_tree. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,8 +49,8 @@
 #define FILE_TREE_THUMB_SIZE 16
 #define FILE_TREE_THUMB_MAX_BYTES (8 * 1024 * 1024)
 #define MAX_EXPANDED 64
-#define TOOLBAR_HEIGHT 26
-#define SEARCH_HEIGHT 20
+#define TOOLBAR_HEIGHT 30
+#define SEARCH_HEIGHT 24
 
 typedef struct {
     char path[600];
@@ -54,6 +68,9 @@ static int g_expanded_count = 0;
 static text_field_t g_search_field;
 static int g_ready = 0;
 static int g_needs_rebuild = 1;
+static float g_refresh_timer = 0.0f;
+static unsigned long long g_assets_signature = 0;
+#define ASSETS_REFRESH_INTERVAL 2.0f
 static char g_last_project_path[600] = {0};
 static char g_selected_path[600] = {0};
 static ui_tree_t g_tree;
@@ -132,6 +149,10 @@ static void open_scene_resource(const char *path) {
         viewport_2d_focus_scene();
     }
     editor_workspace_set_camera_mode((editor_camera_mode_t)dimension);
+}
+
+void file_system_panel_open_scene(const char *path) {
+    open_scene_resource(path);
 }
 
 static void open_file_resource(const fs_row_t *row) {
@@ -269,12 +290,51 @@ static void sync_tree_items(void) {
     ui_tree_set_selected(&g_tree, selected);
 }
 
+static unsigned long long hash_bytes(unsigned long long hash, const void *data, size_t size) {
+    const unsigned char *bytes = (const unsigned char *)data;
+    for (size_t i = 0; i < size; i++) hash = (hash ^ bytes[i]) * 1099511628211ULL;
+    return hash;
+}
+
+static unsigned long long directory_signature(const char *dir_path, int depth, unsigned long long hash) {
+    DIR *dir = opendir(dir_path);
+    if (dir == NULL) return hash;
+    struct dirent *entry;
+    int visited = 0;
+    while ((entry = readdir(dir)) != NULL && visited < 512) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        visited++;
+        char full_path[600];
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+        struct stat status;
+        if (stat(full_path, &status) != 0) continue;
+        long long size = (long long)status.st_size;
+        long long modified = (long long)status.st_mtime;
+        hash = hash_bytes(hash, entry->d_name, strlen(entry->d_name));
+        hash = hash_bytes(hash, &size, sizeof(size));
+        hash = hash_bytes(hash, &modified, sizeof(modified));
+        if (S_ISDIR(status.st_mode) && depth < 16 && is_expanded(full_path)) {
+            hash = directory_signature(full_path, depth + 1, hash);
+        }
+    }
+    closedir(dir);
+    return hash;
+}
+
+static unsigned long long assets_signature(void) {
+    const char *project_path = current_project_get_path();
+    if (project_path == NULL) return 0;
+    char assets_path[600];
+    snprintf(assets_path, sizeof(assets_path), "%s/assets", project_path);
+    return directory_signature(assets_path, 0, 14695981039346656037ULL);
+}
+
 static void rebuild_rows(void) {
     free_rows();
     const char *project_path = current_project_get_path();
     if (project_path == NULL) { g_needs_rebuild = 0; sync_tree_items(); return; }
     char assets_path[600];
-    snprintf(assets_path, sizeof(assets_path), "%s/Assets", project_path);
+    snprintf(assets_path, sizeof(assets_path), "%s/assets", project_path);
     struct stat status;
     if (stat(assets_path, &status) != 0) REBAX_MKDIR(assets_path, 0755);
     fs_row_t *root = &g_rows[g_row_count++];
@@ -312,7 +372,16 @@ void file_system_panel_update(int x, int y, int w, int h) {
         g_last_project_path[sizeof(g_last_project_path) - 1] = '\0';
         g_needs_rebuild = 1;
     }
-    if (g_needs_rebuild) rebuild_rows(); else sync_tree_items();
+    g_refresh_timer += window_get_delta_time();
+    if (!g_needs_rebuild && g_refresh_timer >= ASSETS_REFRESH_INTERVAL) {
+        g_refresh_timer = 0.0f;
+        if (assets_signature() != g_assets_signature) g_needs_rebuild = 1;
+    }
+    if (g_needs_rebuild) {
+        rebuild_rows();
+        g_assets_signature = assets_signature();
+        g_refresh_timer = 0.0f;
+    } else sync_tree_items();
 
     int toolbar_icon_y = y + (TOOLBAR_HEIGHT - UI_TREE_ICON_SIZE) / 2;
     int more_x = x + w - UI_TREE_ICON_SIZE - UI_TREE_ROW_PAD;
@@ -369,6 +438,8 @@ void file_system_panel_shutdown(void) {
     text_field_free(&g_search_field);
     g_ready = 0;
     g_needs_rebuild = 1;
+    g_refresh_timer = 0.0f;
+    g_assets_signature = 0;
     g_last_project_path[0] = '\0';
     g_selected_path[0] = '\0';
     g_last_click_path[0] = '\0';

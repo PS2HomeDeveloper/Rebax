@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * rebax_fs.c
  * ============================================================
@@ -259,3 +273,18 @@ void rebax_fs_basename_no_ext(const char *path, char *out, int out_size) {
     if (dot != NULL) *dot = '\0';
 }
 
+
+int rebax_fs_write_atomic(const char *path, const void *data, size_t size) {
+    char temp[1100];
+    snprintf(temp, sizeof(temp), "%s.tmp", path);
+    FILE *f = fopen(temp, "wb");
+    if (f == NULL) return 0;
+    int ok = size == 0 || fwrite(data, 1, size, f) == size;
+    if (fclose(f) != 0) ok = 0;
+    if (!ok) { remove(temp); return 0; }
+#if defined(_WIN32)
+    remove(path);
+#endif
+    if (rename(temp, path) != 0) { remove(temp); return 0; }
+    return 1;
+}

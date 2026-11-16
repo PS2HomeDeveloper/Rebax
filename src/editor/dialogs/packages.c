@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #include <stdio.h>
 #include <string.h>
 
@@ -13,7 +27,7 @@
 #define DIALOG_MAX_H 580
 #define TITLEBAR_H 40
 #define PAD 20
-#define ROW_H 38
+#define ROW_H 42
 #define CLOSE_SIZE 22
 #define ARROW_SIZE 16
 #define INDENT 34
@@ -43,6 +57,7 @@ static int g_open;
 static int g_ready;
 static int g_expanded[PKG_PLATFORM_COUNT];
 static int g_scroll;
+static int g_press_active, g_press_in_list, g_dragged, g_press_x, g_press_y;
 static int g_dragging;
 static int g_was_busy;
 static int g_content_h;
@@ -159,6 +174,8 @@ static pkg_state_t row_state(const row_t *r) {
 
 void packages_dialog_open(void) {
     ensure_ready();
+    icon_atlas_init();
+    g_press_active = 0;
     package_manager_init();
     package_refresh_states();
     g_was_busy = package_is_busy();
@@ -180,20 +197,37 @@ void packages_dialog_update(int window_w, int window_h) {
     row_t rows[64];
     int count = build_rows(rows, 64);
     ui_scrollbar_update(&g_scroll, &g_dragging, l.list_x, l.list_w, l.list_y, l.list_h, g_content_h, ROW_H);
+    int pressed = window_mouse_left_just_pressed();
+    int down = window_mouse_left_down();
+    int list_click = 0;
+    if (pressed) {
+        g_press_active = 1;
+        g_dragged = 0;
+        g_press_x = mx;
+        g_press_y = my;
+        g_press_in_list = !g_dragging && ui_point_in_rect(mx, my, l.list_x, l.list_y, l.list_w, l.list_h);
+    }
+    if (g_press_active && g_press_in_list && down) {
+        int moved = my - g_press_y;
+        if (!g_dragged && (moved > 14 || moved < -14)) g_dragged = 1;
+        if (g_dragged) g_scroll -= window_mouse_delta_y();
+    }
+    if (g_press_active && !down) {
+        g_press_active = 0;
+        if (g_press_in_list && !g_dragged) list_click = 1;
+    }
     int max_scroll = g_content_h - l.list_h;
     if (max_scroll < 0) max_scroll = 0;
     if (g_scroll > max_scroll) g_scroll = max_scroll;
     if (g_scroll < 0) g_scroll = 0;
 
-    if (!window_mouse_left_just_pressed()) return;
-
-    if (ui_dialog_close_button_hit(mx, my, l.x + l.w - PAD - CLOSE_SIZE, l.y + (TITLEBAR_H - CLOSE_SIZE) / 2, CLOSE_SIZE)) {
+    if (pressed && ui_dialog_close_button_hit(mx, my, l.x + l.w - PAD - CLOSE_SIZE, l.y + (TITLEBAR_H - CLOSE_SIZE) / 2, CLOSE_SIZE)) {
         g_open = 0;
         return;
     }
     if (!package_host_supported()) return;
 
-    if (package_host_compiler_state() == PKG_STATE_NOT_INSTALLED && !busy) {
+    if (pressed && package_host_compiler_state() == PKG_STATE_NOT_INSTALLED && !busy) {
         int bx = l.x + l.w - PAD - g_install_btn.width;
         int by = l.y + TITLEBAR_H + 70 + (ROW_H - g_install_btn.height) / 2;
         if (ui_point_in_rect(mx, my, bx, by, g_install_btn.width, g_install_btn.height)) {
@@ -202,7 +236,9 @@ void packages_dialog_update(int window_w, int window_h) {
         }
     }
 
-    if (!ui_point_in_rect(mx, my, l.list_x, l.list_y, l.list_w, l.list_h)) return;
+    if (!list_click) return;
+    mx = g_press_x;
+    my = g_press_y;
     int scrollbar = g_content_h > l.list_h;
     for (int i = 0; i < count; i++) {
         row_t *r = &rows[i];

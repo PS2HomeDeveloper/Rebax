@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Scene parsing and project-specific scene C generation. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,7 +20,9 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
+#include "project/current_project.h"
 #include "exporters/common/export_internal.h"
+#include "project/current_project.h"
 
 #define MAX_USED_TYPES EXPORT_MAX_USED_TYPES
 #define MAX_IMAGE_PATHS EXPORT_MAX_IMAGE_PATHS
@@ -27,6 +43,18 @@ static void add_unique(char list[][64], int *count, int max, const char *value) 
     strncpy(list[*count], value, 63);
     list[*count][63] = '\0';
     (*count)++;
+}
+
+const char *export_public_path(const char *path) {
+    if (path == NULL) return "";
+    const char *root = current_project_get_path();
+    if (root != NULL && root[0] != '\0') {
+        size_t length = strlen(root);
+        if (strncmp(path, root, length) == 0 && (path[length] == '/' || path[length] == '\\')) {
+            return path + length + 1;
+        }
+    }
+    return path;
 }
 
 void export_scene_add_image_path(const char *value) {
@@ -217,8 +245,14 @@ static void interface_symbol_name(const char *type_name, char *out, size_t out_s
  * world origin (0,0) maps exactly to the center of this resolution. A general conversion
  * with no node-type knowledge - any future property in any node named "Position X"/
  * "Position Y" exactly will automatically benefit with no changes here */
-#define REFERENCE_SCREEN_WIDTH  640.0f
-#define REFERENCE_SCREEN_HEIGHT 448.0f
+static float reference_screen_width(void) {
+    const project_settings_t *settings = current_project_get_settings();
+    return settings != NULL && settings->display_width > 0 ? (float)settings->display_width : 640.0f;
+}
+static float reference_screen_height(void) {
+    const project_settings_t *settings = current_project_get_settings();
+    return settings != NULL && settings->display_height > 0 ? (float)settings->display_height : 448.0f;
+}
 
 /* Writes a single property value as a typed C literal - text (strings) are escaped
  * to account for any quotes/backslashes in file paths. property_name
@@ -234,9 +268,9 @@ static void write_c_literal(FILE *f, node_property_type_t type, const char *stri
             float v = (string_value != NULL) ? (float)atof(string_value)
                       : (default_prop != NULL ? default_prop->default_value.f : 0.0f);
             if (property_name != NULL && strcmp(property_name, "Position X") == 0) {
-                v += REFERENCE_SCREEN_WIDTH / 2.0f;
+                v += reference_screen_width() / 2.0f;
             } else if (property_name != NULL && strcmp(property_name, "Position Y") == 0) {
-                v += REFERENCE_SCREEN_HEIGHT / 2.0f;
+                v += reference_screen_height() / 2.0f;
             }
             fprintf(f, "{ .f = %.6ff }", v);
             break;
@@ -252,7 +286,7 @@ static void write_c_literal(FILE *f, node_property_type_t type, const char *stri
                              : (default_prop != NULL && default_prop->default_value.s != NULL
                                 ? default_prop->default_value.s : "");
             fputs("{ .s = \"", f);
-            for (const char *p = s; *p != '\0'; p++) {
+            for (const char *p = export_public_path(s); *p != '\0'; p++) {
                 if (*p == '"' || *p == '\\') fputc('\\', f);
                 fputc(*p, f);
             }
@@ -292,7 +326,11 @@ void export_scene_generate_from_file(const char *path) {
 
     long size = 0;
     char *content = export_read_whole_file(path, &size);
-    if (content == NULL) return;
+    if (content == NULL) {
+        log_pushf("[exporter] WARNING: could not read scene file: %s", path);
+        return;
+    }
+    log_pushf("[exporter] scene file: %s (%ld bytes)", path, size);
 
     const char *slash = strrchr(path, '/');
     const char *base = (slash != NULL) ? slash + 1 : path;
@@ -311,9 +349,11 @@ void export_scene_generate_from_file(const char *path) {
     parse_rscene_content(content);
 
     if (g_parsed_node_count == 0) {
+        log_push("[exporter] this scene has no nodes - it was probably never saved or is empty.");
         free(content);
         return;
     }
+    log_pushf("[exporter] this scene has %d node(s).", g_parsed_node_count);
 
     int valid_node_indices[MAX_NODES_PER_SCENE];
     int valid_count = 0;

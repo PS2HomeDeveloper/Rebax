@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * close_scene_dialog.c
  * ============================================================
@@ -20,10 +34,10 @@
 #include "editor/ui/dialog.h"
 
 #define DIALOG_WIDTH   360
-#define DIALOG_HEIGHT  140
+#define DIALOG_HEIGHT  156
 #define BUTTON_GAP       10
-#define BUTTON_ROW_H     36
-#define TITLEBAR_HEIGHT   36
+#define BUTTON_ROW_H     40
+#define TITLEBAR_HEIGHT   40
 #define CLOSE_BTN_SIZE    22
 
 static int g_is_open = 0;

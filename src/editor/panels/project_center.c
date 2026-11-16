@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Project center screen: a recent projects list stored inside Rebax/Editor. */
 #include <stdio.h>
 #include <string.h>
@@ -12,12 +26,14 @@
 #include "project/project_catalog.h"
 #include "editor/panels/file_manager.h"
 #include "project/current_project.h"
+#include "project/project_file.h"
+#include "editor/core/project_session.h"
 #include "core/app_state.h"
 #include "editor/panels/scene_tabs.h"
 #include "scene/scene_data.h"
 #include "scene/current_scene.h"
 
-#define ROW_HEIGHT 58
+#define ROW_HEIGHT 64
 #define LIST_PADDING 18
 #define BUTTON_MARGIN 12
 #define BUTTON_COUNT 5
@@ -171,8 +187,10 @@ static void open_selected_project(void);
 static void on_import_project(const char *path, void *user_data) {
     (void)user_data;
     if (!path) return;
-    if (!project_catalog_is_valid(path)) {
-        set_notice("This is not a valid Rebax project (project.rebax or Assets is missing).");
+    char error[160];
+    project_settings_t settings;
+    if (!project_file_load(path, &settings, error, sizeof(error))) {
+        set_notice(error);
         return;
     }
     if (project_catalog_add(path)) {
@@ -185,30 +203,17 @@ static void on_import_project(const char *path, void *user_data) {
 static void open_selected_project(void) {
     const project_catalog_entry_t *entry = project_catalog_get(g_selected);
     if (!entry) { set_notice("Select a project first."); return; }
-    if (!project_catalog_is_valid(entry->path)) {
-        set_notice("Project folder is unavailable or invalid.");
-        project_catalog_remove(g_selected);
-        g_selected = -1;
-        g_selected_path[0] = '\0';
-        return;
-    }
-    char path[PROJECT_CATALOG_PATH_MAX];
+    char path[PROJECT_CATALOG_PATH_MAX], error[160];
     snprintf(path, sizeof(path), "%s", entry->path);
-    project_catalog_add(path);
-    const char *current_path = current_project_get_path();
-    if (current_path != NULL && strcmp(current_path, path) == 0) {
-        app_state_set_screen(APP_SCREEN_EDITOR);
+    if (!project_session_open(path, error, sizeof(error))) {
+        set_notice(error);
+        if (!project_catalog_is_valid(path)) {
+            project_catalog_remove(g_selected);
+            g_selected = -1;
+            g_selected_path[0] = '\0';
+        }
         return;
     }
-    for (int i = 0; i < scene_tabs_count(); i++) {
-        if (scene_tabs_get_dirty(i)) {
-            set_notice("Save or close modified scenes before switching projects.");
-            return;
-        }
-    }
-    current_project_set_path(path);
-    scene_tabs_shutdown();
-    scene_tabs_init();
     app_state_set_screen(APP_SCREEN_EDITOR);
 }
 

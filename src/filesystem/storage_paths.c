@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
@@ -91,7 +105,7 @@ static int shipped_path(const char *name, char *out, size_t cap) {
 
 #if defined(__ANDROID__)
 
-#define ANDROID_STAMP_ASSET "packages/stamp.txt"
+#define ANDROID_STAMP_ASSET "rebax_sources_stamp.txt"
 
 static void android_stamp_path(char *out, size_t cap) {
     snprintf(out, cap, "%s/.setup-stamp", g_root_dir);
@@ -116,19 +130,6 @@ static int android_setup_needed(void) {
     return !same;
 }
 
-static int android_install_package(const char *asset, const char *dest_dir) {
-    char archive[REBAX_PATH_MAX], error[256];
-    snprintf(archive, sizeof(archive), "%s/package.tar.xz", g_temp_export_dir);
-    if (!asset_file_copy(asset, archive)) {
-        fprintf(stderr, "[rebax] FAILED: cannot read the packaged asset '%s'.\n", asset);
-        return 0;
-    }
-    int ok = rebax_archive_install(archive, dest_dir, NULL, NULL, error, sizeof(error));
-    remove(archive);
-    if (!ok) fprintf(stderr, "[rebax] FAILED: cannot install '%s': %s\n", asset, error);
-    return ok;
-}
-
 static void android_copy_node_file(const char *relative, void *user) {
     int *ok = (int *)user;
     char asset[REBAX_PATH_MAX], dest[REBAX_PATH_MAX], parent[REBAX_PATH_MAX];
@@ -141,18 +142,6 @@ static void android_copy_node_file(const char *relative, void *user) {
         rebax_fs_mkdir_p(parent);
     }
     if (!asset_file_copy(asset, dest)) *ok = 0;
-}
-
-typedef struct {
-    char sdk_name[96];
-} android_listing_t;
-
-static void android_find_sdk(const char *name, void *user) {
-    android_listing_t *l = (android_listing_t *)user;
-    size_t n = strlen(name);
-    if (strncmp(name, "sdk-", 4) == 0 && n > 11 && strcmp(name + n - 7, ".tar.xz") == 0 && n < sizeof(l->sdk_name)) {
-        snprintf(l->sdk_name, sizeof(l->sdk_name), "%s", name);
-    }
 }
 
 static void android_copy_tool_file(const char *relative, void *user) {
@@ -170,24 +159,6 @@ static void android_copy_tool_file(const char *relative, void *user) {
 }
 
 static int android_setup(void) {
-    char dest[REBAX_PATH_MAX], asset[REBAX_PATH_MAX];
-    android_listing_t listing;
-    memset(&listing, 0, sizeof(listing));
-    if (!rebax_fs_mkdir_p(g_temp_export_dir)) return 0;
-
-    snprintf(dest, sizeof(dest), "%s/clang", g_toolchains_dir);
-    if (!android_install_package("packages/clang.tar.xz", dest)) return 0;
-
-    asset_file_list("packages/", android_find_sdk, &listing);
-    if (listing.sdk_name[0]) {
-        char id[96];
-        snprintf(id, sizeof(id), "%s", listing.sdk_name + 4);
-        id[strlen(id) - 7] = '\0';
-        snprintf(asset, sizeof(asset), "packages/%s", listing.sdk_name);
-        snprintf(dest, sizeof(dest), "%s/%s", g_sdks_dir, id);
-        if (!android_install_package(asset, dest)) return 0;
-    }
-
     int ok = 1;
     asset_file_list_tree("sdks/rebax/", android_copy_node_file, &ok);
     if (!ok) {

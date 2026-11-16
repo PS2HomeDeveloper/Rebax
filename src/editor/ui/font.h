@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * font.h
  * ============================================================
@@ -43,6 +57,8 @@ font_text_image_t font_render_text(const char *text, font_weight_t weight,
 /* Render text using one RGB color per UTF-8 byte; a NULL color map uses white. */
 font_text_image_t font_render_text_colored(const char *text, font_weight_t weight,
                                             int pixel_size, const unsigned char *rgb_by_byte);
+
+int font_measure_text(const char *text, font_weight_t weight, int pixel_size);
 
 /* Frees a text image produced by font_render_text */
 void font_free_text_image(font_text_image_t *img);

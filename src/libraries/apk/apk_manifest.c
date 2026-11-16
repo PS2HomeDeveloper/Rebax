@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #include "libraries/apk/apk_manifest.h"
 
 #include "libraries/apk/apk_axml.h"
@@ -10,7 +24,7 @@ static void permission(apk_axml_t *a, const char *name) {
     apk_axml_end(a);
 }
 
-int apk_manifest_build(const apk_pack_config_t *cfg, apk_buf_t *out) {
+int apk_manifest_build(const apk_pack_config_t *cfg, byte_buf_t *out) {
     apk_axml_t *a = apk_axml_new();
     if (!a) return 0;
     apk_axml_start(a, "manifest");
@@ -23,6 +37,8 @@ int apk_manifest_build(const apk_pack_config_t *cfg, apk_buf_t *out) {
     apk_axml_attr_int(a, "targetSdkVersion", cfg->target_sdk);
     apk_axml_end(a);
 
+    permission(a, "android.permission.INTERNET");
+    permission(a, "android.permission.ACCESS_NETWORK_STATE");
     permission(a, "android.permission.READ_EXTERNAL_STORAGE");
     permission(a, "android.permission.WRITE_EXTERNAL_STORAGE");
     permission(a, "android.permission.MANAGE_EXTERNAL_STORAGE");
@@ -40,10 +56,10 @@ int apk_manifest_build(const apk_pack_config_t *cfg, apk_buf_t *out) {
     apk_axml_attr_bool(a, "hasCode", 1);
 
     apk_axml_start(a, "activity");
-    apk_axml_attr_string(a, "name", "org.libsdl.app.SDLActivity");
+    apk_axml_attr_string(a, "name", cfg->activity_name != NULL && cfg->activity_name[0] != '\0' ? cfg->activity_name : "org.libsdl.app.SDLActivity");
     apk_axml_attr_bool(a, "exported", 1);
     apk_axml_attr_hex(a, "launchMode", 1);
-    apk_axml_attr_hex(a, "screenOrientation", 0);
+    apk_axml_attr_hex(a, "screenOrientation", cfg->screen_orientation != 0 ? cfg->screen_orientation : 6);
     apk_axml_attr_hex(a, "configChanges", 0x7b0u);
     apk_axml_attr_ref(a, "theme", STYLE_THEME_NOTITLEBAR_FULLSCREEN);
 

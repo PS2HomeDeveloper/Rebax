@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +32,10 @@ static char g_sdk_name[64] = "ps2";
 
 void node_source_use(const char *sdk_name) {
     snprintf(g_sdk_name, sizeof(g_sdk_name), "%s", sdk_name);
+}
+
+int node_source_is_modern(void) {
+    return strcmp(g_sdk_name, "modern") == 0;
 }
 
 #if defined(__ANDROID__)

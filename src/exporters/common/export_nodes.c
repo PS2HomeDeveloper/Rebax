@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Node selection and dependency discovery for native exports. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -197,6 +211,20 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         char sdk_dst[1600];
         snprintf(sdk_dst, sizeof(sdk_dst), "%s/rebax_sdk.h", dest_src_dir);
         if (!node_source_copy("rebax_sdk.h", sdk_dst)) return 0;
+    }
+
+    if (node_source_is_modern()) {
+        static const char *MODERN_RUNTIME_FILES[] = {
+            "scene_runtime.h", "scene_runtime.c", "scene_loader_main.c",
+            "engine_input.h", "engine_input.c", "engine_context.h",
+            "engine_context.c", "embedded_images.h",
+            "asset_image.h", "asset_image.c", "stb_image.h"
+        };
+        for (size_t i = 0; i < sizeof(MODERN_RUNTIME_FILES) / sizeof(MODERN_RUNTIME_FILES[0]); i++) {
+            char dst[1600];
+            snprintf(dst, sizeof(dst), "%s/%s", dest_src_dir, MODERN_RUNTIME_FILES[i]);
+            if (!node_source_copy(MODERN_RUNTIME_FILES[i], dst)) return 0;
+        }
     }
 
     /* engine_context.h - completely independent of g_needs_image_loader (it was

@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #include "libraries/apk/apk_sign.h"
 
 #include <stdio.h>
@@ -138,34 +152,34 @@ void apk_key_close(apk_key_t *k) {
     free(k);
 }
 
-static void put_prefixed(apk_buf_t *b, const apk_buf_t *inner) {
-    apk_buf_u32(b, (uint32_t)inner->size);
-    apk_buf_put(b, inner->data, inner->size);
+static void put_prefixed(byte_buf_t *b, const byte_buf_t *inner) {
+    byte_buf_u32(b, (uint32_t)inner->size);
+    byte_buf_put(b, inner->data, inner->size);
 }
 
-int apk_sign_v2_block(apk_key_t *k, const unsigned char top_digest[32], apk_buf_t *block, char *err, size_t err_cap) {
-    apk_buf_t digest_entry, signed_data, sig_entry, sigs, pub, signer, signers, value;
-    apk_buf_t *all[] = {&digest_entry, &signed_data, &sig_entry, &sigs, &pub, &signer, &signers, &value};
-    for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) apk_buf_init(all[i]);
+int apk_sign_v2_block(apk_key_t *k, const unsigned char top_digest[32], byte_buf_t *block, char *err, size_t err_cap) {
+    byte_buf_t digest_entry, signed_data, sig_entry, sigs, pub, signer, signers, value;
+    byte_buf_t *all[] = {&digest_entry, &signed_data, &sig_entry, &sigs, &pub, &signer, &signers, &value};
+    for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) byte_buf_init(all[i]);
 
-    apk_buf_u32(&digest_entry, ALGO_RSA_PKCS1_SHA256);
-    apk_buf_u32(&digest_entry, 32);
-    apk_buf_put(&digest_entry, top_digest, 32);
+    byte_buf_u32(&digest_entry, ALGO_RSA_PKCS1_SHA256);
+    byte_buf_u32(&digest_entry, 32);
+    byte_buf_put(&digest_entry, top_digest, 32);
 
     {
-        apk_buf_t d, c;
-        apk_buf_init(&d);
-        apk_buf_init(&c);
+        byte_buf_t d, c;
+        byte_buf_init(&d);
+        byte_buf_init(&c);
         put_prefixed(&d, &digest_entry);
-        apk_buf_u32(&c, (uint32_t)k->cert_len);
-        apk_buf_put(&c, k->cert, k->cert_len);
-        apk_buf_u32(&signed_data, (uint32_t)d.size);
-        apk_buf_put(&signed_data, d.data, d.size);
-        apk_buf_u32(&signed_data, (uint32_t)c.size);
-        apk_buf_put(&signed_data, c.data, c.size);
-        apk_buf_u32(&signed_data, 0);
-        apk_buf_free(&d);
-        apk_buf_free(&c);
+        byte_buf_u32(&c, (uint32_t)k->cert_len);
+        byte_buf_put(&c, k->cert, k->cert_len);
+        byte_buf_u32(&signed_data, (uint32_t)d.size);
+        byte_buf_put(&signed_data, d.data, d.size);
+        byte_buf_u32(&signed_data, (uint32_t)c.size);
+        byte_buf_put(&signed_data, c.data, c.size);
+        byte_buf_u32(&signed_data, 0);
+        byte_buf_free(&d);
+        byte_buf_free(&c);
     }
 
     unsigned char hash[32];
@@ -174,22 +188,22 @@ int apk_sign_v2_block(apk_key_t *k, const unsigned char top_digest[32], apk_buf_
     size_t sig_len = 0;
     if (mbedtls_pk_sign(&k->pk, MBEDTLS_MD_SHA256, hash, sizeof(hash), sig, sizeof(sig), &sig_len, mbedtls_ctr_drbg_random, &k->drbg) != 0) {
         set_err(err, err_cap, "signing failed");
-        for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) apk_buf_free(all[i]);
+        for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) byte_buf_free(all[i]);
         return 0;
     }
-    apk_buf_u32(&sig_entry, ALGO_RSA_PKCS1_SHA256);
-    apk_buf_u32(&sig_entry, (uint32_t)sig_len);
-    apk_buf_put(&sig_entry, sig, sig_len);
+    byte_buf_u32(&sig_entry, ALGO_RSA_PKCS1_SHA256);
+    byte_buf_u32(&sig_entry, (uint32_t)sig_len);
+    byte_buf_put(&sig_entry, sig, sig_len);
     put_prefixed(&sigs, &sig_entry);
 
     unsigned char pubder[1024];
     int pub_len = mbedtls_pk_write_pubkey_der(&k->pk, pubder, sizeof(pubder));
     if (pub_len <= 0) {
         set_err(err, err_cap, "cannot encode the public key");
-        for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) apk_buf_free(all[i]);
+        for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) byte_buf_free(all[i]);
         return 0;
     }
-    apk_buf_put(&pub, pubder + sizeof(pubder) - pub_len, (size_t)pub_len);
+    byte_buf_put(&pub, pubder + sizeof(pubder) - pub_len, (size_t)pub_len);
 
     put_prefixed(&signer, &signed_data);
     put_prefixed(&signer, &sigs);
@@ -199,13 +213,13 @@ int apk_sign_v2_block(apk_key_t *k, const unsigned char top_digest[32], apk_buf_
 
     uint64_t pair_len = 4 + (uint64_t)value.size;
     uint64_t block_size = 8 + pair_len + 8 + 16;
-    apk_buf_u64(block, block_size);
-    apk_buf_u64(block, pair_len);
-    apk_buf_u32(block, V2_BLOCK_ID);
-    apk_buf_put(block, value.data, value.size);
-    apk_buf_u64(block, block_size);
-    apk_buf_put(block, "APK Sig Block 42", 16);
+    byte_buf_u64(block, block_size);
+    byte_buf_u64(block, pair_len);
+    byte_buf_u32(block, V2_BLOCK_ID);
+    byte_buf_put(block, value.data, value.size);
+    byte_buf_u64(block, block_size);
+    byte_buf_put(block, "APK Sig Block 42", 16);
 
-    for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) apk_buf_free(all[i]);
+    for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) byte_buf_free(all[i]);
     return !block->failed;
 }

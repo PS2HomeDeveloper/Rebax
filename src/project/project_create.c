@@ -1,70 +1,62 @@
 /*
- * ============================================================
- * project_create.c
- * ============================================================
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
  */
-
-#include <stdio.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
-#if defined(_WIN32)
-#include <direct.h>
-#define REBAX_MKDIR(path, mode) _mkdir(path)
-#else
-#define REBAX_MKDIR(path, mode) mkdir(path, mode)
-#endif
-
-#include <errno.h>
 
 #include "project/project_create.h"
 
-/* Creates a single directory if it doesn't already exist. Returns 1 on success (or
- * if the directory already existed), and 0 on true failure (permissions, etc.) */
-static int ensure_dir(const char *path) {
-    struct stat st;
-    if (stat(path, &st) == 0) {
-        return S_ISDIR(st.st_mode) ? 1 : 0; /* Exists but is a regular file, not a directory -> failure */
-    }
-    if (REBAX_MKDIR(path, 0755) == 0) {
-        return 1;
-    }
-    return (errno == EEXIST) ? 1 : 0;
+#include <stdio.h>
+#include <string.h>
+
+#include "filesystem/rebax_fs.h"
+#include "project/project_file.h"
+
+#define DEFAULT_SCENE "scene_version=1\nnode_count=0\n\n"
+#define DEFAULT_SCENE_FILE "main.rscene"
+
+project_create_result_t project_create(const project_create_options_t *o) {
+    if (o == NULL || o->base_path == NULL || o->base_path[0] == '\0' || project_name_error(o->name) != NULL)
+        return PROJECT_CREATE_ERROR_INVALID_INPUT;
+    if ((unsigned)o->type >= PROJECT_TYPE_COUNT || !dev_system_is_available(o->dev_system))
+        return PROJECT_CREATE_ERROR_INVALID_INPUT;
+
+    char root[1100], path[1200];
+    snprintf(root, sizeof(root), "%s/%s", o->base_path, o->name);
+
+    snprintf(path, sizeof(path), "%s/%s", root, PROJECT_FILE_NAME);
+    if (rebax_fs_exists(path)) return PROJECT_CREATE_ERROR_EXISTS;
+
+    if (!rebax_fs_mkdir_p(root)) return PROJECT_CREATE_ERROR_MKDIR;
+    project_path_assets(root, path, sizeof(path));
+    if (!rebax_fs_mkdir_p(path)) return PROJECT_CREATE_ERROR_MKDIR;
+    project_path_meta(root, path, sizeof(path));
+    if (!rebax_fs_mkdir_p(path)) return PROJECT_CREATE_ERROR_MKDIR;
+
+    snprintf(path, sizeof(path), "%s/%s/%s", root, PROJECT_ASSETS_DIR, DEFAULT_SCENE_FILE);
+    if (!rebax_fs_exists(path) && !rebax_fs_write_atomic(path, DEFAULT_SCENE, strlen(DEFAULT_SCENE)))
+        return PROJECT_CREATE_ERROR_FILE;
+
+    project_settings_t settings;
+    project_settings_defaults(&settings, o->name, o->type, o->dev_system);
+    if (!project_file_save(root, &settings)) return PROJECT_CREATE_ERROR_FILE;
+    return PROJECT_CREATE_OK;
 }
 
-project_create_result_t project_create(const char *project_name, const char *base_path) {
-    if (project_name == NULL || project_name[0] == '\0'
-        || base_path == NULL || base_path[0] == '\0') {
-        return PROJECT_CREATE_ERROR_INVALID_INPUT;
+const char *project_create_error_text(project_create_result_t result) {
+    switch (result) {
+        case PROJECT_CREATE_OK: return "";
+        case PROJECT_CREATE_ERROR_INVALID_INPUT: return "The project name or location is not valid.";
+        case PROJECT_CREATE_ERROR_EXISTS: return "A project already exists in this location.";
+        case PROJECT_CREATE_ERROR_MKDIR: return "Could not create the project folders.";
+        default: return "Could not write the project files.";
     }
-
-    char project_dir[900];
-    snprintf(project_dir, sizeof(project_dir), "%s/%s", base_path, project_name);
-
-    if (!ensure_dir(project_dir)) {
-        return PROJECT_CREATE_ERROR_MKDIR;
-    }
-
-    char assets_dir[1024];
-    snprintf(assets_dir, sizeof(assets_dir), "%s/Assets", project_dir);
-    if (!ensure_dir(assets_dir)) {
-        return PROJECT_CREATE_ERROR_MKDIR;
-    }
-
-    char settings_path[1024];
-    snprintf(settings_path, sizeof(settings_path), "%s/project.rebax", project_dir);
-
-    FILE *f = fopen(settings_path, "w");
-    if (f == NULL) {
-        return PROJECT_CREATE_ERROR_FILE;
-    }
-    fprintf(f, "name=%s\n", project_name);
-    /* Current editor version is 0.1.0. At the first stable 1.0.0 release,
-     * keep a versioned project reader/migration path for earlier formats. */
-    fprintf(f, "engine_version=0.1.0\n");
-    fprintf(f, "project_format=1\n");
-    fclose(f);
-
-    return PROJECT_CREATE_OK;
 }

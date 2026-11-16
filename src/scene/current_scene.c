@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * current_scene.c
  * ============================================================
@@ -11,6 +25,8 @@
 #include <string.h>
 
 #include "scene/current_scene.h"
+#include "filesystem/rebax_fs.h"
+#include "project/editor_state.h"
 #include "scene/scene_data.h"
 #include "editor/panels/properties.h"
 
@@ -85,16 +101,12 @@ int current_scene_save_as(const char *path) {
     int written = scene_data_serialize(buffer, sizeof(buffer));
     if (written < 0) return 0; /* Scene is larger than SCENE_BUFFER_MAX, or format error */
 
-    FILE *f = fopen(path, "wb");
-    if (f == NULL) return 0;
-
-    size_t actually_written = fwrite(buffer, 1, (size_t)written, f);
-    fclose(f);
-    if (actually_written != (size_t)written) return 0;
+    if (!rebax_fs_write_atomic(path, buffer, (size_t)written)) return 0;
 
     strncpy(g_path, path, sizeof(g_path) - 1);
     g_path[sizeof(g_path) - 1] = '\0';
     g_dirty = 0;
+    editor_state_note_scene(g_path);
     return 1;
 }
 
@@ -128,6 +140,7 @@ int current_scene_load(const char *path) {
     strncpy(g_path, path, sizeof(g_path) - 1);
     g_path[sizeof(g_path) - 1] = '\0';
     g_dirty = 0;
+    editor_state_note_scene(g_path);
     return 1;
 }
 
@@ -139,4 +152,5 @@ void current_scene_restore_state(const char *path, int dirty) {
         g_path[0] = '\0';
     }
     g_dirty = dirty;
+    if (g_path[0] != '\0') editor_state_note_scene(g_path);
 }

@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * scene_tabs.c
  * ============================================================
@@ -14,6 +28,8 @@
 #include "scene/current_scene.h"
 #include "scene/scene_data.h"
 #include "editor/panels/properties.h"
+#include "project/current_project.h"
+#include "filesystem/rebax_fs.h"
 
 /* Same as SCENE_BUFFER_MAX in current_scene.c exactly - one scene
  * exported as text at the maximum realistically expected size */
@@ -164,4 +180,51 @@ void scene_tabs_shutdown(void) {
     }
     g_tab_count = 0;
     g_active_index = -1;
+}
+
+static void unique_scene_path(const char *display_name, char *out, size_t size) {
+    char clean[128];
+    size_t n = 0;
+    for (const char *p = display_name; *p != '\0' && n < sizeof(clean) - 1; p++) {
+        char c = *p;
+        clean[n++] = ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') ? c : '_';
+    }
+    clean[n] = '\0';
+    if (clean[0] == '\0') snprintf(clean, sizeof(clean), "scene");
+    const char *root = current_project_get_path();
+    snprintf(out, size, "%s/assets/%s.rscene", root != NULL ? root : ".", clean);
+    for (int i = 2; rebax_fs_exists(out) && i < 1000; i++) {
+        snprintf(out, size, "%s/assets/%s_%d.rscene", root != NULL ? root : ".", clean, i);
+    }
+}
+
+int scene_tabs_save_all(void) {
+    int saved = 0;
+    for (int i = 0; i < g_tab_count; i++) {
+        if (i == g_active_index) {
+            if (current_scene_get_path() != NULL) {
+                if (current_scene_is_dirty() && current_scene_save()) saved++;
+            } else if (scene_data_get_node_count() > 0) {
+                char path[1600];
+                unique_scene_path(current_scene_get_display_name(), path, sizeof(path));
+                if (current_scene_save_as(path)) saved++;
+            }
+            continue;
+        }
+        scene_tab_t *t = &g_tabs[i];
+        if (t->buffer == NULL || t->buffer[0] == '\0') continue;
+        if (t->path == NULL) {
+            if (strstr(t->buffer, "[node ") == NULL) continue;
+            char path[1600];
+            unique_scene_path(t->display_name, path, sizeof(path));
+            t->path = strdup(path);
+        } else if (!t->dirty) {
+            continue;
+        }
+        if (t->path != NULL && rebax_fs_write_atomic(t->path, t->buffer, strlen(t->buffer))) {
+            t->dirty = 0;
+            saved++;
+        }
+    }
+    return saved;
 }

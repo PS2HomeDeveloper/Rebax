@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * Direct PS2 toolchain driver.
  *
  * Replaces make and the ps2sdk Makefile.pref / Makefile.eeglobal /
@@ -70,9 +84,9 @@ static int g_active;
 static int g_parallel;
 static export_shell_step_t g_slots[PS2_MAX_PARALLEL];
 
-static char g_ps2dev[PS2_PATH];
-static char g_ps2sdk[PS2_PATH];
-static char g_gskit[PS2_PATH];
+static char g_toolchain[PS2_PATH];
+static char g_sdk_standard[PS2_PATH];
+static char g_sdk_graphics[PS2_PATH];
 static char *g_saved_path;
 
 /* ---------- string builder ---------- */
@@ -144,9 +158,9 @@ static void sb_argf(sb_t *sb, const char *fmt, const char *a) {
 /* ---------- variable expansion for flag lines ($(NAME) and ${NAME}) ---------- */
 
 static const char *variable_value(const char *name) {
-    if (strcmp(name, "PS2DEV") == 0) return g_ps2dev;
-    if (strcmp(name, "PS2SDK") == 0) return g_ps2sdk;
-    if (strcmp(name, "GSKIT") == 0) return g_gskit;
+    if (strcmp(name, "GCC_PS2") == 0 || strcmp(name, "PS2DEV") == 0) return g_toolchain;
+    if (strcmp(name, "SDK_STANDARD") == 0 || strcmp(name, "PS2SDK") == 0) return g_sdk_standard;
+    if (strcmp(name, "SDK_GRAPHICS") == 0 || strcmp(name, "GSKIT") == 0) return g_sdk_graphics;
     const char *v = getenv(name);
     return v ? v : "";
 }
@@ -205,19 +219,29 @@ static void sb_flag_list(sb_t *sb, const char *const *list, int count) {
     for (int i = 0; i < count; i++) sb_flag_line(sb, list[i]);
 }
 
-/* ---------- tool names (same overridable variables as Makefile.pref) ---------- */
+/* ---------- tool paths (gcc-ps2/<ee|iop|dvp>/bin/<prefix><name>) ---------- */
 
-static void tool_name(char *out, size_t size, const char *override_var,
-                      const char *prefix_var, const char *default_prefix,
-                      const char *suffix) {
-    const char *over = getenv(override_var);
-    if (over != NULL && over[0] != '\0') {
-        snprintf(out, size, "%s", over);
-        return;
-    }
-    const char *prefix = getenv(prefix_var);
-    if (prefix == NULL || prefix[0] == '\0') prefix = default_prefix;
-    snprintf(out, size, "%s%s", prefix, suffix);
+#if defined(_WIN32)
+#define PS2_EXE_SUFFIX ".exe"
+#else
+#define PS2_EXE_SUFFIX ""
+#endif
+
+static int tool_path(char *out, size_t size, const char *group, const char *prefix, const char *name) {
+    snprintf(out, size, "%s/%s/bin/%s%s" PS2_EXE_SUFFIX, g_toolchain, group, prefix, name);
+    if (rebax_fs_exists(out)) return 1;
+    log_push("[build] FAILED: toolchain program is missing:");
+    log_push(out);
+    return 0;
+}
+
+static int require_directory(const char *path, const char *what) {
+    if (rebax_fs_exists(path)) return 1;
+    char line[PS2_PATH + 64];
+    snprintf(line, sizeof(line), "[build] FAILED: %s is missing:", what);
+    log_push(line);
+    log_push(path);
+    return 0;
 }
 
 /* ---------- stages and jobs ---------- */
@@ -270,7 +294,8 @@ static int has_suffix(const char *name, const char *suffix) {
 
 static int classify_source(const char *name) {
     if (has_suffix(name, ".c")) return SRC_C;
-    if (has_suffix(name, ".cc") || has_suffix(name, ".cpp") || has_suffix(name, ".cxx")) return SRC_CXX;
+    if (has_suffix(name, ".cc") || has_suffix(name, ".cpp") || has_suffix(name, ".cxx") ||
+        has_suffix(name, ".cp") || has_suffix(name, ".c++")) return SRC_CXX;
     if (has_suffix(name, ".S")) return SRC_ASM_PP;
     if (has_suffix(name, ".s")) return SRC_ASM;
     return -1;
@@ -311,8 +336,7 @@ static void collect_sources(const char *root, const char *relative, source_t **l
         struct stat st;
         if (stat(full, &st) != 0) continue;
         if (S_ISDIR(st.st_mode)) {
-            if (strcmp(names[i], ".git") == 0 || strcmp(names[i], ".svn") == 0 ||
-                strcmp(names[i], "build") == 0 || strcmp(names[i], "Temp") == 0) continue;
+            if (strcmp(names[i], ".git") == 0 || strcmp(names[i], ".svn") == 0) continue;
             if (skip_dir != NULL && strcmp(child, skip_dir) == 0) continue;
             collect_sources(root, child, list, count, cap, skip_dir);
         } else if (S_ISREG(st.st_mode)) {
@@ -339,12 +363,7 @@ static void sources_free(source_t *list, int count) {
 }
 
 static void object_path(char *out, size_t size, const char *base_dir, const char *relative) {
-    snprintf(out, size, "%s/%s", base_dir, relative);
-    char *dot = strrchr(out, '.');
-    char *slash = strrchr(out, '/');
-    if (dot != NULL && (slash == NULL || dot > slash)) *dot = '\0';
-    size_t n = strlen(out);
-    if (n + 3 <= size) strcpy(out + n, ".o");
+    snprintf(out, size, "%s/%s.o", base_dir, relative);
 }
 
 static void ensure_parent_directory(const char *file_path) {
@@ -360,7 +379,7 @@ static void ensure_parent_directory(const char *file_path) {
     rebax_fs_mkdir_p(dir);
 }
 
-/* ---------- environment (PS2DEV, PS2SDK, GSKIT, PATH) ---------- */
+/* ---------- environment (PATH only) ---------- */
 
 static void set_env(const char *name, const char *value) {
 #if defined(_WIN32)
@@ -370,25 +389,20 @@ static void set_env(const char *name, const char *value) {
 #endif
 }
 
-static void setup_environment(const char *ps2dev_root, const char *ps2sdk_root, const char *gskit_root) {
-    snprintf(g_ps2dev, sizeof(g_ps2dev), "%s", ps2dev_root);
-    if (ps2sdk_root && ps2sdk_root[0]) snprintf(g_ps2sdk, sizeof(g_ps2sdk), "%s", ps2sdk_root);
-    else snprintf(g_ps2sdk, sizeof(g_ps2sdk), "%s/ps2sdk", ps2dev_root);
-    if (gskit_root && gskit_root[0]) snprintf(g_gskit, sizeof(g_gskit), "%s", gskit_root);
-    else snprintf(g_gskit, sizeof(g_gskit), "%s/gsKit", ps2dev_root);
-    set_env("PS2DEV", g_ps2dev);
-    set_env("PS2SDK", g_ps2sdk);
-    set_env("GSKIT", g_gskit);
+static void setup_environment(const ps2_build_config_t *cfg) {
+    snprintf(g_toolchain, sizeof(g_toolchain), "%s", cfg->toolchain_root);
+    snprintf(g_sdk_standard, sizeof(g_sdk_standard), "%s", cfg->sdk_standard_root);
+    snprintf(g_sdk_graphics, sizeof(g_sdk_graphics), "%s", cfg->sdk_graphics_root);
     if (g_saved_path == NULL) {
         const char *current = getenv("PATH");
         g_saved_path = strdup(current ? current : "");
     }
-    char *path = (char *)malloc(strlen(g_saved_path) + PS2_PATH * 5);
+    size_t cap = strlen(g_saved_path) + PS2_PATH * 4;
+    char *path = (char *)malloc(cap);
     if (path == NULL) return;
-    snprintf(path, strlen(g_saved_path) + PS2_PATH * 5,
-             "%s/bin" PS2_PATH_LIST_SEP "%s/ee/bin" PS2_PATH_LIST_SEP "%s/iop/bin"
-             PS2_PATH_LIST_SEP "%s/bin" PS2_PATH_LIST_SEP "%s",
-             g_ps2dev, g_ps2dev, g_ps2dev, g_ps2sdk, g_saved_path);
+    snprintf(path, cap, "%s/ee/bin" PS2_PATH_LIST_SEP "%s/iop/bin" PS2_PATH_LIST_SEP
+             "%s/dvp/bin" PS2_PATH_LIST_SEP "%s",
+             g_toolchain, g_toolchain, g_toolchain, g_saved_path);
     set_env("PATH", path);
     free(path);
 }
@@ -396,7 +410,7 @@ static void setup_environment(const char *ps2dev_root, const char *ps2sdk_root, 
 /* ---------- EE targets (Makefile.eeglobal / Makefile.eeglobal_cpp) ---------- */
 
 typedef struct {
-    char cc[128], cxx[128], as[128], ar[128], strip[128];
+    char cc[PS2_PATH], cxx[PS2_PATH], as[PS2_PATH], ar[PS2_PATH], strip[PS2_PATH];
     sb_t cflags;
     sb_t cxxflags;
     sb_t incs;
@@ -410,20 +424,25 @@ static const char *or_default(const char *value, const char *fallback) {
     return (value != NULL && value[0] != '\0') ? value : fallback;
 }
 
-static void ee_toolset_init(ee_toolset_t *t, const ps2_build_config_t *cfg) {
-    tool_name(t->cc, sizeof(t->cc), "EE_CC", "EE_TOOL_PREFIX", "mips64r5900el-ps2-elf-", "gcc");
-    tool_name(t->cxx, sizeof(t->cxx), "EE_CXX", "EE_TOOL_PREFIX", "mips64r5900el-ps2-elf-", "g++");
-    tool_name(t->as, sizeof(t->as), "EE_AS", "EE_TOOL_PREFIX", "mips64r5900el-ps2-elf-", "as");
-    tool_name(t->ar, sizeof(t->ar), "EE_AR", "EE_TOOL_PREFIX", "mips64r5900el-ps2-elf-", "ar");
-    tool_name(t->strip, sizeof(t->strip), "EE_STRIP", "EE_TOOL_PREFIX", "mips64r5900el-ps2-elf-", "strip");
+static int ee_toolset_init(ee_toolset_t *t, const ps2_build_config_t *cfg) {
+    const char *prefix = "mips64r5900el-ps2-elf-";
+    int found = 1;
+    found &= tool_path(t->cc, sizeof(t->cc), "ee", prefix, "gcc");
+    found &= tool_path(t->cxx, sizeof(t->cxx), "ee", prefix, "g++");
+    found &= tool_path(t->as, sizeof(t->as), "ee", prefix, "as");
+    found &= tool_path(t->ar, sizeof(t->ar), "ee", prefix, "ar");
+    found &= tool_path(t->strip, sizeof(t->strip), "ee", prefix, "strip");
+    if (!found) return 0;
     snprintf(t->opt, sizeof(t->opt), "%s", or_default(cfg->opt_flags, "-O2"));
     const char *warn = or_default(cfg->warn_flags, "-Wall");
     const char *debug = or_default(cfg->debug_flags, "-gdwarf-2 -gz");
 
     sb_init(&t->incs);
     char inc[PS2_PATH];
-    snprintf(inc, sizeof(inc), "-I%s/ee/include", g_ps2sdk); sb_arg(&t->incs, inc);
-    snprintf(inc, sizeof(inc), "-I%s/common/include", g_ps2sdk); sb_arg(&t->incs, inc);
+    snprintf(inc, sizeof(inc), "-I%s/ee/include", g_sdk_standard); sb_arg(&t->incs, inc);
+    snprintf(inc, sizeof(inc), "-I%s/common/include", g_sdk_standard); sb_arg(&t->incs, inc);
+    snprintf(inc, sizeof(inc), "-I%s/libc/include", g_sdk_standard); sb_arg(&t->incs, inc);
+    snprintf(inc, sizeof(inc), "-I%s/include", g_sdk_graphics); sb_arg(&t->incs, inc);
     snprintf(inc, sizeof(inc), "-I%s", cfg->work_dir); sb_arg(&t->incs, inc);
     sb_flag_list(&t->incs, cfg->incs, cfg->inc_count);
 
@@ -443,12 +462,19 @@ static void ee_toolset_init(ee_toolset_t *t, const ps2_build_config_t *cfg) {
 
     sb_init(&t->ldflags);
     char lib[PS2_PATH];
-    snprintf(lib, sizeof(lib), "-L%s/ee/lib", g_ps2sdk); sb_arg(&t->ldflags, lib);
+    snprintf(lib, sizeof(lib), "-B%s/ee/mips64r5900el-ps2-elf/lib/", g_toolchain); sb_arg(&t->ldflags, lib);
+    snprintf(lib, sizeof(lib), "-L%s/ee/mips64r5900el-ps2-elf/lib", g_toolchain); sb_arg(&t->ldflags, lib);
+    snprintf(lib, sizeof(lib), "-B%s/ee/startup/", g_sdk_standard); sb_arg(&t->ldflags, lib);
+    snprintf(lib, sizeof(lib), "-L%s/ee/startup", g_sdk_standard); sb_arg(&t->ldflags, lib);
+    snprintf(lib, sizeof(lib), "-L%s/ee/lib", g_sdk_standard); sb_arg(&t->ldflags, lib);
+    snprintf(lib, sizeof(lib), "-L%s/libc/lib", g_sdk_standard); sb_arg(&t->ldflags, lib);
+    snprintf(lib, sizeof(lib), "-L%s/lib", g_sdk_graphics); sb_arg(&t->ldflags, lib);
     sb_arg(&t->ldflags, "-Wl,-zmax-page-size=128");
     sb_flag_list(&t->ldflags, cfg->ldflags, cfg->ldflag_count);
 
     if (cfg->linkfile != NULL && cfg->linkfile[0] != '\0') snprintf(t->linkfile, sizeof(t->linkfile), "%s", cfg->linkfile);
-    else snprintf(t->linkfile, sizeof(t->linkfile), "%s/ee/startup/linkfile", g_ps2sdk);
+    else snprintf(t->linkfile, sizeof(t->linkfile), "%s/ee/startup/linkfile", g_sdk_standard);
+    return 1;
 }
 
 static void ee_toolset_free(ee_toolset_t *t) {
@@ -472,9 +498,37 @@ static void ee_extra_ldflags(sb_t *sb, const ps2_build_config_t *cfg) {
 }
 
 static int plan_ee(const ps2_build_config_t *cfg) {
+    if (!require_directory(g_sdk_standard, "the PlayStation 2 standard SDK")) return 0;
+    char probe[PS2_PATH];
+    snprintf(probe, sizeof(probe), "%s/ee/include", g_sdk_standard);
+    if (!require_directory(probe, "the standard SDK headers")) return 0;
+    snprintf(probe, sizeof(probe), "%s/libc/include", g_sdk_standard);
+    if (!require_directory(probe, "the standard SDK C library headers")) return 0;
+
+    if (cfg->kind == PS2_BUILD_EE_ELF) {
+        char crt[PS2_PATH * 2];
+        snprintf(crt, sizeof(crt), "%s/ee/startup/crt0.o", g_sdk_standard);
+        if (!rebax_fs_exists(crt)) {
+            log_push("[build] FAILED: the PlayStation 2 SDK does not contain its startup file.");
+            log_pushf("[build] Missing: %s", crt);
+            log_push("[build] The SDK package must ship the startup object built by the PlayStation 2 SDK.");
+            return 0;
+        }
+    }
+
     source_t *sources = NULL;
     int source_count = 0, source_cap = 0;
     collect_sources(cfg->work_dir, "", &sources, &source_count, &source_cap, NULL);
+    {
+        int c_count = 0, cpp_count = 0;
+        for (int i = 0; i < source_count; i++) {
+            if (sources[i].kind == SRC_CXX) cpp_count++;
+            else c_count++;
+        }
+        char summary[128];
+        snprintf(summary, sizeof(summary), "[build] %d C/assembly and %d C++ source files to compile.", c_count, cpp_count);
+        log_push(summary);
+    }
     if (source_count == 0 && cfg->kind != PS2_BUILD_IOPRP) {
         log_push("[build] FAILED: no source files were found.");
         sources_free(sources, source_count);
@@ -482,7 +536,10 @@ static int plan_ee(const ps2_build_config_t *cfg) {
     }
 
     ee_toolset_t t;
-    ee_toolset_init(&t, cfg);
+    if (!ee_toolset_init(&t, cfg)) {
+        sources_free(sources, source_count);
+        return 0;
+    }
     int has_cpp = 0;
     int compile_stage = stage_new();
     int ok = 1;
@@ -539,7 +596,6 @@ static int plan_ee(const ps2_build_config_t *cfg) {
             ok = stage_add(link_stage, label, &cmd);
         } else if (cfg->kind == PS2_BUILD_EE_ERL) {
             sb_arg(&cmd, t.cc);
-            sb_arg(&cmd, "-mno-crt0");
             sb_flag_line(&cmd, t.opt);
             sb_arg(&cmd, "-o");
             sb_arg(&cmd, cfg->output);
@@ -566,6 +622,11 @@ static int plan_ee(const ps2_build_config_t *cfg) {
             }
         } else {
             sb_arg(&cmd, has_cpp ? t.cxx : t.cc);
+            {
+                char crt[PS2_PATH * 2];
+                snprintf(crt, sizeof(crt), "%s/ee/startup/crt0.o", g_sdk_standard);
+                sb_arg(&cmd, crt);
+            }
             char tf[PS2_PATH + 4];
             snprintf(tf, sizeof(tf), "-T%s", t.linkfile);
             sb_arg(&cmd, tf);
@@ -577,6 +638,14 @@ static int plan_ee(const ps2_build_config_t *cfg) {
             if (!has_cpp) ee_extra_ldflags(&cmd, cfg);
             sb_arg(&cmd, "-Wl,--start-group");
             sb_flag_list(&cmd, cfg->libs, cfg->lib_count);
+            if (!cfg->newlib_nano) {
+                sb_arg(&cmd, "-lc");
+                sb_arg(&cmd, "-lcdvd");
+                sb_arg(&cmd, "-lcglue");
+                sb_arg(&cmd, "-lpthread");
+                sb_arg(&cmd, "-lpthreadglue");
+                sb_arg(&cmd, "-lkernel");
+            }
             sb_arg(&cmd, "-Wl,--end-group");
             if (has_cpp) ee_extra_ldflags(&cmd, cfg);
             snprintf(label, sizeof(label), "[LD] %s", name);
@@ -653,11 +722,14 @@ static int plan_ioprp(const ps2_build_config_t *cfg) {
 }
 
 static int plan_iop(const ps2_build_config_t *cfg) {
-    char cc[128], as[128], ar[128], strip_tool[128];
-    tool_name(cc, sizeof(cc), "IOP_CC", "IOP_TOOL_PREFIX", "mipsel-none-elf-", "gcc");
-    tool_name(as, sizeof(as), "IOP_AS", "IOP_TOOL_PREFIX", "mipsel-none-elf-", "as");
-    tool_name(ar, sizeof(ar), "IOP_AR", "IOP_TOOL_PREFIX", "mipsel-none-elf-", "ar");
-    tool_name(strip_tool, sizeof(strip_tool), "IOP_STRIP", "IOP_TOOL_PREFIX", "mipsel-none-elf-", "strip");
+    char cc[PS2_PATH], as[PS2_PATH], ar[PS2_PATH], strip_tool[PS2_PATH];
+    const char *iop_prefix = "mipsel-none-elf-";
+    int iop_found = 1;
+    iop_found &= tool_path(cc, sizeof(cc), "iop", iop_prefix, "gcc");
+    iop_found &= tool_path(as, sizeof(as), "iop", iop_prefix, "as");
+    iop_found &= tool_path(ar, sizeof(ar), "iop", iop_prefix, "ar");
+    iop_found &= tool_path(strip_tool, sizeof(strip_tool), "iop", iop_prefix, "strip");
+    if (!iop_found) return 0;
 
     char version[64], version_cmd[256];
     snprintf(version_cmd, sizeof(version_cmd), "%s -dumpversion", cc);
@@ -684,8 +756,8 @@ static int plan_iop(const ps2_build_config_t *cfg) {
     sb_flag_line(&cflags, debug);
     char inc[PS2_PATH];
     sb_flag_list(&cflags, cfg->incs, cfg->inc_count);
-    snprintf(inc, sizeof(inc), "-I%s/iop/include", g_ps2sdk); sb_arg(&cflags, inc);
-    snprintf(inc, sizeof(inc), "-I%s/common/include", g_ps2sdk); sb_arg(&cflags, inc);
+    snprintf(inc, sizeof(inc), "-I%s/iop/include", g_sdk_standard); sb_arg(&cflags, inc);
+    snprintf(inc, sizeof(inc), "-I%s/common/include", g_sdk_standard); sb_arg(&cflags, inc);
     snprintf(inc, sizeof(inc), "-I%s", cfg->work_dir); sb_arg(&cflags, inc);
     snprintf(inc, sizeof(inc), "-I%s/include", cfg->work_dir); sb_arg(&cflags, inc);
     sb_flag_list(&cflags, cfg->cflags, cfg->cflag_count);
@@ -796,7 +868,7 @@ static int plan_iop(const ps2_build_config_t *cfg) {
     } else if (ok) {
         char linkfile[PS2_PATH], elf[PS2_PATH * 2], stripped[PS2_PATH * 2];
         if (cfg->linkfile != NULL && cfg->linkfile[0] != '\0') snprintf(linkfile, sizeof(linkfile), "%s", cfg->linkfile);
-        else snprintf(linkfile, sizeof(linkfile), "%s/iop/startup/linkfile", g_ps2sdk);
+        else snprintf(linkfile, sizeof(linkfile), "%s/iop/startup/linkfile", g_sdk_standard);
         snprintf(elf, sizeof(elf), "%s", cfg->output);
         char *ext = strstr(elf, ".irx");
         if (ext != NULL) strcpy(ext, ".notiopmod.elf"); else strcat(elf, ".notiopmod.elf");
@@ -905,7 +977,7 @@ int ps2_build_start(const ps2_build_config_t *config) {
     g_failed = 0;
     memset(g_slots, 0, sizeof(g_slots));
 
-    setup_environment(config->ps2dev_root, config->ps2sdk_root, config->gskit_root);
+    setup_environment(config);
     g_parallel = detect_parallel_jobs(config->parallel_jobs);
 
     int ok;

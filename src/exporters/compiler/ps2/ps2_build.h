@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Direct PS2 toolchain driver. Plans and runs compiler/linker commands without make. */
 #ifndef REBAX_PS2_BUILD_H
 #define REBAX_PS2_BUILD_H
@@ -13,9 +27,9 @@ typedef enum {
 
 typedef struct {
     ps2_build_kind_t kind;
-    const char *ps2dev_root;
-    const char *ps2sdk_root;
-    const char *gskit_root;
+    const char *toolchain_root;
+    const char *sdk_standard_root;
+    const char *sdk_graphics_root;
     const char *work_dir;
     const char *output;
 

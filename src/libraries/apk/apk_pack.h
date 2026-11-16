@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #ifndef APK_PACK_H
 #define APK_PACK_H
 
@@ -14,6 +28,8 @@ typedef struct {
     uint32_t version_code;
     uint32_t min_sdk;
     uint32_t target_sdk;
+    uint32_t screen_orientation;
+    const char *activity_name;
 } apk_pack_config_t;
 
 int apk_pack(const apk_pack_config_t *cfg, char *err, size_t err_cap);

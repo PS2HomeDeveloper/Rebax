@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #include <stddef.h>
 
 #include "editor/ui/dialog.h"
@@ -22,8 +36,43 @@ void ui_dialog_draw_backdrop(int window_w, int window_h) {
     if (g_backdrop_tex != NULL) window_draw_texture(g_backdrop_tex, 0, 0, window_w, window_h);
 }
 
+#define FRAME_RADIUS 8
+#define FRAME_BORDER 2
+static window_texture_t *g_frame_tex = NULL;
+static int g_frame_w = 0, g_frame_h = 0;
+
 void ui_dialog_draw_frame(int x, int y, int w, int h) {
-    window_fill_rect(x, y, w, h, UI_COLOR_PANEL_BG.r, UI_COLOR_PANEL_BG.g, UI_COLOR_PANEL_BG.b);
+    if (g_frame_tex == NULL || g_frame_w != w || g_frame_h != h) {
+        if (g_frame_tex != NULL) window_destroy_texture(g_frame_tex);
+        g_frame_tex = NULL;
+        g_frame_w = w;
+        g_frame_h = h;
+        shape_image_t outer = shape_provider_render_rect(w + FRAME_BORDER * 2, h + FRAME_BORDER * 2, FRAME_RADIUS + FRAME_BORDER, 0, 0, 0);
+        shape_image_t inner = shape_provider_render_rect(w, h, FRAME_RADIUS, UI_COLOR_PANEL_BG.r, UI_COLOR_PANEL_BG.g, UI_COLOR_PANEL_BG.b);
+        if (outer.pixels != NULL && inner.pixels != NULL) {
+            for (int row = 0; row < inner.height; row++) {
+                for (int col = 0; col < inner.width; col++) {
+                    unsigned char *src = &inner.pixels[(row * inner.width + col) * 4];
+                    unsigned char *dst = &outer.pixels[((row + FRAME_BORDER) * outer.width + col + FRAME_BORDER) * 4];
+                    if (src[3] == 255) { dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = 255; }
+                    else if (src[3] > 0 && dst[3] > 0) {
+                        int a = src[3];
+                        dst[0] = (unsigned char)((src[0] * a + dst[0] * (255 - a)) / 255);
+                        dst[1] = (unsigned char)((src[1] * a + dst[1] * (255 - a)) / 255);
+                        dst[2] = (unsigned char)((src[2] * a + dst[2] * (255 - a)) / 255);
+                    }
+                }
+            }
+            g_frame_tex = window_create_texture(outer.pixels, outer.width, outer.height);
+        }
+        shape_provider_free_image(&outer);
+        shape_provider_free_image(&inner);
+    }
+    if (g_frame_tex != NULL) {
+        window_draw_texture(g_frame_tex, x - FRAME_BORDER, y - FRAME_BORDER, w + FRAME_BORDER * 2, h + FRAME_BORDER * 2);
+    } else {
+        window_fill_rect(x, y, w, h, UI_COLOR_PANEL_BG.r, UI_COLOR_PANEL_BG.g, UI_COLOR_PANEL_BG.b);
+    }
 }
 
 void ui_dialog_draw_title_left(window_texture_t *title, int title_w, int title_h,
@@ -67,6 +116,9 @@ int ui_dialog_close_button_hit(int mouse_x, int mouse_y, int x, int y, int size)
 
 void ui_dialog_shutdown(void) {
     if (g_backdrop_tex != NULL) window_destroy_texture(g_backdrop_tex);
+    if (g_frame_tex != NULL) window_destroy_texture(g_frame_tex);
+    g_frame_tex = NULL;
+    g_frame_w = g_frame_h = 0;
     if (g_close_bg_tex != NULL) window_destroy_texture(g_close_bg_tex);
     if (g_close_x_tex != NULL) window_destroy_texture(g_close_x_tex);
     g_backdrop_tex = g_close_bg_tex = g_close_x_tex = NULL;

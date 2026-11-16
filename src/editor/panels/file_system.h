@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * file_system_panel.h
  * ============================================================
@@ -14,5 +28,7 @@
 void file_system_panel_update(int x, int y, int w, int h);
 void file_system_panel_draw(int x, int y, int w, int h);
 void file_system_panel_shutdown(void);
+
+void file_system_panel_open_scene(const char *path);
 
 #endif /* FILE_SYSTEM_PANEL_H */

@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * file_manager.c
  * ============================================================
@@ -59,15 +73,15 @@
  * Layout constants
  * ------------------------------------------------------------ */
 #define DIALOG_WIDTH        640
-#define DIALOG_HEIGHT        460
+#define DIALOG_HEIGHT        500
 #define DIALOG_PADDING         16
-#define TITLEBAR_HEIGHT        32
+#define TITLEBAR_HEIGHT        36
 #define CLOSE_BTN_SIZE          22
-#define CRUMB_BAR_HEIGHT        24
-#define TOOLBAR_HEIGHT          30
+#define CRUMB_BAR_HEIGHT        28
+#define TOOLBAR_HEIGHT          34
 #define GRID_TOP_GAP             8
-#define FOOTER_HEIGHT           44
-#define FILENAME_ROW_HEIGHT     32 /* One extra row only in SAVE_FILE mode - the filename field + its label */
+#define FOOTER_HEIGHT           48
+#define FILENAME_ROW_HEIGHT     36 /* One extra row only in SAVE_FILE mode - the filename field + its label */
 
 #define CELL_W                  84
 #define CELL_H                  96
@@ -117,6 +131,7 @@ static int  g_extension_count = 0;
 static char g_root_path[AB_MAX_PATH];
 static char g_root_label[64];
 static char g_current_path[AB_MAX_PATH];
+static int g_skip_input_frames = 0;
 
 static ab_entry_t g_entries[AB_MAX_ENTRIES];
 static int g_entry_count = 0;
@@ -420,7 +435,7 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
             if (callback != NULL) callback(NULL, user_data);
             return 0;
         }
-        snprintf(g_root_path, sizeof(g_root_path), "%s/Assets", project_path);
+        snprintf(g_root_path, sizeof(g_root_path), "%s/assets", project_path);
         struct stat st;
         if (stat(g_root_path, &st) != 0) REBAX_MKDIR(g_root_path, 0755);
         strncpy(g_root_label, "Assets://", sizeof(g_root_label) - 1);
@@ -445,6 +460,9 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
     g_search_field.scroll_offset = 0;
 
     if (root == FILE_MANAGER_ROOT_DEVICE) {
+#if defined(__ANDROID__)
+        load_directory("/storage/emulated/0");
+#else
         struct stat st;
         const char *home = getenv("HOME");
         if (stat("/storage/emulated/0", &st) == 0 && S_ISDIR(st.st_mode)) {
@@ -454,10 +472,12 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
         } else {
             load_directory(g_root_path);
         }
+#endif
     } else {
         load_directory(g_root_path);
     }
 
+    g_skip_input_frames = 2;
     g_is_open = 1;
     return 1;
 }
@@ -543,6 +563,7 @@ static void finish(const char *picked_path) {
 
 void file_manager_update(int window_w, int window_h) {
     if (!g_is_open) return;
+    if (g_skip_input_frames > 0) { g_skip_input_frames--; return; }
 
     int dx = (window_w - DIALOG_WIDTH) / 2;
     int dy = (window_h - DIALOG_HEIGHT) / 2;

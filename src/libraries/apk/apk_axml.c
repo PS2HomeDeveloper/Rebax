@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 #include "libraries/apk/apk_axml.h"
 
 #include <stdlib.h>
@@ -172,7 +186,7 @@ static int cmp_attr(const void *x, const void *y) {
     return ia < ib ? -1 : ia > ib;
 }
 
-static int put_utf16(apk_buf_t *b, const char *s) {
+static int put_utf16(byte_buf_t *b, const char *s) {
     size_t n = strlen(s);
     uint16_t *w = (uint16_t *)malloc((n + 1) * sizeof(uint16_t));
     if (!w) return 0;
@@ -193,16 +207,16 @@ static int put_utf16(apk_buf_t *b, const char *s) {
             w[len++] = (uint16_t)cp;
         }
     }
-    int ok = apk_buf_u16(b, (uint32_t)len);
-    for (size_t i = 0; ok && i < len; i++) ok = apk_buf_u16(b, w[i]);
-    ok = ok && apk_buf_u16(b, 0);
+    int ok = byte_buf_u16(b, (uint32_t)len);
+    for (size_t i = 0; ok && i < len; i++) ok = byte_buf_u16(b, w[i]);
+    ok = ok && byte_buf_u16(b, 0);
     free(w);
     return ok;
 }
 
-static int write_pool(apk_buf_t *out, char **pool, int n) {
-    apk_buf_t body;
-    apk_buf_init(&body);
+static int write_pool(byte_buf_t *out, char **pool, int n) {
+    byte_buf_t body;
+    byte_buf_init(&body);
     uint32_t *offs = (uint32_t *)calloc((size_t)(n ? n : 1), sizeof(uint32_t));
     if (!offs) return 0;
     int ok = 1;
@@ -210,15 +224,15 @@ static int write_pool(apk_buf_t *out, char **pool, int n) {
         offs[i] = (uint32_t)body.size;
         ok = put_utf16(&body, pool[i]);
     }
-    while (ok && (body.size & 3)) ok = apk_buf_u8(&body, 0);
+    while (ok && (body.size & 3)) ok = byte_buf_u8(&body, 0);
     uint32_t start = 28 + 4 * (uint32_t)n;
     uint32_t total = start + (uint32_t)body.size;
-    ok = ok && apk_buf_u16(out, 0x0001) && apk_buf_u16(out, 28) && apk_buf_u32(out, total) && apk_buf_u32(out, (uint32_t)n) &&
-         apk_buf_u32(out, 0) && apk_buf_u32(out, 0) && apk_buf_u32(out, start) && apk_buf_u32(out, 0);
-    for (int i = 0; ok && i < n; i++) ok = apk_buf_u32(out, offs[i]);
-    ok = ok && apk_buf_put(out, body.data, body.size);
+    ok = ok && byte_buf_u16(out, 0x0001) && byte_buf_u16(out, 28) && byte_buf_u32(out, total) && byte_buf_u32(out, (uint32_t)n) &&
+         byte_buf_u32(out, 0) && byte_buf_u32(out, 0) && byte_buf_u32(out, start) && byte_buf_u32(out, 0);
+    for (int i = 0; ok && i < n; i++) ok = byte_buf_u32(out, offs[i]);
+    ok = ok && byte_buf_put(out, body.data, body.size);
     free(offs);
-    apk_buf_free(&body);
+    byte_buf_free(&body);
     return ok;
 }
 
@@ -232,7 +246,7 @@ static int attr_value_type(int kind) {
     }
 }
 
-int apk_axml_finish(apk_axml_t *a, apk_buf_t *out) {
+int apk_axml_finish(apk_axml_t *a, byte_buf_t *out) {
     if (a->failed || a->depth != 0) return 0;
     uint32_t *ids = (uint32_t *)malloc((size_t)(a->nattr ? a->nattr : 1) * sizeof(uint32_t));
     if (!ids) return 0;
@@ -256,32 +270,32 @@ int apk_axml_finish(apk_axml_t *a, apk_buf_t *out) {
     }
     for (int i = 0; i < a->nstr; i++) pool[nid + i] = a->strs[i];
 
-    apk_buf_t body;
-    apk_buf_init(&body);
+    byte_buf_t body;
+    byte_buf_init(&body);
     int ok = write_pool(&body, pool, total);
     if (ok && nid > 0) {
-        ok = apk_buf_u16(&body, 0x0180) && apk_buf_u16(&body, 8) && apk_buf_u32(&body, 8 + 4 * (uint32_t)nid);
-        for (int i = 0; ok && i < nid; i++) ok = apk_buf_u32(&body, ids[i]);
+        ok = byte_buf_u16(&body, 0x0180) && byte_buf_u16(&body, 8) && byte_buf_u32(&body, 8 + 4 * (uint32_t)nid);
+        for (int i = 0; ok && i < nid; i++) ok = byte_buf_u32(&body, ids[i]);
     }
     uint32_t pref = (uint32_t)(nid + pi_prefix), uri = (uint32_t)(nid + pi_uri);
-    ok = ok && apk_buf_u16(&body, 0x0100) && apk_buf_u16(&body, 16) && apk_buf_u32(&body, 24) && apk_buf_u32(&body, 1) &&
-         apk_buf_u32(&body, 0xffffffffu) && apk_buf_u32(&body, pref) && apk_buf_u32(&body, uri);
+    ok = ok && byte_buf_u16(&body, 0x0100) && byte_buf_u16(&body, 16) && byte_buf_u32(&body, 24) && byte_buf_u32(&body, 1) &&
+         byte_buf_u32(&body, 0xffffffffu) && byte_buf_u32(&body, pref) && byte_buf_u32(&body, uri);
     for (int e = 0; ok && e < a->nev; e++) {
         event_t *ev = &a->evs[e];
         uint32_t tag = (uint32_t)(nid + ev->tag);
         if (!ev->start) {
-            ok = apk_buf_u16(&body, 0x0103) && apk_buf_u16(&body, 16) && apk_buf_u32(&body, 24) && apk_buf_u32(&body, 1) &&
-                 apk_buf_u32(&body, 0xffffffffu) && apk_buf_u32(&body, 0xffffffffu) && apk_buf_u32(&body, tag);
+            ok = byte_buf_u16(&body, 0x0103) && byte_buf_u16(&body, 16) && byte_buf_u32(&body, 24) && byte_buf_u32(&body, 1) &&
+                 byte_buf_u32(&body, 0xffffffffu) && byte_buf_u32(&body, 0xffffffffu) && byte_buf_u32(&body, tag);
             continue;
         }
         attr_t *list = (attr_t *)malloc((size_t)(ev->count ? ev->count : 1) * sizeof(attr_t));
         if (!list) { ok = 0; break; }
         memcpy(list, &a->attrs[ev->first], (size_t)ev->count * sizeof(attr_t));
         qsort(list, (size_t)ev->count, sizeof(attr_t), cmp_attr);
-        ok = apk_buf_u16(&body, 0x0102) && apk_buf_u16(&body, 16) && apk_buf_u32(&body, 36 + 20 * (uint32_t)ev->count) && apk_buf_u32(&body, 1) &&
-             apk_buf_u32(&body, 0xffffffffu) && apk_buf_u32(&body, 0xffffffffu) && apk_buf_u32(&body, tag) &&
-             apk_buf_u16(&body, 20) && apk_buf_u16(&body, 20) && apk_buf_u16(&body, (uint32_t)ev->count) &&
-             apk_buf_u16(&body, 0) && apk_buf_u16(&body, 0) && apk_buf_u16(&body, 0);
+        ok = byte_buf_u16(&body, 0x0102) && byte_buf_u16(&body, 16) && byte_buf_u32(&body, 36 + 20 * (uint32_t)ev->count) && byte_buf_u32(&body, 1) &&
+             byte_buf_u32(&body, 0xffffffffu) && byte_buf_u32(&body, 0xffffffffu) && byte_buf_u32(&body, tag) &&
+             byte_buf_u16(&body, 20) && byte_buf_u16(&body, 20) && byte_buf_u16(&body, (uint32_t)ev->count) &&
+             byte_buf_u16(&body, 0) && byte_buf_u16(&body, 0) && byte_buf_u16(&body, 0);
         for (int k = 0; ok && k < ev->count; k++) {
             attr_t *t = &list[k];
             uint32_t name_idx;
@@ -295,15 +309,15 @@ int apk_axml_finish(apk_axml_t *a, apk_buf_t *out) {
             uint32_t ns = t->id ? uri : 0xffffffffu;
             uint32_t raw = t->kind == K_STR ? (uint32_t)(nid + t->sidx) : 0xffffffffu;
             uint32_t data = t->kind == K_STR ? raw : t->val;
-            ok = apk_buf_u32(&body, ns) && apk_buf_u32(&body, name_idx) && apk_buf_u32(&body, raw) &&
-                 apk_buf_u16(&body, 8) && apk_buf_u8(&body, 0) && apk_buf_u8(&body, (uint32_t)attr_value_type(t->kind)) && apk_buf_u32(&body, data);
+            ok = byte_buf_u32(&body, ns) && byte_buf_u32(&body, name_idx) && byte_buf_u32(&body, raw) &&
+                 byte_buf_u16(&body, 8) && byte_buf_u8(&body, 0) && byte_buf_u8(&body, (uint32_t)attr_value_type(t->kind)) && byte_buf_u32(&body, data);
         }
         free(list);
     }
-    ok = ok && apk_buf_u16(&body, 0x0101) && apk_buf_u16(&body, 16) && apk_buf_u32(&body, 24) && apk_buf_u32(&body, 1) &&
-         apk_buf_u32(&body, 0xffffffffu) && apk_buf_u32(&body, pref) && apk_buf_u32(&body, uri);
-    ok = ok && apk_buf_u16(out, 0x0003) && apk_buf_u16(out, 8) && apk_buf_u32(out, (uint32_t)body.size + 8) && apk_buf_put(out, body.data, body.size);
-    apk_buf_free(&body);
+    ok = ok && byte_buf_u16(&body, 0x0101) && byte_buf_u16(&body, 16) && byte_buf_u32(&body, 24) && byte_buf_u32(&body, 1) &&
+         byte_buf_u32(&body, 0xffffffffu) && byte_buf_u32(&body, pref) && byte_buf_u32(&body, uri);
+    ok = ok && byte_buf_u16(out, 0x0003) && byte_buf_u16(out, 8) && byte_buf_u32(out, (uint32_t)body.size + 8) && byte_buf_put(out, body.data, body.size);
+    byte_buf_free(&body);
     free(pool);
     free(ids);
     return ok && !out->failed;

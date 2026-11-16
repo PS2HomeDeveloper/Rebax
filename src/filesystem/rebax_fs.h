@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * rebax_fs.h
  * ============================================================
@@ -20,6 +34,8 @@
 
 #ifndef REBAX_FS_H
 #define REBAX_FS_H
+
+#include <stddef.h>
 
 /* Creates a directory and any missing parent directories (like mkdir -p) - returns 1
  * on success or if it already existed, 0 on actual failure */
@@ -58,5 +74,7 @@ void rebax_fs_basename_no_ext(const char *path, char *out, int out_size);
 /* Returns a pointer to the start of the extension inside path itself (after the last dot, without the dot) - or NULL if there is no extension. Does not copy, points inside the path itself */
 const char *rebax_fs_extension(const char *path);
 
+/* Writes the whole file through a temporary file and a rename, so a crash never leaves a half written file. Returns 1 on success */
+int rebax_fs_write_atomic(const char *path, const void *data, size_t size);
 
 #endif /* REBAX_FS_H */

@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * properties_panel.c
  * ============================================================
@@ -31,8 +45,8 @@
 #include "editor/ui/scrollbar.h"
 #include "filesystem/path_utils.h"
 
-#define ROW_HEIGHT      22
-#define HEADER_HEIGHT   28
+#define ROW_HEIGHT      26
+#define HEADER_HEIGHT   32
 #define ROW_PAD          8
 #define FIELD_WIDTH     90 /* Display the value field/button, aligned to the right edge */
 #define FIELD_VPAD       3 /* Vertical margin between the field and its row bounds */

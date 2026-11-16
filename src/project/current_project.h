@@ -1,25 +1,30 @@
 /*
- * ============================================================
- * current_project.h
- * ============================================================
- * Stores the path of the currently open project in program memory (RAM) -
- * not a disk file, just runtime state. Filled once after successful project
- * creation (project_create), and any panel that needs to know "where is the
- * open project?" (the filesystem, later save/load scenes) asks here.
- * ============================================================
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
  */
 
 #ifndef CURRENT_PROJECT_H
 #define CURRENT_PROJECT_H
 
-/* Sets the root path of the currently open project (the full path to the
- * project folder itself, not the Assets subfolder) */
-void current_project_set_path(const char *root_path);
+#include "project/project_file.h"
 
-/* Returns the path of the currently open project, or NULL if no project is open */
+void current_project_set(const char *root_path, const project_settings_t *settings);
+
+void current_project_clear(void);
+
 const char *current_project_get_path(void);
 
-/* Returns 1 if a project is currently open, 0 otherwise */
+const project_settings_t *current_project_get_settings(void);
+
 int current_project_is_open(void);
 
-#endif /* CURRENT_PROJECT_H */
+#endif

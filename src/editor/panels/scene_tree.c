@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Scene tree display panel. Data and saving are in scene_data, general rendering in ui_tree. */
 #include "editor/panels/scene_tree.h"
 #include "scene/scene_data.h"
@@ -8,7 +22,7 @@
 #include "editor/dialogs/add_node.h"
 #include "platform/common/window.h"
 
-#define HEADER_HEIGHT 28
+#define HEADER_HEIGHT 32
 
 static ui_tree_t g_tree;
 static ui_tree_item_t g_items[SCENE_DATA_MAX_NODES];

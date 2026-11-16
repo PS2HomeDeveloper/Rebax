@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * font.c
  * ============================================================
@@ -60,6 +74,8 @@ int font_init(void) {
     return 1;
 }
 
+#define FONT_SIZE_BOOST 4
+
 static font_text_image_t font_render_text_internal(const char *text, font_weight_t weight,
                                                     int pixel_size,
                                                     const unsigned char *rgb_by_byte) {
@@ -68,6 +84,7 @@ static font_text_image_t font_render_text_internal(const char *text, font_weight
     if (!g_initialized || text == NULL || pixel_size <= 0) {
         return out;
     }
+    pixel_size += FONT_SIZE_BOOST;
 
     stbtt_fontinfo *font = (weight == FONT_WEIGHT_BOLD) ? &g_font_bold : &g_font_regular;
     float scale = stbtt_ScaleForPixelHeight(font, (float)pixel_size);
@@ -152,6 +169,20 @@ font_text_image_t font_render_text(const char *text, font_weight_t weight, int p
 font_text_image_t font_render_text_colored(const char *text, font_weight_t weight,
                                             int pixel_size, const unsigned char *rgb_by_byte) {
     return font_render_text_internal(text, weight, pixel_size, rgb_by_byte);
+}
+
+int font_measure_text(const char *text, font_weight_t weight, int pixel_size) {
+    if (!g_initialized || text == NULL || pixel_size <= 0) return 0;
+    stbtt_fontinfo *font = (weight == FONT_WEIGHT_BOLD) ? &g_font_bold : &g_font_regular;
+    float scale = stbtt_ScaleForPixelHeight(font, (float)(pixel_size + FONT_SIZE_BOOST));
+    int len = (int)strlen(text), total = 0;
+    for (int i = 0; i < len; i++) {
+        int advance, lsb;
+        stbtt_GetCodepointHMetrics(font, (unsigned char)text[i], &advance, &lsb);
+        total += (int)(advance * scale);
+        if (i + 1 < len) total += (int)(stbtt_GetCodepointKernAdvance(font, (unsigned char)text[i], (unsigned char)text[i + 1]) * scale);
+    }
+    return total;
 }
 
 void font_free_text_image(font_text_image_t *img) {

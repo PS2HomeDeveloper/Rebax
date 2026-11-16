@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * project_dialog.c
  * ============================================================
@@ -18,6 +32,9 @@
 #include "project/current_project.h"
 #include "project/project_create.h"
 #include "project/project_catalog.h"
+#include "project/project_file.h"
+#include "project/project_types.h"
+#include "editor/core/project_session.h"
 #include "editor/panels/scene_tabs.h"
 #include "editor/ui/loading_screen.h"
 #include "editor/panels/file_manager.h" /* Browse button opens the built-in file browser instead of relying on an external system dialog */
@@ -25,14 +42,14 @@
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
 
-#define DIALOG_WIDTH   420
-#define DIALOG_HEIGHT  240
+#define DIALOG_WIDTH   520
+#define DIALOG_HEIGHT  428
 #define DIALOG_PADDING 24
-#define FIELD_HEIGHT   28
+#define FIELD_HEIGHT   32
 #define LABEL_FONT_SIZE 15
 #define FIELD_FONT_SIZE 16
 #define TITLE_FONT_SIZE 18
-#define TITLEBAR_HEIGHT 40
+#define TITLEBAR_HEIGHT 44
 #define CLOSE_BTN_SIZE 22
 
 /* Colors for the path validation message (green = valid, red = invalid) */
@@ -48,6 +65,26 @@ static text_field_t g_path_field;
 /* Validation state of the entered path - updated every frame during typing */
 static int g_path_valid = 0;
 static int g_scene_switch_blocked = 0;
+static const char *g_create_error = NULL;
+static char g_last_name[TEXT_FIELD_MAX_LEN];
+static char g_last_path[TEXT_FIELD_MAX_LEN];
+
+#define CHIP_HEIGHT 32
+#define CHIP_GAP 8
+static project_type_t g_type = PROJECT_TYPE_MODERN;
+static dev_system_t g_dev = DEV_SYSTEM_NODES;
+static window_texture_t *g_type_tex[PROJECT_TYPE_COUNT];
+static int g_type_w[PROJECT_TYPE_COUNT], g_type_h[PROJECT_TYPE_COUNT];
+static window_texture_t *g_dev_tex[DEV_SYSTEM_COUNT];
+static int g_dev_w[DEV_SYSTEM_COUNT], g_dev_h[DEV_SYSTEM_COUNT];
+static window_texture_t *g_soon_tex = NULL;
+static int g_soon_w = 0, g_soon_h = 0;
+static window_texture_t *g_label_type_tex = NULL;
+static int g_label_type_w = 0, g_label_type_h = 0;
+static window_texture_t *g_label_dev_tex = NULL;
+static int g_label_dev_w = 0, g_label_dev_h = 0;
+#define TYPE_ROW_Y 248
+#define DEV_ROW_Y 320
 static const char *g_path_message = "";
 
 /* Cached image of the validation message - redrawn only if the message or its validity
@@ -96,6 +133,14 @@ static void ensure_ready(void) {
     g_label_path_tex = ui_make_text_texture("Project path", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE,
                                           &g_label_path_w, &g_label_path_h);
 
+    g_label_type_tex = ui_make_text_texture("Project type", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE, &g_label_type_w, &g_label_type_h);
+    g_label_dev_tex = ui_make_text_texture("Development system", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE, &g_label_dev_w, &g_label_dev_h);
+    for (int i = 0; i < PROJECT_TYPE_COUNT; i++)
+        g_type_tex[i] = ui_make_text_texture(project_type_label((project_type_t)i), FONT_WEIGHT_REGULAR, 14, &g_type_w[i], &g_type_h[i]);
+    for (int i = 0; i < DEV_SYSTEM_COUNT; i++)
+        g_dev_tex[i] = ui_make_text_texture(dev_system_label((dev_system_t)i), FONT_WEIGHT_REGULAR, 14, &g_dev_w[i], &g_dev_h[i]);
+    g_soon_tex = ui_make_text_texture("soon", FONT_WEIGHT_REGULAR, 11, &g_soon_w, &g_soon_h);
+
     ui_make_blue_button("Browse", LABEL_FONT_SIZE, &g_browse_btn, &g_browse_btn_tex, &g_browse_txt_tex);
     ui_make_blue_button("Cancel", LABEL_FONT_SIZE, &g_cancel_btn, &g_cancel_btn_tex, &g_cancel_txt_tex);
     ui_make_blue_button("Create", LABEL_FONT_SIZE, &g_create_btn, &g_create_btn_tex, &g_create_txt_tex);
@@ -104,6 +149,10 @@ static void ensure_ready(void) {
 void project_dialog_open(void) {
     ensure_ready();
     g_scene_switch_blocked = 0;
+    g_create_error = NULL;
+    g_last_name[0] = g_last_path[0] = '\0';
+    g_type = PROJECT_TYPE_MODERN;
+    g_dev = DEV_SYSTEM_NODES;
     g_is_open = 1;
 }
 
@@ -137,9 +186,21 @@ static int path_is_writable_ancestor(const char *path) {
 
 /* Updates g_path_valid and g_path_message based on the current path field contents - called every frame while the dialog is open */
 static void update_path_validation(void) {
-    if (g_scene_switch_blocked) {
+    if (strcmp(g_last_name, g_name_field.text) != 0 || strcmp(g_last_path, g_path_field.text) != 0) {
+        g_create_error = NULL;
+        g_scene_switch_blocked = 0;
+        snprintf(g_last_name, sizeof(g_last_name), "%s", g_name_field.text);
+        snprintf(g_last_path, sizeof(g_last_path), "%s", g_path_field.text);
+    }
+    if (g_create_error != NULL) {
+        g_path_valid = 0;
+        g_path_message = g_create_error;
+    } else if (g_scene_switch_blocked) {
         g_path_valid = 0;
         g_path_message = "Save or close modified scenes before creating another project";
+    } else if (g_name_field.text[0] != '\0' && project_name_error(g_name_field.text) != NULL) {
+        g_path_valid = 0;
+        g_path_message = project_name_error(g_name_field.text);
     } else if (g_path_field.text[0] == '\0') {
         g_path_valid = 0;
         g_path_message = "Enter a project path";
@@ -168,6 +229,20 @@ static void on_browse_result(const char *path, void *user_data) {
     update_path_validation();
 }
 
+static void chip_rect(int index, int count, int field_x, int field_w, int row_y, int *x, int *w) {
+    *w = (field_w - CHIP_GAP * (count - 1)) / count;
+    *x = field_x + index * (*w + CHIP_GAP);
+    (void)row_y;
+}
+
+static void draw_chip(window_texture_t *tex, int tw, int th, int x, int y, int w, int selected, int enabled) {
+    unsigned char r = selected ? 0x3B : 0x2A, g = selected ? 0x5B : 0x2C, b = selected ? 0x74 : 0x30;
+    window_fill_rect(x, y, w, CHIP_HEIGHT, r, g, b);
+    if (tex == NULL) return;
+    unsigned char c = enabled ? 0xF0 : 0x80;
+    window_draw_texture_tinted(tex, x + (w - tw) / 2, y + (CHIP_HEIGHT - th) / 2, tw, th, c, c, c);
+}
+
 void project_dialog_update(int window_w, int window_h) {
     if (!g_is_open) {
         return;
@@ -189,8 +264,8 @@ void project_dialog_update(int window_w, int window_h) {
     int field_x = dx + DIALOG_PADDING;
     int field_w = DIALOG_WIDTH - DIALOG_PADDING * 2;
 
-    int name_field_y = dy + 64;
-    int path_field_y = dy + 128;
+    int name_field_y = dy + 80;
+    int path_field_y = dy + 148;
 
     /* The path field is slightly narrower to leave room for the Browse button beside it */
     int path_field_w = field_w - g_browse_btn.width - 8;
@@ -221,6 +296,21 @@ void project_dialog_update(int window_w, int window_h) {
         }
     }
 
+    if (window_mouse_left_just_pressed()) {
+        int mx = window_mouse_x(), my = window_mouse_y();
+        for (int i = 0; i < PROJECT_TYPE_COUNT; i++) {
+            int cx, cw;
+            chip_rect(i, PROJECT_TYPE_COUNT, field_x, field_w, 0, &cx, &cw);
+            if (mx >= cx && mx < cx + cw && my >= dy + TYPE_ROW_Y && my < dy + TYPE_ROW_Y + CHIP_HEIGHT) g_type = (project_type_t)i;
+        }
+        for (int i = 0; i < DEV_SYSTEM_COUNT; i++) {
+            int cx, cw;
+            chip_rect(i, DEV_SYSTEM_COUNT, field_x, field_w, 0, &cx, &cw);
+            if (mx >= cx && mx < cx + cw && my >= dy + DEV_ROW_Y && my < dy + DEV_ROW_Y + CHIP_HEIGHT
+                && dev_system_is_available((dev_system_t)i)) g_dev = (dev_system_t)i;
+        }
+    }
+
     int create_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_create_btn.width;
     int cancel_x = create_x - 8 - g_cancel_btn.width;
     int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
@@ -243,9 +333,8 @@ void project_dialog_update(int window_w, int window_h) {
         if (mx >= create_x && mx < create_x + g_create_btn.width
             && my >= buttons_y && my < buttons_y + g_create_btn.height) {
             if (g_name_field.text[0] != '\0' && g_path_valid) {
-                char full_path[600];
-                snprintf(full_path, sizeof(full_path), "%s/%s",
-                         g_path_field.text, g_name_field.text);
+                char full_path[1100];
+                snprintf(full_path, sizeof(full_path), "%s/%s", g_path_field.text, g_name_field.text);
                 const char *previous_project = current_project_get_path();
                 int switching_project = previous_project != NULL && strcmp(previous_project, full_path) != 0;
                 if (switching_project) {
@@ -257,16 +346,14 @@ void project_dialog_update(int window_w, int window_h) {
                         }
                     }
                 }
-                project_create_result_t result =
-                    project_create(g_name_field.text, g_path_field.text);
-                if (result == PROJECT_CREATE_OK) {
-                    if (switching_project && scene_tabs_count() > 0) {
-                        scene_tabs_shutdown();
-                        scene_tabs_init();
-                    }
-                    current_project_set_path(full_path);
-                    project_catalog_add(full_path);
-
+                project_create_options_t options = {g_name_field.text, g_path_field.text, g_type, g_dev};
+                project_create_result_t result = project_create(&options);
+                char error[160];
+                if (result != PROJECT_CREATE_OK) {
+                    g_create_error = project_create_error_text(result);
+                } else if (!project_session_open(full_path, error, sizeof(error))) {
+                    g_create_error = "The project was created but could not be opened.";
+                } else {
                     g_is_open = 0;
                     g_name_field.focused = 0;
                     g_path_field.focused = 0;
@@ -294,8 +381,8 @@ void project_dialog_draw(int window_w, int window_h) {
 
     int field_x = dx + DIALOG_PADDING;
     int field_w = DIALOG_WIDTH - DIALOG_PADDING * 2;
-    int name_field_y = dy + 64;
-    int path_field_y = dy + 128;
+    int name_field_y = dy + 80;
+    int path_field_y = dy + 148;
     int path_field_w = field_w - g_browse_btn.width - 8;
 
     /* Label "Project name" directly above its field */
@@ -322,6 +409,24 @@ void project_dialog_draw(int window_w, int window_h) {
                              browse_x + g_browse_btn.text_offset_x,
                              browse_y + g_browse_btn.text_offset_y,
                              g_browse_btn.text_img.width, g_browse_btn.text_img.height);
+    }
+
+    if (g_label_type_tex != NULL)
+        window_draw_texture(g_label_type_tex, field_x, dy + TYPE_ROW_Y - g_label_type_h - 4, g_label_type_w, g_label_type_h);
+    for (int i = 0; i < PROJECT_TYPE_COUNT; i++) {
+        int cx, cw;
+        chip_rect(i, PROJECT_TYPE_COUNT, field_x, field_w, 0, &cx, &cw);
+        draw_chip(g_type_tex[i], g_type_w[i], g_type_h[i], cx, dy + TYPE_ROW_Y, cw, g_type == (project_type_t)i, 1);
+    }
+    if (g_label_dev_tex != NULL)
+        window_draw_texture(g_label_dev_tex, field_x, dy + DEV_ROW_Y - g_label_dev_h - 4, g_label_dev_w, g_label_dev_h);
+    for (int i = 0; i < DEV_SYSTEM_COUNT; i++) {
+        int cx, cw, ok = dev_system_is_available((dev_system_t)i);
+        chip_rect(i, DEV_SYSTEM_COUNT, field_x, field_w, 0, &cx, &cw);
+        draw_chip(g_dev_tex[i], g_dev_w[i], g_dev_h[i], cx, dy + DEV_ROW_Y, cw, g_dev == (dev_system_t)i, ok);
+        if (!ok && g_soon_tex != NULL)
+            window_draw_texture_tinted(g_soon_tex, cx + cw - g_soon_w - 6, dy + DEV_ROW_Y + CHIP_HEIGHT - g_soon_h - 2,
+                                       g_soon_w, g_soon_h, 0xD0, 0xA0, 0x50);
     }
 
     /* Path validation message - redrawn only if it actually changed */
@@ -382,6 +487,14 @@ void project_dialog_shutdown(void) {
     if (g_create_btn_tex) window_destroy_texture(g_create_btn_tex);
     if (g_create_txt_tex) window_destroy_texture(g_create_txt_tex);
     if (g_path_msg_tex) window_destroy_texture(g_path_msg_tex);
+    if (g_label_type_tex) window_destroy_texture(g_label_type_tex);
+    if (g_label_dev_tex) window_destroy_texture(g_label_dev_tex);
+    if (g_soon_tex) window_destroy_texture(g_soon_tex);
+    for (int i = 0; i < PROJECT_TYPE_COUNT; i++) if (g_type_tex[i]) window_destroy_texture(g_type_tex[i]);
+    for (int i = 0; i < DEV_SYSTEM_COUNT; i++) if (g_dev_tex[i]) window_destroy_texture(g_dev_tex[i]);
+    memset(g_type_tex, 0, sizeof(g_type_tex));
+    memset(g_dev_tex, 0, sizeof(g_dev_tex));
+    g_soon_tex = g_label_type_tex = g_label_dev_tex = NULL;
 
     labeled_button_free(&g_browse_btn);
     labeled_button_free(&g_cancel_btn);

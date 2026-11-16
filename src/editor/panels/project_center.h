@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * project_center.h
  * ============================================================
@@ -25,7 +39,7 @@ typedef struct {
 } ui_rect_t;
 
 /* --- Layout constants, in pixels - change them here only to modify the overall look --- */
-#define UI_SEARCHBAR_HEIGHT   56  /* Top bar height (search bar) */
+#define UI_SEARCHBAR_HEIGHT   60  /* Top bar height (search bar) */
 #define UI_RIGHT_PANEL_WIDTH  220 /* Width of the gray side bar (buttons) */
 #define UI_PANEL_GAP          16  /* Gap between the black box and the gray bar */
 

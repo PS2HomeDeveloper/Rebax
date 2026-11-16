@@ -1,630 +1,299 @@
 /*
- * ============================================================
- * export_dialog.c
- * ============================================================
- * See export_dialog.h for general documentation. Exactly the same approach as
- * project_dialog.c (fields, buttons, integrated folder browser, X close button
- * from file_manager) — no reinventing any new patterns.
- * ============================================================
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) | _| | _ \ / _ \   \  /
+ * |  _ <| |___| |_) / ___ \  /  \
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(__APPLE__)
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-#define EXPORT_UNSUPPORTED 1
-#endif
-#endif
-
 #include "editor/dialogs/export.h"
 #include "platform/common/window.h"
-#include "editor/ui/labeled_button.h"
 #include "editor/ui/font.h"
 #include "editor/ui/text_field.h"
-#include "editor/panels/file_manager.h"
-#include "editor/ui/shape_provider.h"
 #include "editor/ui/theme.h"
-#include "exporters/compiler/ps2/ps2_exporter.h"
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/labeled_button.h"
+#include "editor/panels/file_manager.h"
+#include "editor/panels/scene_tabs.h"
+#include "exporters/compiler/ps2/ps2_exporter.h"
+#include "exporters/compiler/modern/modern_exporter.h"
+#include "project/current_project.h"
+#include "project/project_types.h"
+#include "packages/package_manager.h"
 #include "platform/android/storage.h"
 
-#define DIALOG_WIDTH    620
-#define DIALOG_HEIGHT   460
-#define DIALOG_PADDING  24
-#define FIELD_HEIGHT    28
-#define LABEL_FONT_SIZE 15
-#define FIELD_FONT_SIZE 16
-#define TITLE_FONT_SIZE 18
-#define TITLEBAR_HEIGHT 40
-#define CLOSE_BTN_SIZE  24
-#define RADIO_SIZE      16
-#define LOG_VISIBLE_LINES 22
-#define LOG_LINE_FONT_SIZE 12
+#define PAGE_W 1040
+#define PAGE_H 650
+#define PAD 24
+#define CARD_W 142
+#define CARD_H 84
+#define CARD_GAP 10
+#define FIELD_H 32
+#define LOG_LINES 28
+#define LOG_SHOWN 18
+#define PLATFORM_COUNT 7
+#define MODERN_COUNT 5
+#define BTN_FONT 15
+#define BTN_GAP 10
 
-static int g_is_open = 0;
-static int g_ready = 0;
-
-#if defined(EXPORT_UNSUPPORTED)
-#define NOTICE_FONT_SIZE (LABEL_FONT_SIZE + 4)
-#define NOTICE_LINE_COUNT 7
-
-static const char *const NOTICE_TITLE = "Export is not supported on iOS";
-static const char *const NOTICE_LINES[NOTICE_LINE_COUNT] = {
-    "iOS does not allow apps to run other programs,",
-    "so the export toolchains cannot run.",
-    "",
-    "You can still create and edit your project here.",
-    "To export, copy the project folder to a PC, Mac",
-    "or Linux computer and export it from there.",
-    ""
+typedef struct { const char *id; const char *label; int package_id; unsigned project_flag; int modern; } export_platform_t;
+static const export_platform_t g_platforms[PLATFORM_COUNT] = {
+    {"android", "Android", 0, PROJECT_PLATFORM_ANDROID, 1},
+    {"linux", "Linux", 1, PROJECT_PLATFORM_LINUX, 1},
+    {"windows", "Windows", 2, PROJECT_PLATFORM_WINDOWS, 1},
+    {"macos", "macOS", 3, PROJECT_PLATFORM_MACOS, 1},
+    {"ios", "iOS", 4, PROJECT_PLATFORM_IOS, 1},
+    {"ps2", "PlayStation 2", 5, 0, 0},
+    {"ps1", "PlayStation 1", 6, 0, 0}
 };
+static const char *const g_android_arches[] = {"arm64-v8a", "armeabi-v7a", "x86", "x86_64"};
+static const char *const g_desktop_arches[] = {"arm64", "arm", "x86", "x86_64"};
 
-static window_texture_t *g_notice_title_tex = NULL;
-static int g_notice_title_w = 0, g_notice_title_h = 0;
-static window_texture_t *g_notice_line_tex[NOTICE_LINE_COUNT];
-static int g_notice_line_w[NOTICE_LINE_COUNT];
-static int g_notice_line_h[NOTICE_LINE_COUNT];
-static labeled_button_t g_close_btn;
-static window_texture_t *g_close_btn_tex = NULL;
-static window_texture_t *g_close_txt_tex = NULL;
+typedef struct { labeled_button_t b; window_texture_t *bg; window_texture_t *tx; } btn_t;
+enum { B_EXPORT, B_CANCEL, B_CLOSE, B_DETAILS, B_HIDE, B_BROWSE, B_DEBUG_ON, B_DEBUG_OFF, B_RELEASE_ON, B_RELEASE_OFF, B_COUNT };
+static const char *const g_btn_labels[B_COUNT] = {"Export", "Cancel", "Close", "Details", "Hide details", "Browse", "Debug", "Debug", "Release", "Release"};
+static const int g_btn_blue[B_COUNT] = {1, 0, 0, 0, 1, 1, 1, 0, 1, 0};
+static btn_t g_btn[B_COUNT];
 
-static window_texture_t *make_notice_texture(const char *text, font_weight_t weight,
-                                              unsigned char r, unsigned char g, unsigned char b,
-                                              int *out_w, int *out_h) {
-    size_t n = strlen(text);
-    if (n == 0) return NULL;
-    unsigned char *rgb = (unsigned char *)malloc(n * 3);
-    if (rgb == NULL) return NULL;
-    for (size_t i = 0; i < n; i++) { rgb[i * 3] = r; rgb[i * 3 + 1] = g; rgb[i * 3 + 2] = b; }
-    font_text_image_t img = font_render_text_colored(text, weight, NOTICE_FONT_SIZE, rgb);
-    free(rgb);
-    window_texture_t *tex = NULL;
-    if (img.pixels != NULL) {
-        tex = window_create_texture(img.pixels, img.width, img.height);
-        *out_w = img.width;
-        *out_h = img.height;
-        font_free_text_image(&img);
-    }
-    return tex;
+static int g_open, g_ready, g_selected, g_started;
+static int g_release, g_details;
+static unsigned g_arch_mask;
+static text_field_t g_name, g_path;
+static char g_status_text[160];
+static char g_error_text[240];
+static char g_logs[LOG_LINES][220];
+static int g_log_count;
+static window_texture_t *g_title;
+static int g_title_w, g_title_h;
+
+static window_texture_t *text_texture(const char *s, int size, int *w, int *h) { return ui_make_text_texture(s, FONT_WEIGHT_REGULAR, size, w, h); }
+static void draw_text(const char *s, int x, int y, int size, unsigned char r, unsigned char g, unsigned char b) {
+    int w, h; window_texture_t *t = text_texture(s, size, &w, &h);
+    if (t) { window_draw_texture_tinted(t, x, y, w, h, r, g, b); window_destroy_texture(t); }
 }
-#endif
+static void btn_make(btn_t *btn, const char *label, int blue) {
+    const ui_color_t *c = blue ? &UI_COLOR_BUTTON_BLUE : &UI_COLOR_GRAY_MUTED;
+    btn->b = labeled_button_create(label, FONT_WEIGHT_REGULAR, BTN_FONT, UI_BUTTON_PADDING_X, UI_BUTTON_PADDING_Y, UI_BUTTON_RADIUS, c->r, c->g, c->b);
+    if (btn->b.width > 0) {
+        btn->bg = window_create_texture(btn->b.shape_img.pixels, btn->b.shape_img.width, btn->b.shape_img.height);
+        btn->tx = window_create_texture(btn->b.text_img.pixels, btn->b.text_img.width, btn->b.text_img.height);
+    }
+}
+static void btn_free(btn_t *btn) {
+    if (btn->bg) window_destroy_texture(btn->bg);
+    if (btn->tx) window_destroy_texture(btn->tx);
+    labeled_button_free(&btn->b);
+    memset(btn, 0, sizeof(*btn));
+}
+static void btn_draw(int id, int x, int y) {
+    btn_t *btn = &g_btn[id];
+    if (!btn->bg) return;
+    window_draw_texture(btn->bg, x, y, btn->b.width, btn->b.height);
+    if (btn->tx) window_draw_texture(btn->tx, x + btn->b.text_offset_x, y + btn->b.text_offset_y, btn->b.text_img.width, btn->b.text_img.height);
+}
+static int btn_hit(int id, int x, int y, int mx, int my) { return ui_point_in_rect(mx, my, x, y, g_btn[id].b.width, g_btn[id].b.height); }
+static int btn_w(int id) { return g_btn[id].b.width; }
+static int btn_h(void) { return g_btn[B_EXPORT].b.height; }
 
-static text_field_t g_name_field;
-static text_field_t g_path_field;
-
-static int g_is_release = 0; /* 0 = Debug (default), 1 = Release */
-
-static labeled_button_t  g_browse_btn;
-static labeled_button_t  g_cancel_btn;
-static labeled_button_t  g_export_btn;
-static window_texture_t *g_browse_btn_tex = NULL;
-static window_texture_t *g_browse_txt_tex = NULL;
-static window_texture_t *g_cancel_btn_tex = NULL;
-static window_texture_t *g_cancel_txt_tex = NULL;
-static window_texture_t *g_export_btn_tex = NULL;
-static window_texture_t *g_export_txt_tex = NULL;
-
-static window_texture_t *g_title_tex = NULL;
-static int g_title_w = 0, g_title_h = 0;
-static window_texture_t *g_label_name_tex = NULL;
-static int g_label_name_w = 0, g_label_name_h = 0;
-static window_texture_t *g_label_path_tex = NULL;
-static int g_label_path_w = 0, g_label_path_h = 0;
-static window_texture_t *g_label_debug_tex = NULL;
-static int g_label_debug_w = 0, g_label_debug_h = 0;
-static window_texture_t *g_label_release_tex = NULL;
-static int g_label_release_w = 0, g_label_release_h = 0;
-
-/* Debug/Release radio circles - empty (outline) and filled, two colors
- * (normal/selected) - built once, drawing picks the appropriate ready-made one */
-static window_texture_t *g_radio_ring_tex = NULL;
-static window_texture_t *g_radio_filled_tex = NULL;
-
-/* Currently displayed export output lines - a local copy of the last
- * LOG_VISIBLE_LINES lines received from ps2_exporter (the real reader is there,
- * this is only a display buffer) */
-static char g_log_display[LOG_VISIBLE_LINES][200];
-static int g_log_display_count = 0;
-static window_texture_t *g_log_line_tex[LOG_VISIBLE_LINES];
-static int g_log_line_w[LOG_VISIBLE_LINES];
-static int g_log_line_h[LOG_VISIBLE_LINES];
-static char g_log_line_cached[LOG_VISIBLE_LINES][200];
-
+static int current_status(void) {
+    if (!g_started) return 0;
+    if (g_platforms[g_selected].modern) {
+        modern_export_status_t s = modern_export_get_status();
+        if (s == MODERN_EXPORT_RUNNING) return 1;
+        if (s == MODERN_EXPORT_SUCCESS) return 2;
+        if (s == MODERN_EXPORT_FAILED) return 3;
+    } else {
+        ps2_export_status_t s = ps2_export_get_status();
+        if (s == PS2_EXPORT_STATUS_RUNNING) return 1;
+        if (s == PS2_EXPORT_STATUS_SUCCESS) return 2;
+        if (s == PS2_EXPORT_STATUS_FAILED) return 3;
+    }
+    return 0;
+}
+static void clear_logs(void) { g_log_count = 0; memset(g_logs, 0, sizeof(g_logs)); }
+static void push_log(const char *line) {
+    if (!line || !line[0]) return;
+    if (g_log_count < LOG_LINES) snprintf(g_logs[g_log_count++], sizeof(g_logs[0]), "%s", line);
+    else { for (int i = 1; i < LOG_LINES; i++) snprintf(g_logs[i - 1], sizeof(g_logs[0]), "%s", g_logs[i]); snprintf(g_logs[LOG_LINES - 1], sizeof(g_logs[0]), "%s", line); }
+}
+static void pump_logs(void) {
+    const char *line;
+    while ((line = ps2_export_poll_next_line()) != NULL) push_log(line);
+}
+static int project_modern(void) {
+    const project_settings_t *s = current_project_get_settings();
+    return s != NULL && s->type == PROJECT_TYPE_MODERN;
+}
+static int project_allows(int index) {
+    const project_settings_t *s = current_project_get_settings();
+    if (!s) return 0;
+    if (index == 5) return s->type == PROJECT_TYPE_PS2;
+    if (index == 6) return s->type == PROJECT_TYPE_PS1;
+    return s->type == PROJECT_TYPE_MODERN && (s->platforms & g_platforms[index].project_flag) != 0;
+}
+static int platform_installed(int index) { return package_platform_state(g_platforms[index].package_id) == PKG_STATE_INSTALLED; }
+static int arch_count(void) { return g_platforms[g_selected].modern ? 4 : 0; }
+static const char *arch_name(int i) { return g_selected == 0 ? g_android_arches[i] : g_desktop_arches[i]; }
+static void select_default_arches(void) {
+    g_arch_mask = 0;
+    if (g_platforms[g_selected].modern) { for (int i = 0; i < 4; i++) if (package_arch_state(g_platforms[g_selected].package_id, i) == PKG_STATE_INSTALLED) g_arch_mask |= 1u << i; }
+}
+static void select_platform(int index) { g_selected = index; select_default_arches(); snprintf(g_status_text, sizeof(g_status_text), "Ready"); g_error_text[0] = '\0'; }
+static int detail_x(void) { return project_modern() ? 345 : PAD + 14; }
+static int mode_y(void) { return project_modern() ? 440 : 292; }
+static int footer_y(void) { return PAGE_H - PAD - btn_h(); }
+static void close_export(void) {
+    if (current_status() == 1) { if (g_platforms[g_selected].modern) modern_export_cancel(); else ps2_export_cancel(); }
+    g_open = 0; g_details = 0; g_name.focused = g_path.focused = 0; window_stop_text_input();
+}
+static void on_browse_result(const char *path, void *user_data) {
+    (void)user_data; if (!path) return; snprintf(g_path.text, sizeof(g_path.text), "%s", path); g_path.cursor_pos = (int)strlen(g_path.text); g_path.scroll_offset = 0;
+}
 static void ensure_ready(void) {
     if (g_ready) return;
-    g_ready = 1;
-
-    if (!font_init()) return;
-
-    text_field_init(&g_name_field);
-    text_field_init(&g_path_field);
-    strncpy(g_name_field.text, "MyGame", TEXT_FIELD_MAX_LEN - 1);
-    g_name_field.cursor_pos = (int)strlen(g_name_field.text);
-
-    g_title_tex = ui_make_text_texture("Export to PlayStation 2", FONT_WEIGHT_BOLD, TITLE_FONT_SIZE,
-                                     &g_title_w, &g_title_h);
-    g_label_name_tex = ui_make_text_texture("Executable name", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE,
-                                          &g_label_name_w, &g_label_name_h);
-    g_label_path_tex = ui_make_text_texture("Export path", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE,
-                                          &g_label_path_w, &g_label_path_h);
-    g_label_debug_tex = ui_make_text_texture("Debug", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE,
-                                           &g_label_debug_w, &g_label_debug_h);
-    g_label_release_tex = ui_make_text_texture("Release", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE,
-                                             &g_label_release_w, &g_label_release_h);
-
-    ui_make_blue_button("Browse", LABEL_FONT_SIZE, &g_browse_btn, &g_browse_btn_tex, &g_browse_txt_tex);
-    ui_make_blue_button("Cancel", LABEL_FONT_SIZE, &g_cancel_btn, &g_cancel_btn_tex, &g_cancel_txt_tex);
-    ui_make_blue_button("Export", LABEL_FONT_SIZE, &g_export_btn, &g_export_btn_tex, &g_export_txt_tex);
-    /* The selection circles - same trick as shape_provider (rounded-rect with
- * corner radius = half size makes a full circle). The outline (unselected)
- * is pale gray, the filled (selected) uses the theme blue color */
-    shape_image_t ring = shape_provider_render_rect(RADIO_SIZE, RADIO_SIZE, RADIO_SIZE / 2, 90, 90, 90);
-    g_radio_ring_tex = window_create_texture(ring.pixels, ring.width, ring.height);
-    shape_provider_free_image(&ring);
-
-    shape_image_t filled = shape_provider_render_rect(RADIO_SIZE, RADIO_SIZE, RADIO_SIZE / 2,
-                                                        UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g,
-                                                        UI_COLOR_BUTTON_BLUE.b);
-    g_radio_filled_tex = window_create_texture(filled.pixels, filled.width, filled.height);
-    shape_provider_free_image(&filled);
-
-    for (int i = 0; i < LOG_VISIBLE_LINES; i++) {
-        g_log_line_tex[i] = NULL;
-        g_log_line_w[i] = 0;
-        g_log_line_h[i] = 0;
-        g_log_line_cached[i][0] = '\0';
-    }
-
-#if defined(EXPORT_UNSUPPORTED)
-    g_notice_title_tex = make_notice_texture(NOTICE_TITLE, FONT_WEIGHT_BOLD, 255, 90, 90,
-                                             &g_notice_title_w, &g_notice_title_h);
-    for (int i = 0; i < NOTICE_LINE_COUNT; i++) {
-        g_notice_line_w[i] = g_notice_line_h[i] = 0;
-        g_notice_line_tex[i] = make_notice_texture(NOTICE_LINES[i], FONT_WEIGHT_REGULAR, 255, 214, 80,
-                                                   &g_notice_line_w[i], &g_notice_line_h[i]);
-    }
-    ui_make_blue_button("Close", LABEL_FONT_SIZE, &g_close_btn, &g_close_btn_tex, &g_close_txt_tex);
-#endif
+    g_ready = 1; text_field_init(&g_name); text_field_init(&g_path);
+    snprintf(g_name.text, sizeof(g_name.text), "MyGame"); g_name.cursor_pos = 6;
+    g_title = ui_make_text_texture("Export Project", FONT_WEIGHT_BOLD, 20, &g_title_w, &g_title_h);
+    for (int i = 0; i < B_COUNT; i++) btn_make(&g_btn[i], g_btn_labels[i], g_btn_blue[i]);
+    package_manager_init(); package_refresh_states();
 }
-
 void export_dialog_open(void) {
-    android_storage_request_if_needed();
-    ensure_ready();
-    g_is_open = 1;
+    android_storage_request_if_needed(); ensure_ready();
+    const project_settings_t *s = current_project_get_settings();
+    if (!s) return;
+    g_release = 0; g_details = 0; g_started = 0; g_error_text[0] = '\0'; clear_logs();
+    int first = s->type == PROJECT_TYPE_PS2 ? 5 : (s->type == PROJECT_TYPE_PS1 ? 6 : 0);
+    if (first == 0) { for (int i = 0; i < MODERN_COUNT; i++) if (project_allows(i)) { first = i; break; } }
+    select_platform(first);
+    g_open = 1;
 }
-
-int export_dialog_is_open(void) {
-    return g_is_open;
+int export_dialog_is_open(void) { return g_open; }
+static void start_export(void) {
+    if (!g_name.text[0] || !g_path.text[0] || !project_allows(g_selected)) return;
+    int status = current_status(); if (status == 1) return;
+    scene_tabs_save_all(); clear_logs(); g_details = 0; g_error_text[0] = '\0';
+    if (g_platforms[g_selected].modern) {
+        const char *architectures[4]; int count = 0;
+        for (int i = 0; i < arch_count(); i++) if (g_arch_mask & (1u << i)) architectures[count++] = arch_name(i);
+        if (count == 0) { snprintf(g_error_text, sizeof(g_error_text), "Select at least one installed architecture."); return; }
+        g_started = modern_export_start_multi(g_name.text, g_release, g_path.text, g_platforms[g_selected].id, architectures, count);
+        snprintf(g_status_text, sizeof(g_status_text), "Preparing %s (%d architectures)", g_platforms[g_selected].label, count);
+    } else if (g_selected == 5) {
+        g_started = ps2_export_start(g_name.text, g_release, g_path.text); snprintf(g_status_text, sizeof(g_status_text), "Preparing PlayStation 2 export");
+    } else { snprintf(g_error_text, sizeof(g_error_text), "PlayStation 1 export is not available yet."); }
 }
-
-/* Called by file_manager when the folder chooser window is closed */
-static void on_browse_result(const char *path, void *user_data) {
-    (void)user_data;
-    if (path == NULL) return;
-    strncpy(g_path_field.text, path, TEXT_FIELD_MAX_LEN - 1);
-    g_path_field.text[TEXT_FIELD_MAX_LEN - 1] = '\0';
-    g_path_field.cursor_pos = (int)strlen(g_path_field.text);
-    g_path_field.scroll_offset = 0;
-}
-
-/* Adds one ready-made display line (pre-split if needed) to the scrolling
- * display list - the same scrolling logic used originally, extracted into a
- * separate function for reuse by long-line wrapping */
-static void push_display_line(const char *text) {
-    if (g_log_display_count < LOG_VISIBLE_LINES) {
-        strncpy(g_log_display[g_log_display_count], text, 199);
-        g_log_display[g_log_display_count][199] = '\0';
-        g_log_display_count++;
-    } else {
-        for (int i = 1; i < LOG_VISIBLE_LINES; i++) {
-            strncpy(g_log_display[i - 1], g_log_display[i], 199);
-        }
-        strncpy(g_log_display[LOG_VISIBLE_LINES - 1], text, 199);
-        g_log_display[LOG_VISIBLE_LINES - 1][199] = '\0';
-    }
-}
-
-/* Approximate wrap limit (in characters) for displaying the current export window in the log font -
- * long build commands (a full gcc line with all -I paths, for example) wrap
- * across multiple display lines instead of overflowing past the window edge */
-#define LOG_WRAP_CHARS 84
-
-/* Pulls all new lines from ps2_exporter, wraps any line longer than the
- * window limit across multiple display lines, and updates the scrolled display
- * list (the last LOG_VISIBLE_LINES display lines - continues to scroll down
- * like a normal terminal) */
-static void pump_export_log(void) {
-    const char *line;
-    while ((line = ps2_export_poll_next_line()) != NULL) {
-        size_t len = strlen(line);
-        if (len <= LOG_WRAP_CHARS) {
-            push_display_line(line);
-            continue;
-        }
-        char chunk[LOG_WRAP_CHARS + 1];
-        size_t pos = 0;
-        while (pos < len) {
-            size_t take = len - pos;
-            if (take > LOG_WRAP_CHARS) take = LOG_WRAP_CHARS;
-            memcpy(chunk, line + pos, take);
-            chunk[take] = '\0';
-            push_display_line(chunk);
-            pos += take;
-        }
-    }
-}
-
 void export_dialog_update(int window_w, int window_h) {
-    if (!g_is_open) return;
-
-#if defined(EXPORT_UNSUPPORTED)
-    {
-        int ux, uy;
-        ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &ux, &uy);
-        if (window_mouse_left_just_pressed()) {
-            int mx = window_mouse_x(), my = window_mouse_y();
-            int cx = ux + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
-            int cy = uy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2;
-            int bx = ux + DIALOG_WIDTH - DIALOG_PADDING - g_close_btn.width;
-            int by = uy + DIALOG_HEIGHT - DIALOG_PADDING - g_close_btn.height;
-            if ((mx >= cx && mx < cx + CLOSE_BTN_SIZE && my >= cy && my < cy + CLOSE_BTN_SIZE)
-                || (mx >= bx && mx < bx + g_close_btn.width && my >= by && my < by + g_close_btn.height)) {
-                g_is_open = 0;
-            }
-        }
-        return;
+    if (!g_open) return;
+    int dx, dy; ui_center_rect(window_w, window_h, PAGE_W, PAGE_H, &dx, &dy);
+    int status = current_status();
+    if (status) { if (g_platforms[g_selected].modern) modern_export_update(); else ps2_export_update(); pump_logs(); status = current_status(); }
+    if (status == 1 && g_platforms[g_selected].modern) snprintf(g_status_text, sizeof(g_status_text), "Building %s (%d/%d) %s...", modern_export_current_architecture(), modern_export_architecture_index() + 1, modern_export_architecture_count(), g_platforms[g_selected].label);
+    else if (status == 1) snprintf(g_status_text, sizeof(g_status_text), "Exporting %s...", g_platforms[g_selected].label);
+    else if (status == 2) snprintf(g_status_text, sizeof(g_status_text), "Export completed successfully");
+    else if (status == 3) snprintf(g_status_text, sizeof(g_status_text), "Export failed");
+    int dxx = dx + detail_x();
+    int path_w = 360 - btn_w(B_BROWSE) - 10;
+    if (status == 0) {
+        text_field_update(&g_name, dxx, dy + 142, 360, FIELD_H, 360);
+        text_field_update(&g_path, dxx, dy + 214, path_w, FIELD_H, path_w);
+        if (g_name.focused || g_path.focused) window_start_text_input(); else window_stop_text_input();
     }
-#endif
-
-    /* The crucial line in this function - advances the export state machine one step (starts
-     * shell commands, polls them later without blocking). Without it the export does
-     * not progress at all after the first call to ps2_export_start - it was indeed missing */
-    ps2_export_update();
-
-    ps2_export_status_t status = ps2_export_get_status();
-    int is_running = (status == PS2_EXPORT_STATUS_RUNNING);
-
-    if (status != PS2_EXPORT_STATUS_IDLE) {
-        pump_export_log();
-    }
-
-    int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
-
-    /* Close X button - always enabled, even during a build (treated as Cancel) */
-    int close_x = dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
-    int close_y = dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2;
-    if (window_mouse_left_just_pressed()) {
-        int mx = window_mouse_x(), my = window_mouse_y();
-        if (mx >= close_x && mx < close_x + CLOSE_BTN_SIZE
-            && my >= close_y && my < close_y + CLOSE_BTN_SIZE) {
-            if (is_running) ps2_export_cancel();
-            g_is_open = 0;
-            g_name_field.focused = 0;
-            g_path_field.focused = 0;
-            window_stop_text_input();
-            return;
-        }
-    }
-
-    /* During an actual export: no other interaction (fields/radio/browse) -
-     * only wait until it succeeds or fails, or cancel with the X/Cancel button */
-    if (is_running) {
-        int cancel_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_cancel_btn.width;
-        int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
-        if (window_mouse_left_just_pressed()) {
-            int mx = window_mouse_x(), my = window_mouse_y();
-            if (mx >= cancel_x && mx < cancel_x + g_cancel_btn.width
-                && my >= buttons_y && my < buttons_y + g_cancel_btn.height) {
-                ps2_export_cancel();
-            }
-        }
-        return;
-    }
-
-    /* Success or failure - only one "Close" button (same place as Cancel) */
-    if (status == PS2_EXPORT_STATUS_SUCCESS || status == PS2_EXPORT_STATUS_FAILED) {
-        int close_only_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_cancel_btn.width;
-        int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
-        if (window_mouse_left_just_pressed()) {
-            int mx = window_mouse_x(), my = window_mouse_y();
-            if (mx >= close_only_x && mx < close_only_x + g_cancel_btn.width
-                && my >= buttons_y && my < buttons_y + g_cancel_btn.height) {
-                g_is_open = 0;
-            }
-        }
-        return;
-    }
-
-    /* IDLE - normal settings mode */
-    int field_x = dx + DIALOG_PADDING;
-    int field_w = DIALOG_WIDTH - DIALOG_PADDING * 2;
-    int name_field_y = dy + TITLEBAR_HEIGHT + 40;
-    int path_field_y = dy + TITLEBAR_HEIGHT + 104;
-    int path_field_w = field_w - g_browse_btn.width - 8;
-
-    text_field_update(&g_name_field, field_x, name_field_y, field_w, FIELD_HEIGHT, field_w);
-    text_field_update(&g_path_field, field_x, path_field_y, path_field_w, FIELD_HEIGHT, path_field_w);
-
-    if (g_name_field.focused || g_path_field.focused) {
-        window_start_text_input();
+    if (!window_mouse_left_just_pressed()) return;
+    int mx = window_mouse_x(), my = window_mouse_y();
+    int fy = dy + footer_y();
+    int right = dx + PAGE_W - PAD;
+    if (ui_dialog_close_button_hit(mx, my, dx + PAGE_W - PAD - 22, dy + 11, 22)) { close_export(); return; }
+    int main_id = status == 0 ? B_CANCEL : (status == 1 ? B_CANCEL : B_CLOSE);
+    int main_x = right - btn_w(main_id);
+    if (btn_hit(main_id, main_x, fy, mx, my)) { close_export(); return; }
+    if (status == 1) return;
+    if (status == 0) {
+        int export_x = main_x - BTN_GAP - btn_w(B_EXPORT);
+        if (btn_hit(B_EXPORT, export_x, fy, mx, my)) { start_export(); return; }
     } else {
-        window_stop_text_input();
+        int det_id = g_details ? B_HIDE : B_DETAILS;
+        int det_x = main_x - BTN_GAP - btn_w(det_id);
+        if (btn_hit(det_id, det_x, fy, mx, my)) { g_details = !g_details; }
+        return;
     }
-
-    /* Browse button */
-    int browse_x = field_x + path_field_w + 8;
-    int browse_y = path_field_y;
-    if (window_mouse_left_just_pressed()) {
-        int mx = window_mouse_x(), my = window_mouse_y();
-        if (mx >= browse_x && mx < browse_x + g_browse_btn.width
-            && my >= browse_y && my < browse_y + g_browse_btn.height) {
-            file_manager_open(FILE_MANAGER_ROOT_DEVICE, FILE_MANAGER_MODE_PICK_FOLDER,
-                                NULL, 0, on_browse_result, NULL);
-        }
+    if (project_modern()) {
+        for (int i = 0; i < MODERN_COUNT; i++) if (project_allows(i) && ui_point_in_rect(mx, my, dx + PAD + (i % 2) * (CARD_W + CARD_GAP), dy + 82 + (i / 2) * (CARD_H + CARD_GAP), CARD_W, CARD_H)) { select_platform(i); return; }
     }
-
-    /* Debug/Release radio buttons - to the right of the path field on a new row */
-    int radio_y = path_field_y + FIELD_HEIGHT + 32;
-    int debug_radio_x = field_x;
-    int release_radio_x = field_x + 140;
-
-    if (window_mouse_left_just_pressed()) {
-        int mx = window_mouse_x(), my = window_mouse_y();
-        if (mx >= debug_radio_x && mx < debug_radio_x + RADIO_SIZE + 60
-            && my >= radio_y - 4 && my < radio_y + RADIO_SIZE + 4) {
-            g_is_release = 0;
-        } else if (mx >= release_radio_x && mx < release_radio_x + RADIO_SIZE + 70
-                   && my >= radio_y - 4 && my < radio_y + RADIO_SIZE + 4) {
-            g_is_release = 1;
-        }
-    }
-
-    /* Cancel button (closes the window without exporting) */
-    int cancel_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_export_btn.width - 8 - g_cancel_btn.width;
-    int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
-    if (window_mouse_left_just_pressed()) {
-        int mx = window_mouse_x(), my = window_mouse_y();
-        if (mx >= cancel_x && mx < cancel_x + g_cancel_btn.width
-            && my >= buttons_y && my < buttons_y + g_cancel_btn.height) {
-            g_is_open = 0;
-            g_name_field.focused = 0;
-            g_path_field.focused = 0;
-            window_stop_text_input();
-        }
-    }
-
-    /* Export button - only enabled when the name and export path are not empty */
-    int export_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_export_btn.width;
-    if (window_mouse_left_just_pressed()) {
-        int mx = window_mouse_x(), my = window_mouse_y();
-        if (mx >= export_x && mx < export_x + g_export_btn.width
-            && my >= buttons_y && my < buttons_y + g_export_btn.height) {
-            if (g_name_field.text[0] != '\0' && g_path_field.text[0] != '\0') {
-                g_name_field.focused = 0;
-                g_path_field.focused = 0;
-                window_stop_text_input();
-                g_log_display_count = 0;
-                ps2_export_start(g_name_field.text, g_is_release, g_path_field.text);
-            }
-        }
-    }
+    if (btn_hit(B_BROWSE, dxx + path_w + 10, dy + 214, mx, my)) { file_manager_open(FILE_MANAGER_ROOT_DEVICE, FILE_MANAGER_MODE_PICK_FOLDER, NULL, 0, on_browse_result, NULL); return; }
+    if (g_platforms[g_selected].modern) for (int i = 0; i < arch_count(); i++) { int ay = dy + 322 + i * 30; if (ui_point_in_rect(mx, my, dxx, ay, 320, 26) && package_arch_state(g_platforms[g_selected].package_id, i) == PKG_STATE_INSTALLED) { g_arch_mask ^= 1u << i; return; } }
+    int my0 = dy + mode_y() + 30;
+    if (btn_hit(B_DEBUG_ON, dxx, my0, mx, my)) { g_release = 0; return; }
+    if (btn_hit(B_RELEASE_ON, dxx + btn_w(B_DEBUG_ON) + BTN_GAP, my0, mx, my)) { g_release = 1; return; }
 }
-
-/* Renders text as an output line - rebuilds its texture only if it actually changed (same
- * path_msg pattern in project_dialog.c, applied here per line in the array) */
-static void draw_log_line(int index, int x, int y) {
-    if (strcmp(g_log_display[index], g_log_line_cached[index]) != 0 || g_log_line_tex[index] == NULL) {
-        if (g_log_line_tex[index] != NULL) {
-            window_destroy_texture(g_log_line_tex[index]);
-            g_log_line_tex[index] = NULL;
-        }
-        /* Empty line (e.g. a blank line between steps) - font_render_text returns
-         * an image with zero width for an empty string, so we avoid even attempting to create a texture from it */
-        if (g_log_display[index][0] != '\0') {
-            font_text_image_t img = font_render_text(g_log_display[index], FONT_WEIGHT_REGULAR,
-                                                       LOG_LINE_FONT_SIZE);
-            if (img.pixels != NULL) {
-                g_log_line_tex[index] = window_create_texture(img.pixels, img.width, img.height);
-                g_log_line_w[index] = img.width;
-                g_log_line_h[index] = img.height;
-                font_free_text_image(&img);
-            }
-        } else {
-            g_log_line_w[index] = 0;
-            g_log_line_h[index] = 0;
-        }
-        strncpy(g_log_line_cached[index], g_log_display[index], 199);
-    }
-    if (g_log_line_tex[index] != NULL) {
-        /* The bug was right here - it used 0,0 instead of the real dimensions,
-         * so it drew a rectangle with zero area (invisible) even though the texture
-         * itself was built correctly */
-        window_draw_texture(g_log_line_tex[index], x, y, g_log_line_w[index], g_log_line_h[index]);
-    }
+static void draw_card(int x, int y, int index) {
+    int enabled = project_allows(index), installed = platform_installed(index), selected = index == g_selected;
+    unsigned char r = selected ? UI_COLOR_BUTTON_BLUE.r : 45, g = selected ? UI_COLOR_BUTTON_BLUE.g : 47, b = selected ? UI_COLOR_BUTTON_BLUE.b : 51;
+    window_fill_rect(x, y, CARD_W, CARD_H, r, g, b); draw_text(g_platforms[index].label, x + 10, y + 12, 14, enabled ? 235 : 125, enabled ? 235 : 125, enabled ? 235 : 125);
+    draw_text(!enabled ? "Not for this project" : installed ? "Installed" : "Not installed", x + 10, y + 38, 11, installed && enabled ? 115 : 205, installed && enabled ? 210 : 155, installed && enabled ? 135 : 105);
+    if (g_platforms[index].modern) { char buf[40]; snprintf(buf, sizeof(buf), "%d architectures", package_platform_arch_count(g_platforms[index].package_id)); draw_text(buf, x + 10, y + 58, 10, 155, 160, 168); }
 }
-
 void export_dialog_draw(int window_w, int window_h) {
-    if (!g_is_open) return;
-
-    ui_dialog_draw_backdrop(window_w, window_h);
-    int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
-
-    ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
-    ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLEBAR_HEIGHT, DIALOG_PADDING);
-    ui_dialog_draw_close_button(dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE,
-                                dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2, CLOSE_BTN_SIZE);
-
-#if defined(EXPORT_UNSUPPORTED)
-    {
-        int ty = dy + TITLEBAR_HEIGHT + 24;
-        if (g_notice_title_tex != NULL) {
-            window_draw_texture(g_notice_title_tex, dx + DIALOG_PADDING, ty, g_notice_title_w, g_notice_title_h);
-        }
-        ty += NOTICE_FONT_SIZE + 22;
-        for (int i = 0; i < NOTICE_LINE_COUNT; i++) {
-            if (g_notice_line_tex[i] != NULL) {
-                window_draw_texture(g_notice_line_tex[i], dx + DIALOG_PADDING, ty,
-                                    g_notice_line_w[i], g_notice_line_h[i]);
+    if (!g_open) return;
+    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); ui_center_rect(window_w, window_h, PAGE_W, PAGE_H, &dx, &dy);
+    ui_dialog_draw_frame(dx, dy, PAGE_W, PAGE_H); ui_dialog_draw_title_left(g_title, g_title_w, g_title_h, dx, dy, 44, PAD);
+    ui_dialog_draw_close_button(dx + PAGE_W - PAD - 22, dy + 11, 22);
+    int modern = project_modern();
+    if (modern) {
+        draw_text("Platforms", dx + PAD, dy + 56, 13, 160, 165, 172);
+        for (int i = 0; i < MODERN_COUNT; i++) draw_card(dx + PAD + (i % 2) * (CARD_W + CARD_GAP), dy + 82 + (i / 2) * (CARD_H + CARD_GAP), i);
+    }
+    int dxx = dx + detail_x();
+    int fy = dy + footer_y();
+    int panel_bottom = fy - 14;
+    window_fill_rect(dxx - 14, dy + 52, PAGE_W - detail_x() - PAD + 14, panel_bottom - (dy + 52), 34, 36, 40);
+    draw_text(g_platforms[g_selected].label, dxx, dy + 70, 18, 235, 235, 235);
+    int status = current_status();
+    int path_w = 360 - btn_w(B_BROWSE) - 10;
+    if (status == 0) {
+        draw_text("Output name", dxx, dy + 120, 12, 170, 175, 182); text_field_draw(&g_name, dxx, dy + 142, 360, FIELD_H, 16);
+        draw_text("Output folder", dxx, dy + 192, 12, 170, 175, 182); text_field_draw(&g_path, dxx, dy + 214, path_w, FIELD_H, 16);
+        btn_draw(B_BROWSE, dxx + path_w + 10, dy + 214);
+        if (g_platforms[g_selected].modern) {
+            draw_text("Architectures (installed only)", dxx, dy + 286, 12, 170, 175, 182);
+            for (int i = 0; i < arch_count(); i++) {
+                int ay = dy + 322 + i * 30, installed = package_arch_state(g_platforms[g_selected].package_id, i) == PKG_STATE_INSTALLED;
+                window_fill_rect(dxx, ay, 320, 26, installed ? 56 : 43, installed ? 62 : 45, installed ? 70 : 48);
+                draw_text((g_arch_mask & (1u << i)) ? "[x]" : "[ ]", dxx + 8, ay + 6, 11, installed ? 230 : 120, installed ? 230 : 120, installed ? 230 : 120);
+                draw_text(arch_name(i), dxx + 42, ay + 6, 11, installed ? 220 : 120, installed ? 220 : 120, installed ? 220 : 120);
             }
-            ty += NOTICE_FONT_SIZE + 12;
         }
-        int bx = dx + DIALOG_WIDTH - DIALOG_PADDING - g_close_btn.width;
-        int by = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_close_btn.height;
-        if (g_close_btn_tex != NULL) {
-            window_draw_texture(g_close_btn_tex, bx, by, g_close_btn.width, g_close_btn.height);
-            window_draw_texture(g_close_txt_tex, bx + g_close_btn.text_offset_x, by + g_close_btn.text_offset_y,
-                                g_close_btn.text_img.width, g_close_btn.text_img.height);
-        }
-        return;
+        int my0 = dy + mode_y();
+        draw_text("Build mode", dxx, my0, 12, 170, 175, 182);
+        btn_draw(g_release ? B_DEBUG_OFF : B_DEBUG_ON, dxx, my0 + 30);
+        btn_draw(g_release ? B_RELEASE_ON : B_RELEASE_OFF, dxx + btn_w(B_DEBUG_ON) + BTN_GAP, my0 + 30);
+        if (g_error_text[0]) draw_text(g_error_text, dxx, my0 + 82, 11, 235, 105, 95);
+    } else {
+        int total = 12, done = status == 2 ? total : (g_log_count > 0 ? g_log_count % total : 1); if (done > total) done = total;
+        draw_text(g_status_text, dxx, dy + 124, 14, status == 3 ? 240 : 220, status == 3 ? 120 : 220, status == 3 ? 110 : 220);
+        window_fill_rect(dxx, dy + 164, 480, 12, 55, 58, 64); window_fill_rect(dxx, dy + 164, 480 * done / total, 12, 80, 155, 210);
+        char progress[64]; snprintf(progress, sizeof(progress), "%d/%d", done, total); draw_text(progress, dxx + 490, dy + 162, 11, 180, 185, 190);
+        if (status == 3 && g_log_count > 0) draw_text(g_logs[g_log_count - 1], dxx, dy + 204, 11, 240, 150, 140);
+        if (g_details) { for (int i = 0; i < g_log_count && i < LOG_SHOWN; i++) draw_text(g_logs[i], dxx, dy + 240 + i * 17, 10, 175, 180, 188); }
     }
-#endif
-
-    ps2_export_status_t status = ps2_export_get_status();
-
-    if (status == PS2_EXPORT_STATUS_IDLE) {
-        int field_x = dx + DIALOG_PADDING;
-        int field_w = DIALOG_WIDTH - DIALOG_PADDING * 2;
-        int name_field_y = dy + TITLEBAR_HEIGHT + 40;
-        int path_field_y = dy + TITLEBAR_HEIGHT + 104;
-        int path_field_w = field_w - g_browse_btn.width - 8;
-
-        if (g_label_name_tex != NULL) {
-            window_draw_texture(g_label_name_tex, field_x, name_field_y - g_label_name_h - 4,
-                                 g_label_name_w, g_label_name_h);
-        }
-        text_field_draw(&g_name_field, field_x, name_field_y, field_w, FIELD_HEIGHT, FIELD_FONT_SIZE);
-
-        if (g_label_path_tex != NULL) {
-            window_draw_texture(g_label_path_tex, field_x, path_field_y - g_label_path_h - 4,
-                                 g_label_path_w, g_label_path_h);
-        }
-        text_field_draw(&g_path_field, field_x, path_field_y, path_field_w, FIELD_HEIGHT, FIELD_FONT_SIZE);
-
-        int browse_x = field_x + path_field_w + 8;
-        int browse_y = path_field_y;
-        if (g_browse_btn_tex != NULL) {
-            window_draw_texture(g_browse_btn_tex, browse_x, browse_y, g_browse_btn.width, g_browse_btn.height);
-            window_draw_texture(g_browse_txt_tex, browse_x + g_browse_btn.text_offset_x,
-                                 browse_y + g_browse_btn.text_offset_y,
-                                 g_browse_btn.text_img.width, g_browse_btn.text_img.height);
-        }
-
-        /* Debug/Release circles */
-        int radio_y = path_field_y + FIELD_HEIGHT + 32;
-        int debug_radio_x = field_x;
-        int release_radio_x = field_x + 140;
-
-        window_texture_t *debug_tex = (g_is_release == 0) ? g_radio_filled_tex : g_radio_ring_tex;
-        window_texture_t *release_tex = (g_is_release == 1) ? g_radio_filled_tex : g_radio_ring_tex;
-
-        if (debug_tex != NULL) window_draw_texture(debug_tex, debug_radio_x, radio_y, RADIO_SIZE, RADIO_SIZE);
-        if (g_label_debug_tex != NULL) {
-            window_draw_texture(g_label_debug_tex, debug_radio_x + RADIO_SIZE + 8,
-                                 radio_y + (RADIO_SIZE - g_label_debug_h) / 2,
-                                 g_label_debug_w, g_label_debug_h);
-        }
-        if (release_tex != NULL) window_draw_texture(release_tex, release_radio_x, radio_y, RADIO_SIZE, RADIO_SIZE);
-        if (g_label_release_tex != NULL) {
-            window_draw_texture(g_label_release_tex, release_radio_x + RADIO_SIZE + 8,
-                                 radio_y + (RADIO_SIZE - g_label_release_h) / 2,
-                                 g_label_release_w, g_label_release_h);
-        }
-
-        int cancel_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_export_btn.width - 8 - g_cancel_btn.width;
-        int export_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_export_btn.width;
-        int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
-
-        if (g_cancel_btn_tex != NULL) {
-            window_draw_texture(g_cancel_btn_tex, cancel_x, buttons_y, g_cancel_btn.width, g_cancel_btn.height);
-            window_draw_texture(g_cancel_txt_tex, cancel_x + g_cancel_btn.text_offset_x,
-                                 buttons_y + g_cancel_btn.text_offset_y,
-                                 g_cancel_btn.text_img.width, g_cancel_btn.text_img.height);
-        }
-        if (g_export_btn_tex != NULL) {
-            window_draw_texture(g_export_btn_tex, export_x, buttons_y, g_export_btn.width, g_export_btn.height);
-            window_draw_texture(g_export_txt_tex, export_x + g_export_btn.text_offset_x,
-                                 buttons_y + g_export_btn.text_offset_y,
-                                 g_export_btn.text_img.width, g_export_btn.text_img.height);
-        }
-        return;
-    }
-
-    /* Any other state (RUNNING/SUCCESS/FAILED) - live output panel instead
-     * of fields, using an almost-monospaced font (same family as the regular font -
-     * the project doesn't have a dedicated monospace font yet) */
-    int log_x = dx + DIALOG_PADDING;
-    int log_y = dy + TITLEBAR_HEIGHT + 12;
-    int line_h = LOG_LINE_FONT_SIZE + 6;
-    for (int i = 0; i < g_log_display_count; i++) {
-        draw_log_line(i, log_x, log_y + i * line_h);
-    }
-
-    int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
-    int btn_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_cancel_btn.width;
-    const char *btn_label = (status == PS2_EXPORT_STATUS_RUNNING) ? "Cancel" : "Close";
-
-    /* The button label changes with state (Cancel during build, Close after) -
-     * no separate button needed; we redraw the label only when the state changes */
-    static ps2_export_status_t last_drawn_status = PS2_EXPORT_STATUS_IDLE;
-    if (last_drawn_status != status) {
-        if (g_cancel_txt_tex != NULL) window_destroy_texture(g_cancel_txt_tex);
-        int tw, th;
-        g_cancel_txt_tex = ui_make_text_texture(btn_label, FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE, &tw, &th);
-        last_drawn_status = status;
-    }
-    if (g_cancel_btn_tex != NULL) {
-        window_draw_texture(g_cancel_btn_tex, btn_x, buttons_y, g_cancel_btn.width, g_cancel_btn.height);
-    }
-    if (g_cancel_txt_tex != NULL) {
-        window_draw_texture(g_cancel_txt_tex, btn_x + g_cancel_btn.text_offset_x,
-                             buttons_y + g_cancel_btn.text_offset_y,
-                             g_cancel_btn.text_img.width, g_cancel_btn.text_img.height);
-    }
+    int right = dx + PAGE_W - PAD;
+    int main_id = status == 0 || status == 1 ? B_CANCEL : B_CLOSE;
+    int main_x = right - btn_w(main_id);
+    btn_draw(main_id, main_x, fy);
+    if (status == 0) btn_draw(B_EXPORT, main_x - BTN_GAP - btn_w(B_EXPORT), fy);
+    else if (status >= 2) { int det_id = g_details ? B_HIDE : B_DETAILS; btn_draw(det_id, main_x - BTN_GAP - btn_w(det_id), fy); }
 }
-
 void export_dialog_shutdown(void) {
-    if (g_title_tex) window_destroy_texture(g_title_tex);
-    if (g_label_name_tex) window_destroy_texture(g_label_name_tex);
-    if (g_label_path_tex) window_destroy_texture(g_label_path_tex);
-    if (g_label_debug_tex) window_destroy_texture(g_label_debug_tex);
-    if (g_label_release_tex) window_destroy_texture(g_label_release_tex);
-    if (g_browse_btn_tex) window_destroy_texture(g_browse_btn_tex);
-    if (g_browse_txt_tex) window_destroy_texture(g_browse_txt_tex);
-    if (g_cancel_btn_tex) window_destroy_texture(g_cancel_btn_tex);
-    if (g_cancel_txt_tex) window_destroy_texture(g_cancel_txt_tex);
-    if (g_export_btn_tex) window_destroy_texture(g_export_btn_tex);
-    if (g_export_txt_tex) window_destroy_texture(g_export_txt_tex);
-    if (g_radio_ring_tex) window_destroy_texture(g_radio_ring_tex);
-    if (g_radio_filled_tex) window_destroy_texture(g_radio_filled_tex);
-    for (int i = 0; i < LOG_VISIBLE_LINES; i++) {
-        if (g_log_line_tex[i]) window_destroy_texture(g_log_line_tex[i]);
-    }
-
-#if defined(EXPORT_UNSUPPORTED)
-    if (g_notice_title_tex) window_destroy_texture(g_notice_title_tex);
-    g_notice_title_tex = NULL;
-    for (int i = 0; i < NOTICE_LINE_COUNT; i++) {
-        if (g_notice_line_tex[i]) window_destroy_texture(g_notice_line_tex[i]);
-        g_notice_line_tex[i] = NULL;
-    }
-    if (g_close_btn_tex) window_destroy_texture(g_close_btn_tex);
-    if (g_close_txt_tex) window_destroy_texture(g_close_txt_tex);
-    g_close_btn_tex = g_close_txt_tex = NULL;
-    labeled_button_free(&g_close_btn);
-#endif
-
-    labeled_button_free(&g_browse_btn);
-    labeled_button_free(&g_cancel_btn);
-    labeled_button_free(&g_export_btn);
-    text_field_free(&g_name_field);
-    text_field_free(&g_path_field);
-
-    g_is_open = 0;
-    g_ready = 0;
+    if (g_title) window_destroy_texture(g_title);
+    g_title = NULL; text_field_free(&g_name); text_field_free(&g_path);
+    for (int i = 0; i < B_COUNT; i++) btn_free(&g_btn[i]);
+    g_open = 0; g_ready = 0; g_started = 0; g_details = 0; g_log_count = 0; package_manager_shutdown();
 }

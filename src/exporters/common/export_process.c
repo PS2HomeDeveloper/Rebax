@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Export process/logging module. Owns non-blocking toolchain I/O only. */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
@@ -6,6 +20,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <time.h>
 #if defined(_WIN32)
 #include <io.h>
 #endif
@@ -15,6 +30,7 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include "filesystem/storage_paths.h"
+#include "filesystem/rebax_fs.h"
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -23,6 +39,7 @@
 #endif
 
 static int g_trace_fd = -1;
+static unsigned int g_trace_sequence;
 
 static void trace_write_raw(const char *text) {
     if (g_trace_fd < 0) return;
@@ -71,14 +88,22 @@ static void trace_crash_handler(int sig, siginfo_t *info, void *ctx) {
 #endif
 
 void export_trace_begin(void) {
-    char path[1700];
+    char path[1700], folder[1700];
+    unsigned long long stamp = (unsigned long long)time(NULL);
 #if defined(__ANDROID__)
-    snprintf(path, sizeof(path), "%s", "/storage/emulated/0/Rebax_export_log.txt");
+    snprintf(folder, sizeof(folder), "%s", "/storage/emulated/0/Rebax_logs");
 #else
-    snprintf(path, sizeof(path), "%s/export_log.txt", rebax_root_dir());
+    snprintf(folder, sizeof(folder), "%s/logs", rebax_root_dir());
 #endif
+    rebax_fs_mkdir_p(folder);
     if (g_trace_fd >= 0) close(g_trace_fd);
-    g_trace_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
+    g_trace_fd = -1;
+    for (int attempt = 0; attempt < 1000 && g_trace_fd < 0; attempt++) {
+        g_trace_sequence++;
+        snprintf(path, sizeof(path), "%s/export_log_%llu_%u.txt", folder, stamp, g_trace_sequence);
+        g_trace_fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0666);
+        if (g_trace_fd < 0 && errno != EEXIST) break;
+    }
 #if defined(_WIN32)
     SetUnhandledExceptionFilter(trace_crash_filter);
 #else
@@ -236,4 +261,3 @@ void shell_step_cancel(export_shell_step_t *step) {
         step->active = 0;
     }
 }
-

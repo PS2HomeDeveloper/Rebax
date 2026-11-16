@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * code_editor.c - small, responsibility-separated embedded code editor.
  *
  * This library is responsible for the UI for editing C/C++ files only. It does
@@ -21,10 +35,10 @@
 
 #define CODE_EDITOR_CAPACITY 131072
 #define CODE_EDITOR_MAX_LINES 4096
-#define CODE_EDITOR_LINE_HEIGHT 18
-#define CODE_EDITOR_TOOLBAR_HEIGHT 30
-#define CODE_EDITOR_TAB_HEIGHT 24
-#define CODE_EDITOR_STATUS_HEIGHT 22
+#define CODE_EDITOR_LINE_HEIGHT 22
+#define CODE_EDITOR_TOOLBAR_HEIGHT 34
+#define CODE_EDITOR_TAB_HEIGHT 28
+#define CODE_EDITOR_STATUS_HEIGHT 26
 #define CODE_EDITOR_GUTTER_WIDTH 48
 #define CODE_EDITOR_BUTTON_WIDTH 58
 #define CODE_EDITOR_BUTTON_GAP 5
@@ -40,7 +54,11 @@ static size_t g_anchor = 0;
 static int g_active = 0;
 static int g_dirty = 0;
 static int g_scroll_line = 0;
-static int g_scroll_column = 0;
+static int g_scroll_x = 0;
+static int g_follow_cursor = 0;
+static int g_view_w = 400, g_view_h = 300;
+static int g_press_active = 0, g_press_x = 0, g_press_y = 0, g_dragged = 0, g_drag_accum = 0;
+#define CODE_FONT 13
 static int g_preferred_column = 0;
 static char g_path[1024];
 static char g_title[128] = "untitled.c";
@@ -58,6 +76,7 @@ static window_texture_t *g_line_text[CODE_EDITOR_MAX_LINES];
 static window_texture_t *g_line_number_text[CODE_EDITOR_MAX_LINES];
 static int g_line_width[CODE_EDITOR_MAX_LINES];
 static int g_line_height[CODE_EDITOR_MAX_LINES];
+static int g_line_number_w[CODE_EDITOR_MAX_LINES], g_line_number_h[CODE_EDITOR_MAX_LINES];
 static char g_cached_line[CODE_EDITOR_MAX_LINES][256];
 static char g_cached_number[CODE_EDITOR_MAX_LINES][16];
 static int g_cached_line_count = 0;
@@ -146,6 +165,7 @@ static void insert_bytes(const char *bytes, size_t count) {
     }
     memmove(g_text + g_cursor + count, g_text + g_cursor, g_length - g_cursor + 1);
     memcpy(g_text + g_cursor, bytes, count);
+    g_length += count;
     g_cursor += count;
     g_anchor = g_cursor;
     g_dirty = 1;
@@ -165,16 +185,28 @@ static void move_vertical(int direction) {
     g_cursor = g_anchor = wanted;
 }
 
+static int prefix_width(size_t start, size_t count) {
+    char buffer[256];
+    if (count >= sizeof(buffer)) count = sizeof(buffer) - 1;
+    memcpy(buffer, g_text + start, count);
+    buffer[count] = '\0';
+    return font_measure_text(buffer, FONT_WEIGHT_REGULAR, CODE_FONT);
+}
+
 static void normalize_view(void) {
+    if (!g_follow_cursor) return;
+    g_follow_cursor = 0;
+    int visible_lines = (g_view_h - CODE_EDITOR_TOOLBAR_HEIGHT - CODE_EDITOR_TAB_HEIGHT - CODE_EDITOR_STATUS_HEIGHT) / CODE_EDITOR_LINE_HEIGHT;
+    if (visible_lines < 1) visible_lines = 1;
     int line = cursor_line();
-    int col = cursor_column();
     if (line < g_scroll_line) g_scroll_line = line;
-    if (line >= g_scroll_line + 1) {
-        /* Actual visible line count is corrected by update/draw bounds. */
-    }
-    if (col < g_scroll_column) g_scroll_column = col;
+    if (line >= g_scroll_line + visible_lines) g_scroll_line = line - visible_lines + 1;
+    int text_w = g_view_w - CODE_EDITOR_GUTTER_WIDTH - 24;
+    int caret = prefix_width(line_start_for_cursor(), g_cursor - line_start_for_cursor());
+    if (caret < g_scroll_x) g_scroll_x = caret - 20;
+    if (caret > g_scroll_x + text_w) g_scroll_x = caret - text_w + 20;
+    if (g_scroll_x < 0) g_scroll_x = 0;
     if (g_scroll_line < 0) g_scroll_line = 0;
-    if (g_scroll_column < 0) g_scroll_column = 0;
 }
 
 static void edit_input(void) {
@@ -183,7 +215,14 @@ static void edit_input(void) {
         /* SDL text input is already UTF-8. Newline is handled separately. */
         insert_bytes(typed, strlen(typed));
     }
-    if (window_key_just_pressed_enter()) insert_bytes("\n", 1);
+    if (window_key_just_pressed_enter()) {
+        size_t start = line_start_for_cursor();
+        char indent[64] = "\n";
+        size_t n = 1;
+        while (start + n - 1 < g_cursor && n < sizeof(indent) - 6 && (g_text[start + n - 1] == ' ' || g_text[start + n - 1] == '\t')) { indent[n] = g_text[start + n - 1]; n++; }
+        if (g_cursor > 0 && g_text[g_cursor - 1] == '{') { memcpy(indent + n, "    ", 4); n += 4; }
+        insert_bytes(indent, n);
+    }
     if (window_key_just_pressed_tab()) insert_bytes("    ", 4);
     if (window_key_just_pressed_backspace()) {
         if (g_anchor != g_cursor) delete_selection();
@@ -221,6 +260,10 @@ static void edit_input(void) {
         char *clip = window_get_clipboard_text();
         if (clip) { insert_bytes(clip, strlen(clip)); free(clip); }
     }
+    if (typed && typed[0]) g_follow_cursor = 1;
+    if (window_key_just_pressed_enter() || window_key_just_pressed_tab() || window_key_just_pressed_backspace() || window_key_just_pressed_delete() ||
+        window_key_just_pressed_left() || window_key_just_pressed_right() || window_key_just_pressed_up() || window_key_just_pressed_down() ||
+        window_key_just_pressed_home() || window_key_just_pressed_end() || window_key_just_pressed_paste()) g_follow_cursor = 1;
     normalize_view();
     if (g_dirty) invalidate_view();
 }
@@ -233,7 +276,7 @@ static void load_file(const char *path) {
     g_text[n] = '\0';
     g_length = n;
     g_cursor = g_anchor = 0;
-    g_scroll_line = g_scroll_column = 0;
+    g_scroll_line = g_scroll_x = 0;
     g_dirty = 0;
     snprintf(g_path, sizeof(g_path), "%s", path);
     const char *slash = strrchr(path, '/');
@@ -305,7 +348,7 @@ static void new_file(void) {
     g_text[0] = '\0';
     g_length = 0;
     g_cursor = g_anchor = 0;
-    g_scroll_line = g_scroll_column = 0;
+    g_scroll_line = g_scroll_x = 0;
     g_path[0] = '\0';
     snprintf(g_title, sizeof(g_title), "untitled.c");
     g_dirty = 0;
@@ -416,15 +459,14 @@ static void rebuild_line_cache(void) {
         snprintf(g_cached_number[line], sizeof(g_cached_number[line]), "%4d", line + 1);
         unsigned char rgb[sizeof(g_cached_line[line]) * 3];
         colorize_line(g_cached_line[line], (int)n, rgb, &in_block_comment);
-        font_text_image_t image = font_render_text_colored(g_cached_line[line], FONT_WEIGHT_REGULAR, 13, rgb);
+        font_text_image_t image = font_render_text_colored(g_cached_line[line], FONT_WEIGHT_REGULAR, CODE_FONT, rgb);
         if (image.pixels != NULL) {
             g_line_text[line] = window_create_texture(image.pixels, image.width, image.height);
             g_line_width[line] = image.width;
             g_line_height[line] = image.height;
             font_free_text_image(&image);
         }
-        int nw = 0, nh = 0;
-        g_line_number_text[line] = ui_make_text_texture(g_cached_number[line], FONT_WEIGHT_REGULAR, 11, &nw, &nh);
+        g_line_number_text[line] = ui_make_text_texture(g_cached_number[line], FONT_WEIGHT_REGULAR, 11, &g_line_number_w[line], &g_line_number_h[line]);
         line++;
         if (end >= g_length) break;
         p = end + 1;
@@ -451,25 +493,47 @@ void code_editor_update(int x, int y, int w, int h) {
     int mx = window_mouse_x(), my = window_mouse_y();
     g_hover_button = -1;
     for (int i = 0; i < 4; i++) if (button_hit(i, x, y, w)) g_hover_button = i;
+    g_view_w = w;
+    g_view_h = h;
+    int top_area = y + CODE_EDITOR_TOOLBAR_HEIGHT + CODE_EDITOR_TAB_HEIGHT;
+    int bottom_area = y + h - CODE_EDITOR_STATUS_HEIGHT;
+    int in_area = mx >= x && mx < x + w && my >= top_area && my < bottom_area;
     if (window_mouse_left_just_pressed()) {
         if (g_hover_button == 0) new_file();
         else if (g_hover_button == 1) open_file_dialog();
         else if (g_hover_button == 2) save_file();
         else if (g_hover_button == 3) file_manager_open_save(FILE_MANAGER_ROOT_DEVICE, g_title, on_save_file, NULL);
-        int editor_top = y + CODE_EDITOR_TOOLBAR_HEIGHT + CODE_EDITOR_TAB_HEIGHT;
-        if (mx >= x && mx < x + w && my >= editor_top && my < y + h - CODE_EDITOR_STATUS_HEIGHT) {
+        g_press_active = in_area;
+        g_press_x = mx;
+        g_press_y = my;
+        g_dragged = 0;
+        g_drag_accum = 0;
+    }
+    if (g_press_active && window_mouse_left_down()) {
+        int moved_y = my - g_press_y, moved_x = mx - g_press_x;
+        if (!g_dragged && (moved_y > 14 || moved_y < -14 || moved_x > 14 || moved_x < -14)) g_dragged = 1;
+        if (g_dragged) {
+            g_drag_accum -= window_mouse_delta_y();
+            while (g_drag_accum >= CODE_EDITOR_LINE_HEIGHT) { g_scroll_line++; g_drag_accum -= CODE_EDITOR_LINE_HEIGHT; }
+            while (g_drag_accum <= -CODE_EDITOR_LINE_HEIGHT) { g_scroll_line--; g_drag_accum += CODE_EDITOR_LINE_HEIGHT; }
+            g_scroll_x -= window_mouse_delta_x();
+            if (g_scroll_x < 0) g_scroll_x = 0;
+        }
+    }
+    if (g_press_active && !window_mouse_left_down()) {
+        g_press_active = 0;
+        if (!g_dragged) {
             g_has_focus = 1;
-            int visible = (h - CODE_EDITOR_TOOLBAR_HEIGHT - CODE_EDITOR_TAB_HEIGHT - CODE_EDITOR_STATUS_HEIGHT) / CODE_EDITOR_LINE_HEIGHT;
-            int clicked_line = g_scroll_line + (my - editor_top) / CODE_EDITOR_LINE_HEIGHT;
-            if (clicked_line < line_count()) {
+            int clicked_line = g_scroll_line + (g_press_y - top_area) / CODE_EDITOR_LINE_HEIGHT;
+            if (clicked_line >= line_count()) clicked_line = line_count() - 1;
+            if (clicked_line >= 0) {
                 size_t start = line_start(clicked_line);
                 size_t end = line_end(start);
-                int col = g_scroll_column + (mx - x - CODE_EDITOR_GUTTER_WIDTH - 8) / 8;
-                if (col < 0) col = 0;
-                size_t pos = start + (size_t)col;
-                if (pos > end) pos = end;
+                int target = g_press_x - x - CODE_EDITOR_GUTTER_WIDTH - 8 + g_scroll_x;
+                size_t pos = start;
+                while (pos < end && prefix_width(start, pos + 1 - start) - 3 < target) pos++;
                 g_cursor = g_anchor = pos;
-                (void)visible;
+                g_preferred_column = 0;
             }
         }
     }
@@ -477,13 +541,15 @@ void code_editor_update(int x, int y, int w, int h) {
     int editor_bottom = y + h - CODE_EDITOR_STATUS_HEIGHT;
     if (mx >= x && mx < x + w && my >= editor_top && my < editor_bottom) {
         int wheel = window_mouse_wheel_delta();
-        if (wheel) g_scroll_line -= wheel;
+        if (wheel) g_scroll_line -= wheel * 3;
+    }
+    {
         int max_line = line_count() - 1;
         int visible = (editor_bottom - editor_top) / CODE_EDITOR_LINE_HEIGHT;
-        if (g_scroll_line < 0) g_scroll_line = 0;
         if (g_scroll_line > max_line - visible + 1) g_scroll_line = max_line - visible + 1;
         if (g_scroll_line < 0) g_scroll_line = 0;
     }
+    if (g_scroll_x < 0) g_scroll_x = 0;
     if (g_has_focus) {
         window_start_text_input();
         edit_input();
@@ -521,19 +587,26 @@ void code_editor_draw(int x, int y, int w, int h) {
     window_fill_rect(x + CODE_EDITOR_GUTTER_WIDTH, top, w - CODE_EDITOR_GUTTER_WIDTH, bottom - top, code_bg.r, code_bg.g, code_bg.b);
     int visible = (bottom - top) / CODE_EDITOR_LINE_HEIGHT;
     int current = cursor_line();
+    window_set_clip_rect(x + CODE_EDITOR_GUTTER_WIDTH, top, w - CODE_EDITOR_GUTTER_WIDTH, bottom - top);
     for (int row = 0; row < visible; row++) {
         int line = g_scroll_line + row;
         if (line >= g_cached_line_count) break;
         int ly = top + row * CODE_EDITOR_LINE_HEIGHT;
         if (line == current) window_fill_rect(x + CODE_EDITOR_GUTTER_WIDTH, ly, w - CODE_EDITOR_GUTTER_WIDTH, CODE_EDITOR_LINE_HEIGHT,
                                                 active_line.r, active_line.g, active_line.b);
-        if (g_line_number_text[line]) window_draw_texture_tinted(g_line_number_text[line], x + 6, ly + 2, 30, 14, 120, 135, 150);
-        if (g_line_text[line]) window_draw_texture(g_line_text[line], x + CODE_EDITOR_GUTTER_WIDTH + 8 - g_scroll_column * 8, ly + 1,
-                                                    g_line_width[line], 16);
+        if (g_line_text[line]) window_draw_texture(g_line_text[line], x + CODE_EDITOR_GUTTER_WIDTH + 8 - g_scroll_x, ly + (CODE_EDITOR_LINE_HEIGHT - g_line_height[line]) / 2,
+                                                    g_line_width[line], g_line_height[line]);
     }
-    int cx = x + CODE_EDITOR_GUTTER_WIDTH + 8 + (cursor_column() - g_scroll_column) * 8;
+    window_clear_clip_rect();
+    window_fill_rect(x, top, CODE_EDITOR_GUTTER_WIDTH, bottom - top, gutter.r, gutter.g, gutter.b);
+    for (int row = 0; row < visible; row++) {
+        int line = g_scroll_line + row;
+        if (line >= g_cached_line_count) break;
+        if (g_line_number_text[line]) window_draw_texture_tinted(g_line_number_text[line], x + 6, top + row * CODE_EDITOR_LINE_HEIGHT + 4, g_line_number_w[line], g_line_number_h[line], 120, 135, 150);
+    }
+    int cx = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(line_start_for_cursor(), g_cursor - line_start_for_cursor()) - g_scroll_x;
     int cy = top + (current - g_scroll_line) * CODE_EDITOR_LINE_HEIGHT;
-    if (g_has_focus && cy >= top && cy < bottom) window_fill_rect(cx, cy + 2, 2, 14, 90, 210, 240);
+    if (g_has_focus && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH) window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, 90, 210, 240);
     window_fill_rect(x, bottom, w, CODE_EDITOR_STATUS_HEIGHT, toolbar.r, toolbar.g, toolbar.b);
     char status[256];
     snprintf(status, sizeof(status), "%s  |  Ln %d, Col %d  |  %s", g_status, current + 1, cursor_column() + 1,

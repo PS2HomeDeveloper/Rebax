@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Internal exporter contract. Keep this header private to exporter modules. */
 #ifndef REBAX_EXPORT_INTERNAL_H
 #define REBAX_EXPORT_INTERNAL_H
@@ -9,7 +23,7 @@
 
 enum { EXPORT_MAX_USED_TYPES = 64, EXPORT_MAX_IMAGE_PATHS = 64,
        EXPORT_MAX_PROPS_PER_NODE = 32, EXPORT_MAX_NODES_PER_SCENE = 128,
-       EXPORT_MAX_EXTRA_FLAGS = 32, EXPORT_LOG_LINE_MAX = 200,
+       EXPORT_MAX_EXTRA_FLAGS = 32, EXPORT_LOG_LINE_MAX = 1500,
        EXPORT_LOG_QUEUE_SIZE = 1024 };
 
 typedef struct {
@@ -58,6 +72,7 @@ extern char g_build_dir[1536];
 extern char g_nodes_src_dir[1536];
 extern char g_used_types[EXPORT_MAX_USED_TYPES][64];
 extern int g_used_types_count;
+const char *export_public_path(const char *path);
 extern char g_sdk_types[EXPORT_MAX_USED_TYPES][64];
 extern int g_sdk_types_count;
 extern char g_image_paths[EXPORT_MAX_IMAGE_PATHS][1024];

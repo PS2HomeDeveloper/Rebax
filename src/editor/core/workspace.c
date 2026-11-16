@@ -1,3 +1,17 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Editor layout: resizable areas, and tabs shared across panels. */
 #include <stddef.h>
 #include <stdlib.h>
@@ -22,14 +36,16 @@
 #include "editor/panels/properties.h"
 #include "editor/ui/icon_atlas.h"
 #include "editor/dialogs/export.h"
+#include "editor/dialogs/settings.h"
 #include "editor/viewport/2d.h"
 #include "editor/viewport/3d.h"
 #include "editor/panels/code_editor.h"
 #include "core/app_state.h"
 #include "project/current_project.h"
+#include "editor/core/project_session.h"
 
-#define TOOLBAR_HEIGHT 26
-#define TAB_BAR_HEIGHT 20
+#define TOOLBAR_HEIGHT 30
+#define TAB_BAR_HEIGHT 24
 #define SCENE_TABS_BAR_HEIGHT TAB_BAR_HEIGHT
 #define CAMERA_TOP_BAR_HEIGHT TAB_BAR_HEIGHT
 #define SPLITTER_THICKNESS 6
@@ -432,6 +448,7 @@ void editor_workspace_update(int window_w, int window_h) {
         return;
     }
     if (export_dialog_is_open()) { export_dialog_update(window_w, window_h); return; }
+    if (project_settings_dialog_is_open()) { project_settings_dialog_update(window_w, window_h); return; }
     if (g_move_panel >= 0) { update_move_dialog(window_w, window_h); return; }
     if (add_node_dialog_is_open()) { add_node_dialog_update(window_w, window_h); return; }
 
@@ -444,7 +461,8 @@ void editor_workspace_update(int window_w, int window_h) {
         if (ui_point_in_rect(mx, my, toolbar_x[i], y, g_toolbar_menu_w[i], g_toolbar_menu_h[i])) {
             g_toolbar_menu_hovered = i;
             if (i == 0 && window_mouse_left_just_pressed()) { export_dialog_open(); return; }
-            if (i == 2 && window_mouse_left_just_pressed()) { app_state_set_screen(APP_SCREEN_PROJECT_CENTER); return; }
+            if (i == 1 && window_mouse_left_just_pressed()) { project_settings_dialog_open(); return; }
+            if (i == 2 && window_mouse_left_just_pressed()) { export_dialog_shutdown(); project_settings_dialog_shutdown(); project_session_close(); app_state_set_screen(APP_SCREEN_PROJECT_CENTER); return; }
         }
     }
 
@@ -563,6 +581,7 @@ void editor_workspace_draw(int window_w, int window_h) {
     add_node_dialog_draw(window_w, window_h);
     close_scene_dialog_draw(window_w, window_h);
     export_dialog_draw(window_w, window_h);
+    project_settings_dialog_draw(window_w, window_h);
     draw_move_dialog(window_w, window_h);
 }
 
@@ -577,6 +596,7 @@ void editor_workspace_shutdown(void) {
     scene_tabs_shutdown();
     close_scene_dialog_shutdown();
     export_dialog_shutdown();
+    project_settings_dialog_shutdown();
     code_editor_shutdown();
     scene_tree_panel_shutdown();
     scene_data_shutdown();

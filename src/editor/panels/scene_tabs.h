@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * scene_tabs.h
  * ============================================================
@@ -57,5 +71,9 @@ void scene_tabs_switch_to(int index);
 void scene_tabs_close(int index);
 
 void scene_tabs_shutdown(void);
+
+/* Writes every open scene that has changes to disk (scenes that were never saved
+ * get a file inside the project assets folder). Returns the number of files written. */
+int scene_tabs_save_all(void);
 
 #endif /* SCENE_TABS_H */

@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * Rebax PS2 Exporter
  *
  * The exporter converts the project's .rscene files into native PS2 C code
@@ -96,48 +110,14 @@ export_shell_step_t g_step;
 char g_exe_name[128];
 int g_is_release;
 char g_output_dir[1024];
-char g_ps2dev_root[1536];
-static char g_ps2sdk_root[1536];
-static char g_gskit_root[1536];
-
-static int pick_root(char *out, size_t cap, const char *const *bases, int base_count,
-                     const char *const *subs, const char *marker) {
-    char candidate[1700], probe[1800];
-    for (int b = 0; b < base_count; b++) {
-        for (int s = 0; subs[s] != NULL; s++) {
-            if (subs[s][0] == '\0') snprintf(candidate, sizeof(candidate), "%s", bases[b]);
-            else snprintf(candidate, sizeof(candidate), "%s/%s", bases[b], subs[s]);
-            snprintf(probe, sizeof(probe), "%s/%s", candidate, marker);
-            if (rebax_fs_exists(probe)) {
-                snprintf(out, cap, "%s", candidate);
-                return 1;
-            }
-        }
-    }
-    out[0] = '\0';
-    return 0;
-}
+static char g_toolchain_root[1536];
+static char g_sdk_standard_root[1536];
+static char g_sdk_graphics_root[1536];
 
 static void resolve_ps2_roots(void) {
-    char gcc[1536], standard[1536], graphics[1536];
-    snprintf(gcc, sizeof(gcc), "%s/gcc-ps2", rebax_toolchains_dir());
-    snprintf(standard, sizeof(standard), "%s/ps2/standard", rebax_sdks_dir());
-    snprintf(graphics, sizeof(graphics), "%s/ps2/graphics", rebax_sdks_dir());
-
-    const char *dev_bases[] = { gcc };
-    const char *dev_subs[] = { "", "ps2dev", NULL };
-    if (!pick_root(g_ps2dev_root, sizeof(g_ps2dev_root), dev_bases, 1, dev_subs, "bin"))
-        snprintf(g_ps2dev_root, sizeof(g_ps2dev_root), "%s", gcc);
-
-    const char *sdk_bases[] = { standard, gcc };
-    const char *sdk_subs[] = { "", "ps2sdk", "ps2dev/ps2sdk", NULL };
-    if (!pick_root(g_ps2sdk_root, sizeof(g_ps2sdk_root), sdk_bases, 2, sdk_subs, "ee/include"))
-        snprintf(g_ps2sdk_root, sizeof(g_ps2sdk_root), "%s", standard);
-
-    const char *gs_bases[] = { graphics, gcc };
-    const char *gs_subs[] = { "", "gsKit", "ps2dev/gsKit", NULL };
-    if (!pick_root(g_gskit_root, sizeof(g_gskit_root), gs_bases, 2, gs_subs, "include"))
-        snprintf(g_gskit_root, sizeof(g_gskit_root), "%s", graphics);
+    snprintf(g_toolchain_root, sizeof(g_toolchain_root), "%s/gcc-ps2", rebax_toolchains_dir());
+    snprintf(g_sdk_standard_root, sizeof(g_sdk_standard_root), "%s/ps2/standard", rebax_sdks_dir());
+    snprintf(g_sdk_graphics_root, sizeof(g_sdk_graphics_root), "%s/ps2/graphics", rebax_sdks_dir());
 }
 char g_build_dir[1536];
 char g_nodes_src_dir[1536];
@@ -275,6 +255,7 @@ void ps2_export_update(void) {
             g_declared_interfaces_count = 0;
             g_used_types_count = 0;
 
+            log_pushf("[exporter] project folder: %s", project_root);
             export_scene_walk_rscene_files(project_root, export_scene_generate_from_file);
 
             fclose(g_codegen_main);
@@ -362,9 +343,9 @@ void ps2_export_update(void) {
                 ps2_build_config_t config;
                 memset(&config, 0, sizeof(config));
                 config.kind = PS2_BUILD_EE_ELF;
-                config.ps2dev_root = g_ps2dev_root;
-                config.ps2sdk_root = g_ps2sdk_root;
-                config.gskit_root = g_gskit_root;
+                config.toolchain_root = g_toolchain_root;
+                config.sdk_standard_root = g_sdk_standard_root;
+                config.sdk_graphics_root = g_sdk_graphics_root;
                 config.work_dir = src_dir;
                 config.output = output;
                 config.release = g_is_release;

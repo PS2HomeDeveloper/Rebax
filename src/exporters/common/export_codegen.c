@@ -1,8 +1,23 @@
+/*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
 /* Native runtime/code-generation (currently the PS2 gsKit target) templates. */
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
 #include "exporters/common/export_internal.h"
+#include "exporters/common/node_source.h"
 
 /* ------------------------------------------------------------
  * Static templates (do not change per project) - written as-is for each export:
@@ -161,6 +176,7 @@ static const char *SCENE_LOADER_TEMPLATE =
 
 
 void export_codegen_write_runtime_files(const char *src_dir) {
+    if (node_source_is_modern()) return;
     char path[1600];
     FILE *f;
     snprintf(path, sizeof(path), "%s/scene_runtime.h", src_dir);
@@ -172,6 +188,7 @@ void export_codegen_write_runtime_files(const char *src_dir) {
 }
 
 void export_codegen_write_engine_context_impl(const char *src_dir) {
+    if (node_source_is_modern()) return;
     char path[1600];
     snprintf(path, sizeof(path), "%s/engine_context_impl.c", src_dir);
     FILE *f = fopen(path, "w");

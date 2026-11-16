@@ -1,4 +1,18 @@
 /*
+ *  ____  _____ ____    _    __  __
+ * |  _ \| ____| __ )  / \   \ \/ /
+ * | |_) |  _| |  _ \ / _ \   \  / 
+ * |  _ <| |___| |_) / ___ \  /  \ 
+ * |_| \_\_____|____/_/   \_\/_/\_\
+ *
+ * Rebax Engine
+ * Copyright (c) 2026 PS2HomeDeveloper
+ *
+ * Licensed under the MIT License.
+ * See the LICENSE file for details.
+ */
+
+/*
  * ============================================================
  * add_node_dialog.c
  * ============================================================
@@ -22,14 +36,14 @@
 #include "editor/ui/dialog.h"
 
 #define DIALOG_WIDTH     320
-#define DIALOG_HEIGHT    280
+#define DIALOG_HEIGHT    320
 #define DIALOG_PADDING    16
-#define TITLE_HEIGHT       28
+#define TITLE_HEIGHT       32
 #define CLOSE_BTN_SIZE     22
-#define SEARCH_HEIGHT      22
+#define SEARCH_HEIGHT      26
 #define SEARCH_ICON_GAP     6
 #define GAP                8
-#define ROW_HEIGHT         24
+#define ROW_HEIGHT         28
 #define ICON_SIZE          16
 #define MAX_NODE_TYPES     32
 
