@@ -371,12 +371,13 @@ static int configure_flags(const modern_target_t *target, int arch_index) {
         }
         appendf(g_link_post, sizeof(g_link_post), " \"%s\"", builtins);
     } else if (strcmp(g_target, "android") == 0) {
-        char static_lib[MODERN_PATH_CAP], static_cxx[MODERN_PATH_CAP], unwind_lib[MODERN_PATH_CAP];
+        char static_lib[MODERN_PATH_CAP], static_cxx[MODERN_PATH_CAP], static_abi[MODERN_PATH_CAP], unwind_lib[MODERN_PATH_CAP];
         snprintf(static_lib, sizeof(static_lib), "%s/static/lib/libSDL2.a", graphics);
         snprintf(static_cxx, sizeof(static_cxx), "%s/lib/%s/libc++_static.a", runtime, libdir);
+        snprintf(static_abi, sizeof(static_abi), "%s/lib/%s/libc++abi.a", runtime, libdir);
         snprintf(unwind_lib, sizeof(unwind_lib), "%s/lib/%s/libunwind.a", runtime, libdir);
-        if (!is_regular_file(static_lib) || !is_regular_file(static_cxx)) {
-            log_pushf("[modern] FAILED: the Android SDK package is outdated, static libraries are missing: %s and %s. Delete the sdks folder of this platform and download the latest SDK package.", static_lib, static_cxx);
+        if (!is_regular_file(static_lib) || !is_regular_file(static_cxx) || !is_regular_file(static_abi)) {
+            log_pushf("[modern] FAILED: the Android SDK package is outdated, static libraries are missing: %s, %s, or %s. Delete the sdks folder of this platform and download the latest SDK package.", static_lib, static_cxx, static_abi);
             g_status = MODERN_EXPORT_FAILED;
             return 0;
         }
