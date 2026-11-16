@@ -725,6 +725,8 @@ static void prepare_export(void) {
     }
     if (strcmp(g_target, "android") == 0) {
         snprintf(g_link_output, sizeof(g_link_output), "%s/libmain.so", g_build_dir);
+    } else if (strcmp(g_target, "windows") == 0) {
+        snprintf(g_link_output, sizeof(g_link_output), "%s/%s.exe", g_build_dir, g_product_name);
     } else {
         snprintf(g_link_output, sizeof(g_link_output), "%s/%s", g_build_dir, g_product_name);
     }
@@ -970,6 +972,9 @@ static int package_desktop(void) {
             if (!copy_checked(runtime_src, runtime_dst, "SDL2.dll")) return 0;
         }
     } else if (strcmp(g_target, "linux") == 0) {
+        char static_sdl[MODERN_PATH_CAP];
+        snprintf(static_sdl, sizeof(static_sdl), "%s/graphics/lib/libSDL2.a", g_sdk_root);
+        if (is_regular_file(static_sdl)) return 1;
         snprintf(runtime_src, sizeof(runtime_src), "%s/graphics/lib/libSDL2.so", g_sdk_root);
         if (is_regular_file(runtime_src)) {
             snprintf(runtime_dst, sizeof(runtime_dst), "%s/libSDL2.so", bundle);
