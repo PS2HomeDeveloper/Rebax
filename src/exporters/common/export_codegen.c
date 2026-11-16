@@ -174,6 +174,38 @@ static const char *SCENE_LOADER_TEMPLATE =
     "    return 0;\n"
     "}\n";
 
+static const char *PS1_ENGINE_CONTEXT_IMPL_SOURCE =
+    "#include \"engine_context.h\"\n"
+    "static ps1_engine_context_t g_ps1_context;\n"
+    "ps1_engine_context_t *ps1_engine_context(void) { return &g_ps1_context; }\n";
+
+static const char *PS1_SCENE_LOADER_TEMPLATE =
+    "#include <stddef.h>\n"
+    "#include \"scene_runtime.h\"\n"
+    "#include \"engine_context.h\"\n"
+    "#define PS1_MAX_ACTIVE_NODES 64\n"
+    "int main(void) {\n"
+    "    ps1_engine_context_t *context = ps1_engine_context();\n"
+    "    ps1_engine_init(context, 320, 240, 0);\n"
+    "    static void *instances[PS1_MAX_ACTIVE_NODES];\n"
+    "    static const node_interface_t *ifaces[PS1_MAX_ACTIVE_NODES];\n"
+    "    int count = 0;\n"
+    "    for (int s = 0; s < g_scene_count; s++) {\n"
+    "        const scene_table_entry_t *scene = &g_scenes[s];\n"
+    "        for (int n = 0; n < scene->node_count && count < PS1_MAX_ACTIVE_NODES; n++) {\n"
+    "            const scene_node_entry_t *entry = &scene->nodes[n];\n"
+    "            instances[count] = node_instantiate(entry->iface, entry->values);\n"
+    "            if (instances[count] != NULL) ifaces[count++] = entry->iface;\n"
+    "        }\n"
+    "    }\n"
+    "    for (;;) {\n"
+    "        ps1_engine_begin(context);\n"
+    "        for (int i = 0; i < count; i++) if (ifaces[i]->update) ifaces[i]->update(instances[i], 1.0f / 60.0f);\n"
+    "        for (int i = 0; i < count; i++) if (ifaces[i]->draw) ifaces[i]->draw(instances[i]);\n"
+    "        ps1_engine_end(context);\n"
+    "    }\n"
+    "}\n";
+
 
 void export_codegen_write_runtime_files(const char *src_dir) {
     if (node_source_is_modern()) return;
@@ -184,15 +216,16 @@ void export_codegen_write_runtime_files(const char *src_dir) {
     snprintf(path, sizeof(path), "%s/scene_runtime.c", src_dir);
     f = fopen(path, "w"); if (f) { fputs(SCENE_RUNTIME_SOURCE, f); fclose(f); }
     snprintf(path, sizeof(path), "%s/scene_loader_main.c", src_dir);
-    f = fopen(path, "w"); if (f) { fputs(SCENE_LOADER_TEMPLATE, f); fclose(f); }
+    f = fopen(path, "w"); if (f) { fputs(node_source_is_ps1() ? PS1_SCENE_LOADER_TEMPLATE : SCENE_LOADER_TEMPLATE, f); fclose(f); }
 }
 
 void export_codegen_write_engine_context_impl(const char *src_dir) {
+    if (node_source_is_ps1()) return;
     if (node_source_is_modern()) return;
     char path[1600];
     snprintf(path, sizeof(path), "%s/engine_context_impl.c", src_dir);
     FILE *f = fopen(path, "w");
-    if (f != NULL) { fputs(ENGINE_CONTEXT_IMPL_SOURCE, f); fclose(f); }
+    if (f != NULL) { fputs(node_source_is_ps1() ? PS1_ENGINE_CONTEXT_IMPL_SOURCE : ENGINE_CONTEXT_IMPL_SOURCE, f); fclose(f); }
 }
 
 static void sdk_interface_symbol(const char *type_name, char *out, size_t out_size) {

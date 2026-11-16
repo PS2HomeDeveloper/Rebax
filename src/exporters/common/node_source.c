@@ -38,6 +38,10 @@ int node_source_is_modern(void) {
     return strcmp(g_sdk_name, "modern") == 0;
 }
 
+int node_source_is_ps1(void) {
+    return strcmp(g_sdk_name, "ps1") == 0;
+}
+
 #if defined(__ANDROID__)
 #include "filesystem/assets.h"
 

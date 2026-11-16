@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <stdint.h>
 #include "exporters/common/export_internal.h"
 #include "exporters/common/node_source.h"
 #include "formats/image_decoder.h"
@@ -39,18 +40,44 @@ static int export_write_image_files(const char *dest_src_dir, int index,
     return 1;
 }
 
+static int export_write_ps1_tim(const char *dest_src_dir, int index,
+                                const unsigned char *pixels, int width, int height) {
+    char path[1700];
+    FILE *f;
+    uint32_t image_length = 12u + (uint32_t)width * (uint32_t)height * 2u;
+    snprintf(path, sizeof(path), "%s/image_%d.tim", dest_src_dir, index);
+    f = fopen(path, "wb");
+    if (f == NULL) return 0;
+    uint32_t header[2] = { 0x10u, 2u };
+    uint16_t rect[4] = { 0, 0, (uint16_t)width, (uint16_t)height };
+    uint32_t length = image_length;
+    if (fwrite(header, sizeof(header), 1, f) != 1 || fwrite(&length, sizeof(length), 1, f) != 1 ||
+        fwrite(rect, sizeof(rect), 1, f) != 1) { fclose(f); return 0; }
+    for (int i = 0; i < width * height; i++) {
+        uint16_t r = (uint16_t)(pixels[i * 4 + 0] >> 3);
+        uint16_t g = (uint16_t)(pixels[i * 4 + 1] >> 3);
+        uint16_t b = (uint16_t)(pixels[i * 4 + 2] >> 3);
+        uint16_t value = (uint16_t)(r | (g << 5) | (b << 10) | (pixels[i * 4 + 3] ? 0x8000u : 0));
+        if (fwrite(&value, sizeof(value), 1, f) != 1) { fclose(f); return 0; }
+    }
+    fclose(f);
+    return 1;
+}
+
 int export_assets_convert_images(const char *dest_src_dir) {
     int portable_data = node_source_is_modern();
+    int ps1_data = node_source_is_ps1();
     char header_path[1700];
     snprintf(header_path, sizeof(header_path), "%s/embedded_images.h", dest_src_dir);
     FILE *hf = fopen(header_path, "w");
     if (hf == NULL) return 0;
-    fputs("#ifndef EMBEDDED_IMAGES_H\n#define EMBEDDED_IMAGES_H\n\n"
+    fputs("#ifndef EMBEDDED_IMAGES_H\n#define EMBEDDED_IMAGES_H\n\n#include <stddef.h>\n\n"
           "typedef struct {\n"
           "    const char *path;\n"
           "    int width;\n"
           "    int height;\n"
-          "    const unsigned char *data; /* RGBA8, width*height*4 bytes */\n"
+          "    const unsigned char *data;\n"
+          "    size_t data_size;\n"
           "} embedded_image_t;\n\n"
           "const embedded_image_t *embedded_image_find(const char *path);\n\n"
           "#endif\n", hf);
@@ -80,7 +107,7 @@ int export_assets_convert_images(const char *dest_src_dir) {
             continue;
         }
         long pixel_bytes = (long)w * (long)h * 4;
-        int written = portable_data || export_write_image_files(dest_src_dir, i, pixels, pixel_bytes);
+        int written = portable_data || (ps1_data ? export_write_ps1_tim(dest_src_dir, i, pixels, w, h) : export_write_image_files(dest_src_dir, i, pixels, pixel_bytes));
         if (!written) {
             free(pixels);
             log_pushf("[exporter] WARNING: could not write embedded data for: %s", g_image_paths[i]);
@@ -100,16 +127,19 @@ int export_assets_convert_images(const char *dest_src_dir) {
             fputs("};\n", cf);
         } else {
             char data_path[1700];
-            snprintf(data_path, sizeof(data_path), "%s/image_%d.rgba", dest_src_dir, i);
+            snprintf(data_path, sizeof(data_path), "%s/image_%d.%s", dest_src_dir, i, ps1_data ? "tim" : "rgba");
             export_slashes(data_path);
             fprintf(cf, "extern const unsigned char rebax_image_%d[];\n"
+                        "extern const unsigned char rebax_image_%d_end[];\n"
                         "__asm__(\".section .rodata\\n\"\n"
                         "        \".balign 64\\n\"\n"
                         "        \".globl rebax_image_%d\\n\"\n"
                         "        \"rebax_image_%d:\\n\"\n"
                         "        \".incbin \\\"%s\\\"\\n\"\n"
+                        "        \".globl rebax_image_%d_end\\n\"\n"
+                        "        \"rebax_image_%d_end:\\n\"\n"
                         "        \".previous\\n\");\n",
-                    i, i, i, data_path);
+                    i, i, i, i, data_path, i, i);
         }
         free(pixels);
         log_pushf("[exporter] embedded image: %s (%dx%d)", g_image_paths[i], w, h);
@@ -118,9 +148,9 @@ int export_assets_convert_images(const char *dest_src_dir) {
     fputs("\nstatic const embedded_image_t g_embedded_images[] = {\n", cf);
     for (int i = 0; i < g_image_paths_count; i++) {
         if (!ready[i]) continue;
-        fprintf(cf, "    { \"%s\", %d, %d, rebax_image_%d },\n", export_public_path(g_image_paths[i]), widths[i], heights[i], i);
+        fprintf(cf, "    { \"%s\", %d, %d, rebax_image_%d, (size_t)(rebax_image_%d_end - rebax_image_%d) },\n", export_public_path(g_image_paths[i]), widths[i], heights[i], i, i, i);
     }
-    fputs("    { NULL, 0, 0, NULL }\n};\n\n", cf);
+    fputs("    { NULL, 0, 0, NULL, 0 }\n};\n\n", cf);
 
     fputs("const embedded_image_t *embedded_image_find(const char *path) {\n"
           "    for (size_t i = 0; g_embedded_images[i].path != NULL; i++) {\n"

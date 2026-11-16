@@ -25,6 +25,7 @@
 #include "editor/panels/file_manager.h"
 #include "editor/panels/scene_tabs.h"
 #include "exporters/compiler/ps2/ps2_exporter.h"
+#include "exporters/compiler/ps1/ps1_exporter.h"
 #include "exporters/compiler/modern/modern_exporter.h"
 #include "project/current_project.h"
 #include "project/project_types.h"
@@ -111,11 +112,16 @@ static int current_status(void) {
         if (s == MODERN_EXPORT_RUNNING) return 1;
         if (s == MODERN_EXPORT_SUCCESS) return 2;
         if (s == MODERN_EXPORT_FAILED) return 3;
-    } else {
+    } else if (g_selected == 5) {
         ps2_export_status_t s = ps2_export_get_status();
         if (s == PS2_EXPORT_STATUS_RUNNING) return 1;
         if (s == PS2_EXPORT_STATUS_SUCCESS) return 2;
         if (s == PS2_EXPORT_STATUS_FAILED) return 3;
+    } else {
+        ps1_export_status_t s = ps1_export_get_status();
+        if (s == PS1_EXPORT_STATUS_RUNNING) return 1;
+        if (s == PS1_EXPORT_STATUS_SUCCESS) return 2;
+        if (s == PS1_EXPORT_STATUS_FAILED) return 3;
     }
     return 0;
 }
@@ -128,6 +134,7 @@ static void push_log(const char *line) {
 static void pump_logs(void) {
     const char *line;
     while ((line = ps2_export_poll_next_line()) != NULL) push_log(line);
+    while ((line = ps1_export_poll_next_line()) != NULL) push_log(line);
 }
 static int project_modern(void) {
     const project_settings_t *s = current_project_get_settings();
@@ -152,7 +159,7 @@ static int detail_x(void) { return project_modern() ? 345 : PAD + 14; }
 static int mode_y(void) { return project_modern() ? 440 : 292; }
 static int footer_y(void) { return PAGE_H - PAD - btn_h(); }
 static void close_export(void) {
-    if (current_status() == 1) { if (g_platforms[g_selected].modern) modern_export_cancel(); else ps2_export_cancel(); }
+    if (current_status() == 1) { if (g_platforms[g_selected].modern) modern_export_cancel(); else if (g_selected == 5) ps2_export_cancel(); else ps1_export_cancel(); }
     g_open = 0; g_details = 0; g_name.focused = g_path.focused = 0; window_stop_text_input();
 }
 static void on_browse_result(const char *path, void *user_data) {
@@ -189,13 +196,15 @@ static void start_export(void) {
         snprintf(g_status_text, sizeof(g_status_text), "Preparing %s (%d architectures)", g_platforms[g_selected].label, count);
     } else if (g_selected == 5) {
         g_started = ps2_export_start(g_name.text, g_release, g_path.text); snprintf(g_status_text, sizeof(g_status_text), "Preparing PlayStation 2 export");
-    } else { snprintf(g_error_text, sizeof(g_error_text), "PlayStation 1 export is not available yet."); }
+    } else {
+        g_started = ps1_export_start(g_name.text, g_release, g_path.text); snprintf(g_status_text, sizeof(g_status_text), "Preparing PlayStation 1 export");
+    }
 }
 void export_dialog_update(int window_w, int window_h) {
     if (!g_open) return;
     int dx, dy; ui_center_rect(window_w, window_h, PAGE_W, PAGE_H, &dx, &dy);
     int status = current_status();
-    if (status) { if (g_platforms[g_selected].modern) modern_export_update(); else ps2_export_update(); pump_logs(); status = current_status(); }
+    if (status) { if (g_platforms[g_selected].modern) modern_export_update(); else if (g_selected == 5) ps2_export_update(); else ps1_export_update(); pump_logs(); status = current_status(); }
     if (status == 1 && g_platforms[g_selected].modern) snprintf(g_status_text, sizeof(g_status_text), "Building %s (%d/%d) %s...", modern_export_current_architecture(), modern_export_architecture_index() + 1, modern_export_architecture_count(), g_platforms[g_selected].label);
     else if (status == 1) snprintf(g_status_text, sizeof(g_status_text), "Exporting %s...", g_platforms[g_selected].label);
     else if (status == 2) snprintf(g_status_text, sizeof(g_status_text), "Export completed successfully");

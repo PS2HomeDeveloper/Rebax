@@ -227,6 +227,17 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         }
     }
 
+    if (node_source_is_ps1()) {
+        static const char *PS1_RUNTIME_FILES[] = {
+            "engine_context.h", "engine_context.c", "ps1_tim.h", "ps1_tim.c", "embedded_images.h"
+        };
+        for (size_t i = 0; i < sizeof(PS1_RUNTIME_FILES) / sizeof(PS1_RUNTIME_FILES[0]); i++) {
+            char dst[1600];
+            snprintf(dst, sizeof(dst), "%s/%s", dest_src_dir, PS1_RUNTIME_FILES[i]);
+            if (!node_source_copy(PS1_RUNTIME_FILES[i], dst)) return 0;
+        }
+    }
+
     /* engine_context.h - completely independent of g_needs_image_loader (it was
      * mistakenly tied to it before via IMAGE_LOADER_FILES below, from an older design
      * where Sprite2D went through image_loader.h - when that was removed, this copy
