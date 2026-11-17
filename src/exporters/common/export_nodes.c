@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include "exporters/common/export_internal.h"
@@ -272,19 +273,53 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
      * breaking linkage). Does not include engine_context.h - that was copied above
      * independently */
     if (g_needs_image_loader) {
-        static const char *IMAGE_LOADER_FILES[] = {
-            "image_loader.h", "image_loader_internal.h",
-            "image_loader.c", "image_loader_common.c",
-            "image_loader_png.c", "image_loader_jpeg.c", "image_loader_bmp.c",
-            "image_loader_tga.c", "image_loader_tiff.c", "image_loader_raw.c",
-            "image_loader_tim2.c", "image_loader_tim.c",
+        int need_png = 0, need_jpeg = 0, need_bmp = 0, need_tga = 0, need_tiff = 0;
+        int need_raw = 0, need_tim2 = 0, need_tim = 0;
+        for (int i = 0; i < g_image_paths_count; i++) {
+            const char *p = g_image_paths[i];
+            const char *dot = strrchr(p, '.');
+            if (dot == NULL) continue;
+            if (strcasecmp(dot, ".png") == 0) need_png = 1;
+            else if (strcasecmp(dot, ".jpg") == 0 || strcasecmp(dot, ".jpeg") == 0) need_jpeg = 1;
+            else if (strcasecmp(dot, ".bmp") == 0) need_bmp = 1;
+            else if (strcasecmp(dot, ".tga") == 0) need_tga = 1;
+            else if (strcasecmp(dot, ".tif") == 0 || strcasecmp(dot, ".tiff") == 0) need_tiff = 1;
+            else if (strcasecmp(dot, ".raw") == 0) need_raw = 1;
+            else if (strcasecmp(dot, ".tm2") == 0 || strcasecmp(dot, ".tim2") == 0) need_tim2 = 1;
+            else if (strcasecmp(dot, ".tim") == 0) need_tim = 1;
+        }
+        {
+            char config_path[1600];
+            FILE *config;
+            snprintf(config_path, sizeof(config_path), "%s/image_loader_config.h", dest_src_dir);
+            config = fopen(config_path, "w");
+            if (config == NULL) return 0;
+            fprintf(config, "#ifndef REBAX_IMAGE_LOADER_CONFIG_H\n#define REBAX_IMAGE_LOADER_CONFIG_H\n"
+                            "#define REBAX_IMAGE_LOADER_PNG %d\n#define REBAX_IMAGE_LOADER_JPEG %d\n"
+                            "#define REBAX_IMAGE_LOADER_BMP %d\n#define REBAX_IMAGE_LOADER_TGA %d\n"
+                            "#define REBAX_IMAGE_LOADER_TIFF %d\n#define REBAX_IMAGE_LOADER_RAW %d\n"
+                            "#define REBAX_IMAGE_LOADER_TIM2 %d\n#define REBAX_IMAGE_LOADER_TIM %d\n"
+                            "#endif\n", need_png, need_jpeg, need_bmp, need_tga, need_tiff,
+                            need_raw, need_tim2, need_tim);
+            fclose(config);
+        }
+        const char *IMAGE_LOADER_FILES[] = {
+            "image_loader.h", "image_loader_internal.h", "image_loader.c", "image_loader_common.c",
+            need_png ? "image_loader_png.c" : NULL,
+            need_jpeg ? "image_loader_jpeg.c" : NULL,
+            need_bmp ? "image_loader_bmp.c" : NULL,
+            need_tga ? "image_loader_tga.c" : NULL,
+            need_tiff ? "image_loader_tiff.c" : NULL,
+            need_raw ? "image_loader_raw.c" : NULL,
+            need_tim2 ? "image_loader_tim2.c" : NULL,
+            need_tim ? "image_loader_tim.c" : NULL,
         };
         for (size_t f = 0; f < sizeof(IMAGE_LOADER_FILES) / sizeof(IMAGE_LOADER_FILES[0]); f++) {
+            if (IMAGE_LOADER_FILES[f] == NULL) continue;
             { char dst[1600]; snprintf(dst,sizeof(dst),"%s/%s",dest_src_dir,IMAGE_LOADER_FILES[f]); if(!node_source_copy(IMAGE_LOADER_FILES[f],dst)) return 0; }
             scan_node_source_for_export_flags(IMAGE_LOADER_FILES[f]);
         }
-        log_push("[exporter] included full image loader subsystem (all formats - "
-                 "per-format dead-code elimination is a separate future step).");
+        log_push("[exporter] included only image loader units required by project assets.");
     }
 
     return matched_count == g_used_types_count;

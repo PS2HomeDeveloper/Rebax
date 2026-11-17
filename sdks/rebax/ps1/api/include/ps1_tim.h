@@ -26,5 +26,7 @@ typedef struct {
 } ps1_tim_image_t;
 
 int ps1_tim_upload(const void *data, size_t size, ps1_tim_image_t *out_image);
+int ps1_tim_mode_supported(int mode);
+int ps1_tim_texture_width(int mode, int image_words);
 
 #endif

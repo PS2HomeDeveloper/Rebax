@@ -21,6 +21,7 @@
 #include "exporters/common/export_internal.h"
 #include "exporters/common/node_source.h"
 #include "formats/image_decoder.h"
+#include "formats/tim/tim_codec.h"
 
 static void export_slashes(char *path) {
     for (char *p = path; *p != '\0'; p++) if (*p == '\\') *p = '/';
@@ -43,25 +44,8 @@ static int export_write_image_files(const char *dest_src_dir, int index,
 static int export_write_ps1_tim(const char *dest_src_dir, int index,
                                 const unsigned char *pixels, int width, int height) {
     char path[1700];
-    FILE *f;
-    uint32_t image_length = 12u + (uint32_t)width * (uint32_t)height * 2u;
     snprintf(path, sizeof(path), "%s/image_%d.tim", dest_src_dir, index);
-    f = fopen(path, "wb");
-    if (f == NULL) return 0;
-    uint32_t header[2] = { 0x10u, 2u };
-    uint16_t rect[4] = { 0, 0, (uint16_t)width, (uint16_t)height };
-    uint32_t length = image_length;
-    if (fwrite(header, sizeof(header), 1, f) != 1 || fwrite(&length, sizeof(length), 1, f) != 1 ||
-        fwrite(rect, sizeof(rect), 1, f) != 1) { fclose(f); return 0; }
-    for (int i = 0; i < width * height; i++) {
-        uint16_t r = (uint16_t)(pixels[i * 4 + 0] >> 3);
-        uint16_t g = (uint16_t)(pixels[i * 4 + 1] >> 3);
-        uint16_t b = (uint16_t)(pixels[i * 4 + 2] >> 3);
-        uint16_t value = (uint16_t)(r | (g << 5) | (b << 10) | (pixels[i * 4 + 3] ? 0x8000u : 0));
-        if (fwrite(&value, sizeof(value), 1, f) != 1) { fclose(f); return 0; }
-    }
-    fclose(f);
-    return 1;
+    return rebax_tim_write_ps1_16(path, pixels, width, height);
 }
 
 int export_assets_convert_images(const char *dest_src_dir) {
@@ -92,6 +76,7 @@ int export_assets_convert_images(const char *dest_src_dir) {
     int ok_count = 0;
     int widths[EXPORT_MAX_IMAGE_PATHS] = {0}, heights[EXPORT_MAX_IMAGE_PATHS] = {0};
     int ready[EXPORT_MAX_IMAGE_PATHS] = {0};
+    long sizes[EXPORT_MAX_IMAGE_PATHS] = {0};
     for (int i = 0; i < g_image_paths_count; i++) {
         const export_image_spec_t *spec = &g_image_specs[i];
         int w = 0, h = 0;
@@ -117,6 +102,7 @@ int export_assets_convert_images(const char *dest_src_dir) {
         heights[i] = h;
         ready[i] = 1;
         ok_count++;
+        sizes[i] = pixel_bytes;
         if (portable_data) {
             fprintf(cf, "static const unsigned char rebax_image_%d[] = {\n", i);
             for (long b = 0; b < pixel_bytes; b++) {
@@ -128,6 +114,16 @@ int export_assets_convert_images(const char *dest_src_dir) {
         } else {
             char data_path[1700];
             snprintf(data_path, sizeof(data_path), "%s/image_%d.%s", dest_src_dir, i, ps1_data ? "tim" : "rgba");
+            if (ps1_data) {
+                FILE *size_file = fopen(data_path, "rb");
+                if (size_file != NULL) {
+                    if (fseek(size_file, 0, SEEK_END) == 0) {
+                        long length = ftell(size_file);
+                        if (length > 0) sizes[i] = length;
+                    }
+                    fclose(size_file);
+                }
+            }
             export_slashes(data_path);
             fprintf(cf, "extern const unsigned char rebax_image_%d[];\n"
                         "extern const unsigned char rebax_image_%d_end[];\n"
@@ -148,7 +144,7 @@ int export_assets_convert_images(const char *dest_src_dir) {
     fputs("\nstatic const embedded_image_t g_embedded_images[] = {\n", cf);
     for (int i = 0; i < g_image_paths_count; i++) {
         if (!ready[i]) continue;
-        fprintf(cf, "    { \"%s\", %d, %d, rebax_image_%d, (size_t)(rebax_image_%d_end - rebax_image_%d) },\n", export_public_path(g_image_paths[i]), widths[i], heights[i], i, i, i);
+        fprintf(cf, "    { \"%s\", %d, %d, rebax_image_%d, %ld },\n", export_public_path(g_image_paths[i]), widths[i], heights[i], i, sizes[i]);
     }
     fputs("    { NULL, 0, 0, NULL, 0 }\n};\n\n", cf);
 

@@ -18,6 +18,18 @@ static uint32_t word_at(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+int ps1_tim_mode_supported(int mode) {
+    return mode >= 0 && mode <= 3;
+}
+
+int ps1_tim_texture_width(int mode, int image_words) {
+    if (image_words < 0 || !ps1_tim_mode_supported(mode)) return 0;
+    if (mode == 0) return image_words * 4;
+    if (mode == 1) return image_words * 2;
+    if (mode == 2) return image_words;
+    return (image_words * 2) / 3;
+}
+
 int ps1_tim_upload(const void *data, size_t size, ps1_tim_image_t *out_image) {
     const uint8_t *p = (const uint8_t *)data;
     size_t offset = 0;
@@ -26,6 +38,7 @@ int ps1_tim_upload(const void *data, size_t size, ps1_tim_image_t *out_image) {
     memset(out_image, 0, sizeof(*out_image));
     flags = word_at(p + 4);
     out_image->mode = (int)(flags & 7u);
+    if (!ps1_tim_mode_supported(out_image->mode)) return 0;
     out_image->has_clut = (flags & 8u) != 0;
     offset = 8;
     if (out_image->has_clut) {

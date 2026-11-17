@@ -102,11 +102,11 @@ int ps1_build_start(const ps1_build_config_t *config) {
 }
 
 int ps1_build_poll(int *out_ok) {
-    int done;
+    int running;
     if (!g_active) { if (out_ok) *out_ok = 0; return 0; }
-    done = shell_step_poll(&g_step, out_ok);
-    if (done) { g_active = 0; free(g_command); g_command = NULL; }
-    return done;
+    running = shell_step_poll(&g_step, out_ok);
+    if (!running) { g_active = 0; free(g_command); g_command = NULL; }
+    return running;
 }
 
 void ps1_build_cancel(void) {

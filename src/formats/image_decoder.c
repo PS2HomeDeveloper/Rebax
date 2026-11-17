@@ -45,6 +45,7 @@
 
 #include "filesystem/path_utils.h"
 #include "formats/image_decoder.h"
+#include "formats/tim/tim_codec.h"
 #include "stb_image.h" /* No STB_IMAGE_IMPLEMENTATION here - icon_atlas.c defines it once for the whole project */
 
 /* PSM constants (same real GS_PSM_* values from ps2sdk, copied here by name
@@ -392,10 +393,14 @@ unsigned char *image_loader_editor_load(const char *path, int *out_width, int *o
         unsigned char *result = load_raw(path, raw_width, raw_height, raw_psm);
         if (result != NULL) { *out_width = raw_width; *out_height = raw_height; }
         return result;
-    } else if (path_utils_has_suffix_ci(path, ".tm2") || path_utils_has_suffix_ci(path, ".tim2")) {
-        return load_tim2(path, out_width, out_height);
-    } else if (path_utils_has_suffix_ci(path, ".tim")) {
-        return load_tim(path, out_width, out_height);
+    } else if (path_utils_has_suffix_ci(path, ".tm2") || path_utils_has_suffix_ci(path, ".tim2") || path_utils_has_suffix_ci(path, ".tim")) {
+        rebax_decoded_image_t decoded;
+        if (rebax_tim_decode_file(path, &decoded)) {
+            *out_width = decoded.width;
+            *out_height = decoded.height;
+            return decoded.rgba;
+        }
+        return NULL;
     }
 
     return NULL; /* Unsupported format (GIF or anything else) */
