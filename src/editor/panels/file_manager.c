@@ -68,6 +68,9 @@
 #include "filesystem/path_utils.h"
 #include "editor/ui/file_icons.h"
 #include "platform/android/storage.h"
+#include "editor/ui/draw_kit.h"
+#include "filesystem/storage_volumes.h"
+#include "filesystem/rebax_fs.h"
 
 /* ------------------------------------------------------------
  * Layout constants
@@ -152,6 +155,14 @@ static text_field_t g_search_field;
 static text_field_t g_filename_field;
 static window_texture_t *g_filename_label_tex = NULL;
 static int g_filename_label_w = 0, g_filename_label_h = 0;
+
+typedef enum { PROMPT_NONE, PROMPT_NEW_FOLDER, PROMPT_RENAME, PROMPT_DELETE } prompt_t;
+static prompt_t g_prompt = PROMPT_NONE;
+static text_field_t g_prompt_field;
+static int g_prompt_ready = 0;
+static char g_prompt_error[120];
+static int g_manage = 0;
+static int g_in_devices = 0;
 
 static int g_selected_index = -1; /* In file-pick mode only - index into g_entries */
 static int g_scroll_offset = 0;
@@ -328,6 +339,7 @@ static void rebuild_breadcrumb(void) {
 }
 
 static void load_directory(const char *path) {
+    g_in_devices = 0;
     free_entries();
     g_selected_index = -1;
     g_scroll_offset = 0;
@@ -386,6 +398,89 @@ static void load_directory(const char *path) {
     strncpy(g_current_path, path, sizeof(g_current_path) - 1);
     g_current_path[sizeof(g_current_path) - 1] = '\0';
     rebuild_breadcrumb();
+}
+
+static void load_devices(void) {
+    free_entries();
+    g_selected_index = -1;
+    g_scroll_offset = 0;
+    g_manage = 0;
+    storage_volume_t vols[24];
+    int n = storage_volumes_list(vols, 24);
+    for (int i = 0; i < n; i++) add_entry(vols[i].path, vols[i].label, 1);
+    free_crumb_textures();
+    snprintf(g_crumb_label[0], sizeof(g_crumb_label[0]), "Devices");
+    g_crumb_path[0][0] = '\0';
+    g_crumb_count = 1;
+    g_crumb_tex[0] = ui_make_text_texture(g_crumb_label[0], FONT_WEIGHT_REGULAR, 13, &g_crumb_w[0], &g_crumb_h[0]);
+    g_in_devices = 1;
+}
+
+static int valid_entry_name(const char *name) {
+    if (!name[0] || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return 0;
+    return strpbrk(name, "/\\:*?\"<>|") == NULL;
+}
+
+static void run_prompt_action(void) {
+    const char *name = g_prompt_field.text;
+    char target[AB_MAX_PATH];
+    g_prompt_error[0] = '\0';
+    if (g_prompt == PROMPT_DELETE) {
+        if (g_selected_index >= 0 && g_selected_index < g_entry_count) {
+            char path[AB_MAX_PATH];
+            snprintf(path, sizeof(path), "%s", g_entries[g_selected_index].full_path);
+            if (!rebax_fs_remove_recursive(path)) { snprintf(g_prompt_error, sizeof(g_prompt_error), "Could not delete it"); return; }
+        }
+    } else {
+        if (!valid_entry_name(name)) { snprintf(g_prompt_error, sizeof(g_prompt_error), "This name is not valid"); return; }
+        snprintf(target, sizeof(target), "%s/%s", g_current_path, name);
+        if (rebax_fs_exists(target)) { snprintf(g_prompt_error, sizeof(g_prompt_error), "This name already exists"); return; }
+        if (g_prompt == PROMPT_NEW_FOLDER) {
+            if (!rebax_fs_mkdir_p(target)) { snprintf(g_prompt_error, sizeof(g_prompt_error), "Could not create the folder"); return; }
+        } else if (g_selected_index >= 0 && g_selected_index < g_entry_count) {
+            if (rename(g_entries[g_selected_index].full_path, target) != 0) { snprintf(g_prompt_error, sizeof(g_prompt_error), "Could not rename it"); return; }
+        }
+    }
+    g_prompt = PROMPT_NONE;
+    window_stop_text_input();
+    char here[AB_MAX_PATH];
+    snprintf(here, sizeof(here), "%s", g_current_path);
+    load_directory(here);
+}
+
+static void open_prompt(prompt_t kind) {
+    if (!g_prompt_ready) { g_prompt_ready = 1; text_field_init(&g_prompt_field); }
+    g_prompt = kind;
+    g_prompt_error[0] = '\0';
+    g_prompt_field.text[0] = '\0';
+    if (kind == PROMPT_RENAME && g_selected_index >= 0 && g_selected_index < g_entry_count)
+        snprintf(g_prompt_field.text, sizeof(g_prompt_field.text), "%s", g_entries[g_selected_index].display_name);
+    g_prompt_field.cursor_pos = (int)strlen(g_prompt_field.text);
+    g_prompt_field.scroll_offset = 0;
+    g_prompt_field.focused = (kind != PROMPT_DELETE);
+    if (g_prompt_field.focused) window_start_text_input();
+}
+
+typedef struct { int x, y, w, h; } fm_rect_t;
+#define PROMPT_W 440
+#define PROMPT_H 130
+
+static fm_rect_t prompt_rect(int dx, int dy) {
+    fm_rect_t r = { dx + (DIALOG_WIDTH - PROMPT_W) / 2, dy + 150, PROMPT_W, PROMPT_H };
+    return r;
+}
+
+static void tool_rects(int dx, int toolbar_y, fm_rect_t out[5]) {
+    static const char *labels[5] = { "Devices", "New folder", "Manage", "Rename", "Delete" };
+    int right = dx + DIALOG_WIDTH - DIALOG_PADDING;
+    int count = g_manage ? 5 : 3;
+    int x = right;
+    for (int i = count - 1; i >= 0; i--) {
+        int w = ui_kit_text_width(labels[i], 13) + 22;
+        x -= w;
+        out[i].x = x; out[i].y = toolbar_y + 1; out[i].w = w; out[i].h = TOOLBAR_HEIGHT - 8;
+        x -= 6;
+    }
 }
 
 /* ------------------------------------------------------------
@@ -477,6 +572,8 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
         load_directory(g_root_path);
     }
 
+    g_manage = 0;
+    g_prompt = PROMPT_NONE;
     g_skip_input_frames = 2;
     g_is_open = 1;
     return 1;
@@ -580,6 +677,35 @@ void file_manager_update(int window_w, int window_h) {
         return;
     }
 
+    if (g_prompt != PROMPT_NONE) {
+        fm_rect_t pr = prompt_rect(dx, dy);
+        int ok_x = pr.x + pr.w - 16 - 100, btn_y = pr.y + pr.h - 16 - 34;
+        int cancel_x2 = ok_x - 10 - 100;
+        if (g_prompt != PROMPT_DELETE) {
+            int was = g_prompt_field.focused;
+            text_field_update(&g_prompt_field, pr.x + 16, pr.y + 40, pr.w - 32, 30, pr.w - 32);
+            if (g_prompt_field.focused != was) { if (g_prompt_field.focused) window_start_text_input(); else window_stop_text_input(); }
+        }
+        if (window_mouse_left_just_pressed()) {
+            if (ui_kit_clicked(ok_x, btn_y, 100, 34)) run_prompt_action();
+            else if (ui_kit_clicked(cancel_x2, btn_y, 100, 34)) { g_prompt = PROMPT_NONE; window_stop_text_input(); }
+        }
+        return;
+    }
+
+    int toolbar_y0 = dy + TITLEBAR_HEIGHT + CRUMB_BAR_HEIGHT;
+    {
+        fm_rect_t tr[5];
+        tool_rects(dx, toolbar_y0, tr);
+        int sel_ok = g_selected_index >= 0 && g_selected_index < g_entry_count;
+        int can_edit = !g_in_devices;
+        if (g_root_mode == FILE_MANAGER_ROOT_DEVICE && ui_kit_clicked(tr[0].x, tr[0].y, tr[0].w, tr[0].h)) { load_devices(); return; }
+        if (can_edit && ui_kit_clicked(tr[1].x, tr[1].y, tr[1].w, tr[1].h)) { open_prompt(PROMPT_NEW_FOLDER); return; }
+        if (can_edit && ui_kit_clicked(tr[2].x, tr[2].y, tr[2].w, tr[2].h)) { g_manage = !g_manage; g_selected_index = -1; return; }
+        if (g_manage && sel_ok && ui_kit_clicked(tr[3].x, tr[3].y, tr[3].w, tr[3].h)) { open_prompt(PROMPT_RENAME); return; }
+        if (g_manage && sel_ok && ui_kit_clicked(tr[4].x, tr[4].y, tr[4].w, tr[4].h)) { open_prompt(PROMPT_DELETE); return; }
+    }
+
     /* --- Breadcrumb bar - counted here, reused during drawing --- */
     int crumb_y = dy + TITLEBAR_HEIGHT;
     int crumb_x = dx + DIALOG_PADDING;
@@ -601,7 +727,7 @@ void file_manager_update(int window_w, int window_h) {
     /* --- Search bar --- */
     int toolbar_y = crumb_y + CRUMB_BAR_HEIGHT;
     int search_x = dx + DIALOG_PADDING;
-    int search_w = (DIALOG_WIDTH - DIALOG_PADDING * 2) / 2;
+    int search_w = 220;
     text_field_update(&g_search_field, search_x + 20, toolbar_y, search_w - 20, TOOLBAR_HEIGHT - 6, search_w - 20);
 
     if (g_search_field.focused) window_start_text_input(); else window_stop_text_input();
@@ -648,7 +774,10 @@ void file_manager_update(int window_w, int window_h) {
         int inside = (mx >= cell_x && mx < cell_x + CELL_W && my >= cell_y && my < cell_y + CELL_H
                       && my >= grid_y && my < grid_y + grid_h);
         if (inside && window_mouse_left_just_pressed()) {
-            if (e->is_dir) {
+            if (g_manage) {
+                g_selected_index = i;
+                clicked_grid = 1;
+            } else if (e->is_dir) {
                 /* e points into g_entries; load_directory() clears and rebuilds
                  * that array, so copy the path before calling it. */
                 char next_path[AB_MAX_PATH];
@@ -672,7 +801,9 @@ void file_manager_update(int window_w, int window_h) {
     int can_select = 0;
     char final_path[AB_MAX_PATH];
     final_path[0] = '\0';
-    if (g_pick_mode == FILE_MANAGER_MODE_SAVE_FILE) {
+    if (g_in_devices) {
+        can_select = 0;
+    } else if (g_pick_mode == FILE_MANAGER_MODE_SAVE_FILE) {
         /* File name row - directly below the grid, above the button row */
         int buttons_y_early = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
         int filename_row_y = buttons_y_early - FILENAME_ROW_HEIGHT;
@@ -760,14 +891,29 @@ void file_manager_draw(int window_w, int window_h) {
     /* --- Search bar + results/filter counter --- */
     int toolbar_y = crumb_y + CRUMB_BAR_HEIGHT;
     int search_x = dx + DIALOG_PADDING;
-    int search_w = (DIALOG_WIDTH - DIALOG_PADDING * 2) / 2;
+    int search_w = 220;
     icon_atlas_draw(ICON_search, search_x, toolbar_y + (TOOLBAR_HEIGHT - 6 - 16) / 2, 16);
     text_field_draw(&g_search_field, search_x + 20, toolbar_y, search_w - 20, TOOLBAR_HEIGHT - 6, 13);
 
     if (g_filter_label_tex != NULL) {
         int fx = dx + DIALOG_WIDTH - DIALOG_PADDING - g_filter_label_w;
-        window_draw_texture_tinted(g_filter_label_tex, fx, toolbar_y + (TOOLBAR_HEIGHT - g_filter_label_h) / 2,
+        window_draw_texture_tinted(g_filter_label_tex, fx, crumb_y + (CRUMB_BAR_HEIGHT - g_filter_label_h) / 2,
                                     g_filter_label_w, g_filter_label_h, 150, 150, 150);
+    }
+    {
+        static const char *labels[5] = { "Devices", "New folder", "Manage", "Rename", "Delete" };
+        fm_rect_t tr[5];
+        tool_rects(dx, toolbar_y, tr);
+        int count = g_manage ? 5 : 3;
+        int sel_ok = g_selected_index >= 0 && g_selected_index < g_entry_count;
+        for (int i = 0; i < count; i++) {
+            int enabled = 1;
+            if (i == 0 && g_root_mode != FILE_MANAGER_ROOT_DEVICE) enabled = 0;
+            if ((i == 1 || i == 2) && g_in_devices) enabled = 0;
+            if (i >= 3 && !sel_ok) enabled = 0;
+            if (i == 0 && g_root_mode != FILE_MANAGER_ROOT_DEVICE) continue;
+            ui_kit_button(labels[i], tr[i].x, tr[i].y, tr[i].w, tr[i].h, enabled, i == 2 && g_manage);
+        }
     }
 
     /* --- Grid area (clipped at its edges so no content overflows) --- */
@@ -799,7 +945,7 @@ void file_manager_draw(int window_w, int window_h) {
         int is_dim = (!e->is_dir && g_pick_mode == FILE_MANAGER_MODE_PICK_FOLDER);
         int is_hover = (mx >= cell_x && mx < cell_x + CELL_W && my >= cell_y && my < cell_y + CELL_H
                          && my >= grid_y && my < grid_y + grid_h);
-        int is_selected = (!e->is_dir && i == g_selected_index);
+        int is_selected = ((!e->is_dir || g_manage) && i == g_selected_index);
 
         if (is_selected && g_selected_tex != NULL) {
             window_draw_texture(g_selected_tex, cell_x + 2, cell_y + 2, CELL_W - 4, CELL_H - 4);
@@ -849,7 +995,9 @@ void file_manager_draw(int window_w, int window_h) {
 
     /* --- Footer: Cancel / Select / Save buttons --- */
     int can_select = 0;
-    if (g_pick_mode == FILE_MANAGER_MODE_SAVE_FILE) {
+    if (g_in_devices) {
+        can_select = 0;
+    } else if (g_pick_mode == FILE_MANAGER_MODE_SAVE_FILE) {
         can_select = (g_filename_field.text[0] != '\0');
     } else if (g_pick_mode == FILE_MANAGER_MODE_PICK_FOLDER) {
         can_select = 1;
@@ -894,6 +1042,24 @@ void file_manager_draw(int window_w, int window_h) {
         window_draw_texture_tinted(g_select_txt_tex, select_x + g_select_btn.text_offset_x, buttons_y + g_select_btn.text_offset_y,
                                     g_select_btn.text_img.width, g_select_btn.text_img.height, 150, 150, 150);
     }
+
+    if (g_prompt != PROMPT_NONE) {
+        fm_rect_t pr = prompt_rect(dx, dy);
+        ui_kit_rect(pr.x - 1, pr.y - 1, pr.w + 2, pr.h + 2, 11, 90, 93, 100);
+        ui_kit_rect(pr.x, pr.y, pr.w, pr.h, 10, 38, 39, 44);
+        const char *title = g_prompt == PROMPT_NEW_FOLDER ? "New folder name" : (g_prompt == PROMPT_RENAME ? "New name" : "Delete this item?");
+        ui_kit_text(title, 14, pr.x + 16, pr.y + 12, 235, 235, 235);
+        if (g_prompt == PROMPT_DELETE) {
+            const char *nm = (g_selected_index >= 0 && g_selected_index < g_entry_count) ? g_entries[g_selected_index].display_name : "";
+            ui_kit_text(nm, 13, pr.x + 16, pr.y + 44, 200, 204, 210);
+        } else {
+            text_field_draw(&g_prompt_field, pr.x + 16, pr.y + 40, pr.w - 32, 30, 14);
+        }
+        if (g_prompt_error[0]) ui_kit_text(g_prompt_error, 12, pr.x + 16, pr.y + 78, 225, 100, 100);
+        int ok_x = pr.x + pr.w - 16 - 100, btn_y = pr.y + pr.h - 16 - 34;
+        ui_kit_button("Cancel", ok_x - 10 - 100, btn_y, 100, 34, 1, 0);
+        ui_kit_button(g_prompt == PROMPT_DELETE ? "Delete" : "OK", ok_x, btn_y, 100, 34, 1, 1);
+    }
 }
 
 void file_manager_shutdown(void) {
@@ -913,6 +1079,8 @@ void file_manager_shutdown(void) {
 
     text_field_free(&g_search_field);
     text_field_free(&g_filename_field);
+    if (g_prompt_ready) text_field_free(&g_prompt_field);
+    g_prompt_ready = 0;
     labeled_button_free(&g_cancel_btn);
     labeled_button_free(&g_select_btn);
 

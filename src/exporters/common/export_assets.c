@@ -16,12 +16,33 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <limits.h>
 #include <stdint.h>
 #include "exporters/common/export_internal.h"
 #include "exporters/common/node_source.h"
 #include "formats/image_decoder.h"
 #include "formats/tim/tim_codec.h"
+
+static int export_path_has_ext(const char *path, const char *ext) {
+    const char *dot = strrchr(path, '.');
+    return dot != NULL && strcasecmp(dot, ext) == 0;
+}
+
+static int export_copy_file(const char *source, const char *dest) {
+    FILE *in = fopen(source, "rb");
+    FILE *out = fopen(dest, "wb");
+    unsigned char buffer[8192];
+    size_t n;
+    int ok = 1;
+    if (!in || !out) { if (in) fclose(in); if (out) fclose(out); return 0; }
+    while ((n = fread(buffer, 1, sizeof(buffer), in)) != 0) {
+        if (fwrite(buffer, 1, n, out) != n) { ok = 0; break; }
+    }
+    if (ferror(in)) ok = 0;
+    if (fclose(in) != 0 || fclose(out) != 0) ok = 0;
+    return ok;
+}
 
 static void export_slashes(char *path) {
     for (char *p = path; *p != '\0'; p++) if (*p == '\\') *p = '/';
@@ -45,7 +66,13 @@ static int export_write_ps1_tim(const char *dest_src_dir, int index,
                                 const unsigned char *pixels, int width, int height) {
     char path[1700];
     snprintf(path, sizeof(path), "%s/image_%d.tim", dest_src_dir, index);
-    return rebax_tim_write_ps1_16(path, pixels, width, height);
+    {
+        rebax_tim_encode_options_t options;
+        rebax_tim_encode_options_default(&options);
+        options.dither = 1;
+        options.resize_mode = 1;
+        return rebax_tim_encode_file(path, pixels, width, height, REBAX_TIM1_4BIT, &options);
+    }
 }
 
 int export_assets_convert_images(const char *dest_src_dir) {
@@ -92,7 +119,18 @@ int export_assets_convert_images(const char *dest_src_dir) {
             continue;
         }
         long pixel_bytes = (long)w * (long)h * 4;
-        int written = portable_data || (ps1_data ? export_write_ps1_tim(dest_src_dir, i, pixels, w, h) : export_write_image_files(dest_src_dir, i, pixels, pixel_bytes));
+        int written;
+        if (portable_data) written = 1;
+        else if (ps1_data && export_path_has_ext(g_image_paths[i], ".tim")) {
+            char source_path[1700], dest_path[1700];
+            snprintf(source_path, sizeof(source_path), "%s", g_image_paths[i]);
+            snprintf(dest_path, sizeof(dest_path), "%s/image_%d.tim", dest_src_dir, i);
+            written = export_copy_file(source_path, dest_path);
+        } else if (ps1_data) {
+            written = export_write_ps1_tim(dest_src_dir, i, pixels, w, h);
+        } else {
+            written = export_write_image_files(dest_src_dir, i, pixels, pixel_bytes);
+        }
         if (!written) {
             free(pixels);
             log_pushf("[exporter] WARNING: could not write embedded data for: %s", g_image_paths[i]);

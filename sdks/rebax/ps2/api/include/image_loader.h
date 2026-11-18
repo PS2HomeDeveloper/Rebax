@@ -81,6 +81,15 @@ int image_loader_load_raw(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *pa
  * the PSM is read from the GsTex0 stored in the file itself, not
  * hardcoded */
 int image_loader_load_tim2(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_32(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_24(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_16(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_16s(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_8(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_4(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_8h(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_4hl(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
+int image_loader_load_tim2_4hh(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path);
 
 /* Full manual decoding of the PS1 TIM format - the layout is taken
  * verbatim from ps1_tim_tool.py (the tool's parse_tim function and the

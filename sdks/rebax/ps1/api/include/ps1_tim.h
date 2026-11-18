@@ -23,6 +23,9 @@ typedef struct {
     RECT clut;
     int mode;
     int has_clut;
+    int width;
+    int height;
+    int v;
 } ps1_tim_image_t;
 
 int ps1_tim_upload(const void *data, size_t size, ps1_tim_image_t *out_image);

@@ -22,6 +22,7 @@
 #include "exporters/common/export_internal.h"
 #include "filesystem/rebax_fs.h"
 #include "exporters/common/node_source.h"
+#include "formats/tim/tim_codec.h"
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #define MAX_EXTRA_FLAGS EXPORT_MAX_EXTRA_FLAGS
 
@@ -275,6 +276,8 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
     if (g_needs_image_loader) {
         int need_png = 0, need_jpeg = 0, need_bmp = 0, need_tga = 0, need_tiff = 0;
         int need_raw = 0, need_tim2 = 0, need_tim = 0;
+        int need_tim2_32 = 0, need_tim2_24 = 0, need_tim2_16 = 0, need_tim2_16s = 0;
+        int need_tim2_8 = 0, need_tim2_4 = 0, need_tim2_8h = 0, need_tim2_4hl = 0, need_tim2_4hh = 0;
         for (int i = 0; i < g_image_paths_count; i++) {
             const char *p = g_image_paths[i];
             const char *dot = strrchr(p, '.');
@@ -285,7 +288,23 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
             else if (strcasecmp(dot, ".tga") == 0) need_tga = 1;
             else if (strcasecmp(dot, ".tif") == 0 || strcasecmp(dot, ".tiff") == 0) need_tiff = 1;
             else if (strcasecmp(dot, ".raw") == 0) need_raw = 1;
-            else if (strcasecmp(dot, ".tm2") == 0 || strcasecmp(dot, ".tim2") == 0) need_tim2 = 1;
+            else if (strcasecmp(dot, ".tm2") == 0 || strcasecmp(dot, ".tim2") == 0) {
+                int tim2_format = rebax_tim2_format_from_file(p);
+                need_tim2 = 1;
+                if (tim2_format == REBAX_TIM2_32BIT) need_tim2_32 = 1;
+                else if (tim2_format == REBAX_TIM2_24BIT) need_tim2_24 = 1;
+                else if (tim2_format == REBAX_TIM2_16BIT) need_tim2_16 = 1;
+                else if (tim2_format == REBAX_TIM2_16S) need_tim2_16s = 1;
+                else if (tim2_format == REBAX_TIM2_8BIT) need_tim2_8 = 1;
+                else if (tim2_format == REBAX_TIM2_4BIT) need_tim2_4 = 1;
+                else if (tim2_format == REBAX_TIM2_8H) need_tim2_8h = 1;
+                else if (tim2_format == REBAX_TIM2_4HL) need_tim2_4hl = 1;
+                else if (tim2_format == REBAX_TIM2_4HH) need_tim2_4hh = 1;
+                else {
+                    need_tim2_32 = need_tim2_24 = need_tim2_16 = need_tim2_16s = 1;
+                    need_tim2_8 = need_tim2_4 = need_tim2_8h = need_tim2_4hl = need_tim2_4hh = 1;
+                }
+            }
             else if (strcasecmp(dot, ".tim") == 0) need_tim = 1;
         }
         {
@@ -299,8 +318,15 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
                             "#define REBAX_IMAGE_LOADER_BMP %d\n#define REBAX_IMAGE_LOADER_TGA %d\n"
                             "#define REBAX_IMAGE_LOADER_TIFF %d\n#define REBAX_IMAGE_LOADER_RAW %d\n"
                             "#define REBAX_IMAGE_LOADER_TIM2 %d\n#define REBAX_IMAGE_LOADER_TIM %d\n"
+                            "#define REBAX_IMAGE_LOADER_TIM2_32 %d\n#define REBAX_IMAGE_LOADER_TIM2_24 %d\n"
+                            "#define REBAX_IMAGE_LOADER_TIM2_16 %d\n#define REBAX_IMAGE_LOADER_TIM2_16S %d\n"
+                            "#define REBAX_IMAGE_LOADER_TIM2_8 %d\n#define REBAX_IMAGE_LOADER_TIM2_4 %d\n"
+                            "#define REBAX_IMAGE_LOADER_TIM2_8H %d\n#define REBAX_IMAGE_LOADER_TIM2_4HL %d\n"
+                            "#define REBAX_IMAGE_LOADER_TIM2_4HH %d\n"
                             "#endif\n", need_png, need_jpeg, need_bmp, need_tga, need_tiff,
-                            need_raw, need_tim2, need_tim);
+                            need_raw, need_tim2, need_tim, need_tim2_32, need_tim2_24,
+                            need_tim2_16, need_tim2_16s, need_tim2_8, need_tim2_4,
+                            need_tim2_8h, need_tim2_4hl, need_tim2_4hh);
             fclose(config);
         }
         const char *IMAGE_LOADER_FILES[] = {
@@ -311,7 +337,17 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
             need_tga ? "image_loader_tga.c" : NULL,
             need_tiff ? "image_loader_tiff.c" : NULL,
             need_raw ? "image_loader_raw.c" : NULL,
-            need_tim2 ? "image_loader_tim2.c" : NULL,
+            need_tim2 ? "image_loader_tim2_common.c" : NULL,
+            need_tim2_32 ? "image_loader_tim2_32.c" : NULL,
+            need_tim2_24 ? "image_loader_tim2_24.c" : NULL,
+            need_tim2_16 ? "image_loader_tim2_16.c" : NULL,
+            need_tim2_16s ? "image_loader_tim2_16s.c" : NULL,
+            need_tim2_8 ? "image_loader_tim2_8.c" : NULL,
+            need_tim2_4 ? "image_loader_tim2_4.c" : NULL,
+            need_tim2_8h ? "image_loader_tim2_8h.c" : NULL,
+            need_tim2_4hl ? "image_loader_tim2_4hl.c" : NULL,
+            need_tim2_4hh ? "image_loader_tim2_4hh.c" : NULL,
+            need_tim2 ? "image_loader_tim2_internal.h" : NULL,
             need_tim ? "image_loader_tim.c" : NULL,
         };
         for (size_t f = 0; f < sizeof(IMAGE_LOADER_FILES) / sizeof(IMAGE_LOADER_FILES[0]); f++) {

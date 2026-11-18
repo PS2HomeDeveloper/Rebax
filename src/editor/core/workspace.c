@@ -36,6 +36,9 @@
 #include "editor/panels/properties.h"
 #include "editor/ui/icon_atlas.h"
 #include "editor/dialogs/export.h"
+#include "editor/panels/run_controls.h"
+#include "editor/dialogs/ps2_network.h"
+#include "editor/dialogs/emulator_select.h"
 #include "editor/dialogs/settings.h"
 #include "editor/viewport/2d.h"
 #include "editor/viewport/3d.h"
@@ -44,7 +47,7 @@
 #include "project/current_project.h"
 #include "editor/core/project_session.h"
 
-#define TOOLBAR_HEIGHT 30
+#define TOOLBAR_HEIGHT 38
 #define TAB_BAR_HEIGHT 24
 #define SCENE_TABS_BAR_HEIGHT TAB_BAR_HEIGHT
 #define CAMERA_TOP_BAR_HEIGHT TAB_BAR_HEIGHT
@@ -447,11 +450,16 @@ void editor_workspace_update(int window_w, int window_h) {
         apply_close_scene_result(close_scene_dialog_consume_result(), index);
         return;
     }
+    if (ps2_network_dialog_is_open()) { ps2_network_dialog_update(window_w, window_h); return; }
+    if (emulator_select_dialog_is_open()) { emulator_select_dialog_update(window_w, window_h); return; }
     if (export_dialog_is_open()) { export_dialog_update(window_w, window_h); return; }
     if (project_settings_dialog_is_open()) { project_settings_dialog_update(window_w, window_h); return; }
     if (g_move_panel >= 0) { update_move_dialog(window_w, window_h); return; }
     if (add_node_dialog_is_open()) { add_node_dialog_update(window_w, window_h); return; }
 
+    int run_menu_was_open = run_controls_menu_is_open();
+    run_controls_update(window_w);
+    if (run_menu_was_open) return;
     int mx = window_mouse_x(), my = window_mouse_y();
     int toolbar_x[TOOLBAR_MENU_ITEM_COUNT];
     toolbar_layout(window_w, toolbar_x);
@@ -531,6 +539,7 @@ void editor_workspace_draw(int window_w, int window_h) {
                                    (TOOLBAR_HEIGHT - g_toolbar_menu_h[i]) / 2,
                                    g_toolbar_menu_w[i], g_toolbar_menu_h[i], tint, tint, tint);
     }
+    run_controls_draw(window_w);
 
     draw_host_region(PANEL_REGION_LEFT_TOP, window_w, window_h);
     draw_host_region(PANEL_REGION_RIGHT_TOP, window_w, window_h);
@@ -578,9 +587,12 @@ void editor_workspace_draw(int window_w, int window_h) {
     window_fill_rect(0, window_h - 20, window_w, 1, 60, 62, 67);
     if (g_status_tex) window_draw_texture_tinted(g_status_tex, 10, window_h - 15, g_status_w, g_status_h, 165, 170, 178);
 
+    run_controls_draw_menu(window_w);
     add_node_dialog_draw(window_w, window_h);
     close_scene_dialog_draw(window_w, window_h);
     export_dialog_draw(window_w, window_h);
+    ps2_network_dialog_draw(window_w, window_h);
+    emulator_select_dialog_draw(window_w, window_h);
     project_settings_dialog_draw(window_w, window_h);
     draw_move_dialog(window_w, window_h);
 }
@@ -593,6 +605,9 @@ void editor_workspace_shutdown(void) {
     ui_tabs_shutdown(&g_scene_tabs);
     ui_tabs_shutdown(&g_camera_tabs);
     for (int i = 0; i < PANEL_REGION_COUNT; i++) ui_tabs_shutdown(&g_region_tabs[i]);
+    run_controls_shutdown();
+    ps2_network_dialog_shutdown();
+    emulator_select_dialog_shutdown();
     scene_tabs_shutdown();
     close_scene_dialog_shutdown();
     export_dialog_shutdown();

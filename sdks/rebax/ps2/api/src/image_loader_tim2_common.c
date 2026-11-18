@@ -1,8 +1,8 @@
 /*
  *  ____  _____ ____    _    __  __
  * |  _ \| ____| __ )  / \   \ \/ /
- * | |_) |  _| |  _ \ / _ \   \  / 
- * |  _ <| |___| |_) / ___ \  /  \ 
+ * | |_) |  _| |  _ \ / _ \   \  /
+ * |  _ <| |___| |_) / ___ \  /  \
  * |_| \_\_____|____/_/   \_\/_/\_\
  *
  * Rebax Engine
@@ -14,7 +14,7 @@
 
 /*
  * ============================================================
- * image_loader_tim2.c
+ * image_loader_tim2_common.c
  * ============================================================
  * See image_loader.h for full documentation.
  *
@@ -69,17 +69,31 @@
 #include "image_decoder.h"
 #include "image_loader_internal.h"
 
-int image_loader_load_tim2(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path) {
+int image_loader_load_tim2_format(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path,
+                                  unsigned char expected_psm) {
     FILE *f = fopen(path, "rb");
-    if (f == NULL) return 0;
+    if (f == NULL)
+        return 0;
 
-    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return 0;
+    }
     long file_size = ftell(f);
-    if (file_size < 16 + 48) { fclose(f); return 0; } /* Smaller than the smallest possible TIM2 file */
-    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return 0; }
+    if (file_size < 16 + 48) {
+        fclose(f);
+        return 0;
+    } /* Smaller than the smallest possible TIM2 file */
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return 0;
+    }
 
     unsigned char *data = malloc((size_t)file_size);
-    if (data == NULL) { fclose(f); return 0; }
+    if (data == NULL) {
+        fclose(f);
+        return 0;
+    }
 
     if (fread(data, 1, (size_t)file_size, f) != (size_t)file_size) {
         free(data);
@@ -95,14 +109,18 @@ int image_loader_load_tim2(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *p
 
     const size_t PIC_OFFSET = 16; /* File header fixed 16 bytes, first image starts immediately after it */
 
-    unsigned int clut_size    = read_u32le(data + PIC_OFFSET + 4);
-    unsigned int img_size     = read_u32le(data + PIC_OFFSET + 8);
-    unsigned short hdr_size   = read_u16le(data + PIC_OFFSET + 12);
-    unsigned short width      = read_u16le(data + PIC_OFFSET + 20);
-    unsigned short height     = read_u16le(data + PIC_OFFSET + 22);
+    unsigned int clut_size = read_u32le(data + PIC_OFFSET + 4);
+    unsigned int img_size = read_u32le(data + PIC_OFFSET + 8);
+    unsigned short hdr_size = read_u16le(data + PIC_OFFSET + 12);
+    unsigned short width = read_u16le(data + PIC_OFFSET + 20);
+    unsigned short height = read_u16le(data + PIC_OFFSET + 22);
     unsigned long long gs_tex0 = read_u64le(data + PIC_OFFSET + 24);
 
-    unsigned char psm  = (unsigned char)((gs_tex0 >> 20) & 0x3F);
+    unsigned char psm = (unsigned char)((gs_tex0 >> 20) & 0x3F);
+    if (expected_psm != 0xff && psm != expected_psm) {
+        free(data);
+        return 0;
+    }
     unsigned char cpsm = (unsigned char)((gs_tex0 >> 51) & 0xF);
 
     size_t img_start = PIC_OFFSET + hdr_size;
@@ -111,9 +129,9 @@ int image_loader_load_tim2(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *p
         return 0;
     }
 
-    texture->Width  = width;
+    texture->Width = width;
     texture->Height = height;
-    texture->PSM    = psm;
+    texture->PSM = psm;
     texture->Filter = GS_FILTER_NEAREST;
 
     texture->Mem = memalign(128, img_size);
@@ -141,4 +159,8 @@ int image_loader_load_tim2(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *p
     free(data);
 
     return finish_texture_upload(gsGlobal, texture);
+}
+
+int image_loader_load_tim2(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path) {
+    return image_loader_load_tim2_format(gsGlobal, texture, path, 0xff);
 }

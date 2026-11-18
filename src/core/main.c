@@ -30,6 +30,7 @@
 
 #include "platform/common/window.h"
 #include "editor/panels/project_center.h"
+#include "editor/ui/draw_kit.h"
 #include "editor/dialogs/project.h"
 #include "editor/dialogs/packages.h"
 #include "editor/ui/loading_screen.h"
@@ -105,10 +106,14 @@ int main(int argc, char **argv) {
             loading_screen_draw(window_get_width(), window_get_height());
         } else if (app_state_get_screen() == APP_SCREEN_EDITOR) {
             /* Do not update the editor UI (click/drag/camera) while the file browser above it is open - the user interacts with only one window at a time, but it remains rendered underneath (dimmed) */
-            if (!file_manager_is_open()) {
+            if (!file_manager_is_open() && !packages_dialog_is_open()) {
                 editor_workspace_update(window_get_width(), window_get_height());
             }
             editor_workspace_draw(window_get_width(), window_get_height());
+            if (packages_dialog_is_open()) {
+                packages_dialog_update(window_get_width(), window_get_height());
+                packages_dialog_draw(window_get_width(), window_get_height());
+            }
         } else {
             window_clear(UI_COLOR_BLACK_MUTED.r, UI_COLOR_BLACK_MUTED.g, UI_COLOR_BLACK_MUTED.b);
             ui_project_center_draw(window_get_width(), window_get_height());
@@ -144,6 +149,7 @@ int main(int argc, char **argv) {
     packages_dialog_shutdown();
     ui_project_center_shutdown();
     file_manager_shutdown();
+    ui_kit_shutdown();
     ui_dialog_shutdown();
     window_shutdown();
     return 0;

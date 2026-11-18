@@ -37,6 +37,15 @@
 #define REBAX_IMAGE_LOADER_RAW 1
 #define REBAX_IMAGE_LOADER_TIM2 1
 #define REBAX_IMAGE_LOADER_TIM 1
+#define REBAX_IMAGE_LOADER_TIM2_32 1
+#define REBAX_IMAGE_LOADER_TIM2_24 1
+#define REBAX_IMAGE_LOADER_TIM2_16 1
+#define REBAX_IMAGE_LOADER_TIM2_16S 1
+#define REBAX_IMAGE_LOADER_TIM2_8 1
+#define REBAX_IMAGE_LOADER_TIM2_4 1
+#define REBAX_IMAGE_LOADER_TIM2_8H 1
+#define REBAX_IMAGE_LOADER_TIM2_4HL 1
+#define REBAX_IMAGE_LOADER_TIM2_4HH 1
 #endif
 
 /* true if path ends with ext (case-insensitive) - ext includes the dot
@@ -63,7 +72,34 @@ int image_loader_load(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path,
     } else if (REBAX_IMAGE_LOADER_RAW && ends_with(path, ".raw")) {
         return image_loader_load_raw(gsGlobal, texture, path, raw_width, raw_height, raw_psm);
     } else if (REBAX_IMAGE_LOADER_TIM2 && (ends_with(path, ".tm2") || ends_with(path, ".tim2"))) {
-        return image_loader_load_tim2(gsGlobal, texture, path);
+#if REBAX_IMAGE_LOADER_TIM2_32
+        if (image_loader_load_tim2_32(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_24
+        if (image_loader_load_tim2_24(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_16
+        if (image_loader_load_tim2_16(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_16S
+        if (image_loader_load_tim2_16s(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_8
+        if (image_loader_load_tim2_8(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_4
+        if (image_loader_load_tim2_4(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_8H
+        if (image_loader_load_tim2_8h(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_4HL
+        if (image_loader_load_tim2_4hl(gsGlobal, texture, path)) return 1;
+#endif
+#if REBAX_IMAGE_LOADER_TIM2_4HH
+        if (image_loader_load_tim2_4hh(gsGlobal, texture, path)) return 1;
+#endif
+        return 0;
     } else if (REBAX_IMAGE_LOADER_TIM && ends_with(path, ".tim")) {
         return image_loader_load_tim(gsGlobal, texture, path);
     }

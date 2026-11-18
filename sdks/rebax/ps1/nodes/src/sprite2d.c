@@ -62,8 +62,8 @@ static void sprite2d_draw(void *self) {
         setDrawTPage(page, 0, 0, getTPage(instance->tim.mode, 0, instance->tim.image.x, instance->tim.image.y));
         setSprt(sprite);
         setXY0(sprite, (int)instance->position_x, (int)instance->position_y);
-        setWH(sprite, instance->tim.image.w, instance->tim.image.h);
-        setUV0(sprite, 0, 0);
+        setWH(sprite, instance->tim.width, instance->tim.height);
+        setUV0(sprite, 0, instance->tim.v);
         setRGB0(sprite, 128, 128, 128);
         if (instance->tim.has_clut) setClut(sprite, instance->tim.clut.x, instance->tim.clut.y);
         return;
