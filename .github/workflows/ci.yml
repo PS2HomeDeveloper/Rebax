@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,9 +21,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { runner: ubuntu-24.04, platform: linux, arch: x86_64 }
+          - { runner: ubuntu-26.04, platform: android, arch: all }
+          - { runner: ubuntu-26.04, platform: linux, arch: x86_64 }
+          - { runner: ubuntu-26.04, platform: linux, arch: x86 }
+          - { runner: ubuntu-26.04, platform: linux, arch: arm64 }
+          - { runner: ubuntu-26.04, platform: linux, arch: arm }
           - { runner: windows-2025, platform: windows, arch: x86_64 }
-          - { runner: macos-14, platform: macos, arch: arm64 }
+          - { runner: windows-2025, platform: windows, arch: x86 }
+          - { runner: windows-2025, platform: windows, arch: arm64 }
+          - { runner: windows-2025, platform: windows, arch: arm }
+          - { runner: macos-26-intel, platform: macos, arch: x86_64 }
+          - { runner: macos-26-intel, platform: macos, arch: arm64 }
+          - { runner: macos-26-intel, platform: ios, arch: x86_64 }
+          - { runner: macos-26-intel, platform: ios, arch: arm64 }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,18 +43,27 @@ jobs:
         shell: pwsh
         run: choco install -y make
 
+      - name: Install make on macOS
+        if: runner.os == 'macOS'
+        run: brew install make
+
       - name: Build
         shell: bash
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            MAKE_BIN="/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe"
-          else
-            MAKE_BIN=make
-          fi
+          case "${{ runner.os }}" in
+            Windows) MAKE_BIN="/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" ;;
+            macOS) MAKE_BIN=gmake ;;
+            *) MAKE_BIN=make ;;
+          esac
           "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
 
       - name: Check the output
         shell: bash
         run: |
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
-          test -d "build/output/Rebax-Engine-${version}-${{ matrix.platform }}-${{ matrix.arch }}"
+          base="build/output/Rebax-Engine-${version}-${{ matrix.platform }}"
+          case "${{ matrix.platform }}" in
+            android) test -f "${base}-universal.apk" ;;
+            ios) test -f "${base}-${{ matrix.arch }}.ipa" ;;
+            *) test -d "${base}-${{ matrix.arch }}" ;;
+          esac

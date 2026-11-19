@@ -17,77 +17,41 @@ permissions:
   contents: write
 
 jobs:
-  windows:
-    name: Windows ${{ matrix.arch }}
-    runs-on: windows-2025
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64, x86, arm64]
+        include:
+          - { runner: ubuntu-26.04, platform: android, arch: all }
+          - { runner: ubuntu-26.04, platform: linux, arch: x86_64 }
+          - { runner: ubuntu-26.04, platform: linux, arch: x86 }
+          - { runner: ubuntu-26.04, platform: linux, arch: arm64 }
+          - { runner: ubuntu-26.04, platform: linux, arch: arm }
+          - { runner: windows-2025, platform: windows, arch: x86_64 }
+          - { runner: windows-2025, platform: windows, arch: x86 }
+          - { runner: windows-2025, platform: windows, arch: arm64 }
+          - { runner: windows-2025, platform: windows, arch: arm }
+          - { runner: macos-26-intel, platform: macos, arch: x86_64 }
+          - { runner: macos-26-intel, platform: macos, arch: arm64 }
+          - { runner: macos-26-intel, platform: ios, arch: x86_64 }
+          - { runner: macos-26-intel, platform: ios, arch: arm64 }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install make
+      - name: Install make on Windows
+        if: runner.os == 'Windows'
         shell: pwsh
         run: choco install -y make
 
-      - name: Build
-        shell: bash
-        run: |
-          "/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" windows ${{ matrix.arch }}
+      - name: Install make on macOS
+        if: runner.os == 'macOS'
+        run: brew install make
 
-      - name: Package
-        shell: pwsh
-        run: |
-          $version = (Select-String -Path Makefile -Pattern '^ENGINE_VERSION' | Select-Object -First 1).Line -replace '^ENGINE_VERSION\s*:=\s*', ''
-          $name = "Rebax-Engine-$version-windows-${{ matrix.arch }}"
-          New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive -Path "build/output/$name" -DestinationPath "release/$name.zip"
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-${{ matrix.arch }}
-          path: release/*
-          if-no-files-found: error
-
-  linux:
-    name: Linux ${{ matrix.arch }}
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x86_64, x86, arm64, arm]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build
-        run: make linux ${{ matrix.arch }}
-
-      - name: Package
-        run: |
-          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
-          name="Rebax-Engine-${version}-linux-${{ matrix.arch }}"
-          mkdir -p release
-          tar -C build/output -cJf "release/${name}.tar.xz" "$name"
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-${{ matrix.arch }}
-          path: release/*
-          if-no-files-found: error
-
-  android:
-    name: Android
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Prepare the signing file
+      - name: Prepare the Android signing file
+        if: matrix.platform == 'android'
         env:
           ANDROID_SIGNING_BASE64: ${{ secrets.ANDROID_SIGNING_BASE64 }}
         run: |
@@ -99,60 +63,41 @@ jobs:
           printf '%s' "$ANDROID_SIGNING_BASE64" | base64 -d > keystore/rebax_signing.pem
 
       - name: Build
-        run: make android all
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows) MAKE_BIN="/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" ;;
+            macOS) MAKE_BIN=gmake ;;
+            *) MAKE_BIN=make ;;
+          esac
+          "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
 
       - name: Package
+        shell: bash
         run: |
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          base="Rebax-Engine-${version}-${{ matrix.platform }}"
           mkdir -p release
-          cp "build/output/Rebax-Engine-${version}-android-universal.apk" release/
+          case "${{ matrix.platform }}" in
+            android) cp "build/output/${base}-universal.apk" release/ ;;
+            ios) cp "build/output/${base}-${{ matrix.arch }}.ipa" release/ ;;
+            linux) tar -C build/output -cJf "release/${base}-${{ matrix.arch }}.tar.xz" "${base}-${{ matrix.arch }}" ;;
+            macos) ditto -c -k --keepParent "build/output/${base}-${{ matrix.arch }}" "release/${base}-${{ matrix.arch }}.zip" ;;
+            windows) (cd build/output && 7z a -tzip "../../release/${base}-${{ matrix.arch }}.zip" "${base}-${{ matrix.arch }}" > /dev/null) ;;
+          esac
+          ls -l release
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: android-universal
-          path: release/*
-          if-no-files-found: error
-
-  apple:
-    name: macOS and iOS
-    runs-on: macos-14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build macOS
-        run: |
-          make macos arm64
-          make macos x86_64
-
-      - name: Build iOS
-        run: make ios arm64
-
-      - name: Package
-        run: |
-          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
-          base="Rebax-Engine-${version}-macos"
-          mkdir -p release
-          rm -rf "build/output/${base}-universal"
-          cp -R "build/output/${base}-arm64" "build/output/${base}-universal"
-          rm "build/output/${base}-universal/${base}-arm64"
-          lipo -create "build/output/${base}-arm64/${base}-arm64" "build/output/${base}-x86_64/${base}-x86_64" -output "build/output/${base}-universal/${base}-universal"
-          chmod +x "build/output/${base}-universal/${base}-universal"
-          ditto -c -k --keepParent "build/output/${base}-universal" "release/${base}-universal.zip"
-          cp "build/output/Rebax-Engine-${version}-ios-arm64.ipa" release/
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: apple
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
           path: release/*
           if-no-files-found: error
 
   publish:
     name: Publish release
-    runs-on: ubuntu-24.04
-    needs: [windows, linux, android, apple]
+    runs-on: ubuntu-26.04
+    needs: build
     steps:
       - name: Checkout
         uses: actions/checkout@v4
