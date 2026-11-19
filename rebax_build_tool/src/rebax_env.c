@@ -60,7 +60,7 @@ static const target_t TARGETS[] = {
     { "android", "armeabi-v7a", "android-armeabi-v7a", "armv7a-linux-androideabi21", "arm-linux-androideabi", { NULL, NULL, NULL } },
     { "android", "x86", "android-x86", "i686-linux-android21", "i686-linux-android", { NULL, NULL, NULL } },
     { "android", "x86_64", "android-x86_64", "x86_64-linux-android21", "x86_64-linux-android", { NULL, NULL, NULL } },
-    { "macos", "x86_64", "macos-x86_64", "x86_64-apple-macos10.13", "", { NULL, NULL, NULL } },
+    { "macos", "x86_64", "macos-x86_64", "x86_64-apple-macos11.0", "", { NULL, NULL, NULL } },
     { "macos", "arm64", "macos-arm64", "arm64-apple-macos11", "", { NULL, NULL, NULL } },
     { "ios", "arm64", "ios-arm64", "arm64-apple-ios13.0", "", { NULL, NULL, NULL } },
     { "ios", "x86_64", "ios-simulator-x86_64", "x86_64-apple-ios13.0-simulator", "", { NULL, NULL, NULL } }
@@ -312,7 +312,7 @@ static int clang_flags(flags_t *f, const target_t *t, const char *sdk, const cha
     }
     append(f->cflags, FLAGS_CAP, "--target=%s -isysroot %s -nostdlibinc -isystem %s/standard/include -F%s/standard/Frameworks -F%s/graphics/Frameworks -I%s/graphics/include/SDL2", t->triple, empty, sdk, sdk, sdk, sdk);
     append(f->ldpre, FLAGS_CAP, "--target=%s -isysroot %s -fuse-ld=lld -nostdlib", t->triple, empty);
-    append(f->ldpost, FLAGS_CAP, "-L%s/standard/lib -L%s/runtime/lib -L%s/graphics/lib", sdk, sdk, sdk);
+    append(f->ldpost, FLAGS_CAP, "-L%s/standard/lib -L%s/runtime/lib -L%s/graphics/lib -F%s/standard/Frameworks -F%s/graphics/Frameworks", sdk, sdk, sdk, sdk, sdk);
     append(f->ldsdl, FLAGS_CAP, "-lSDL2 -liconv");
     if (strcmp(p, "macos") == 0) {
         static const char *const names[] = { "Cocoa", "CoreAudio", "AudioToolbox", "CoreVideo", "IOKit", "ForceFeedback", "Carbon", "CoreServices", "CoreFoundation", "Foundation", "AppKit", "Metal", "QuartzCore", "OpenGL", "CoreHaptics", "GameController", NULL };

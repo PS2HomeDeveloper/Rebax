@@ -31,9 +31,9 @@
 typedef struct {
     int kind;
     FILE *file;
-} handle_t;
+} host_handle_t;
 
-static handle_t g_handles[MAX_HANDLES];
+static host_handle_t g_handles[MAX_HANDLES];
 static char g_root[1024];
 static int g_ping_answered;
 
@@ -107,7 +107,7 @@ static int allocate_handle(void) {
     return -1;
 }
 
-static handle_t *lookup(unsigned int fd) {
+static host_handle_t *lookup(unsigned int fd) {
     if (fd == 0 || fd > MAX_HANDLES) return NULL;
     if (g_handles[fd - 1].kind == KIND_FREE) return NULL;
     return &g_handles[fd - 1];
@@ -148,7 +148,7 @@ static int do_open(ps2link_socket_t sock, const unsigned char *payload, int size
 }
 
 static int do_close(ps2link_socket_t sock, const unsigned char *payload, int size) {
-    handle_t *handle = size >= 4 ? lookup(get32(payload)) : NULL;
+    host_handle_t *handle = size >= 4 ? lookup(get32(payload)) : NULL;
     int result = -1;
     if (handle != NULL) {
         if (handle->kind == KIND_PING) g_ping_answered = 1;
@@ -161,7 +161,7 @@ static int do_close(ps2link_socket_t sock, const unsigned char *payload, int siz
 }
 
 static int do_read(ps2link_socket_t sock, const unsigned char *payload, int size) {
-    handle_t *handle = size >= 8 ? lookup(get32(payload)) : NULL;
+    host_handle_t *handle = size >= 8 ? lookup(get32(payload)) : NULL;
     unsigned char header[8];
     unsigned char *buffer;
     unsigned int wanted;
@@ -192,7 +192,7 @@ static int do_read(ps2link_socket_t sock, const unsigned char *payload, int size
 }
 
 static int do_write(ps2link_socket_t sock, const unsigned char *payload, int size) {
-    handle_t *handle = size >= 8 ? lookup(get32(payload)) : NULL;
+    host_handle_t *handle = size >= 8 ? lookup(get32(payload)) : NULL;
     unsigned int count = size >= 8 ? get32(payload + 4) : 0;
     unsigned char *buffer;
     int result = -1;
@@ -210,7 +210,7 @@ static int do_write(ps2link_socket_t sock, const unsigned char *payload, int siz
 }
 
 static int do_lseek(ps2link_socket_t sock, const unsigned char *payload, int size) {
-    handle_t *handle = size >= 12 ? lookup(get32(payload)) : NULL;
+    host_handle_t *handle = size >= 12 ? lookup(get32(payload)) : NULL;
     int result = -1;
     if (handle != NULL && handle->kind == KIND_FILE) {
         int whence = (int)get32(payload + 8);
