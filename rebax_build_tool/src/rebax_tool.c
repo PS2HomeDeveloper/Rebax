@@ -8,8 +8,9 @@
  * Rebax Engine
  * Copyright (c) 2026 PS2HomeDeveloper
  *
- * Licensed under the MIT License.
- * See the LICENSE file for details.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 #ifndef __APPLE__
@@ -33,6 +34,7 @@ static void usage(void) {
           "  node-registry <registry.h> <types.h> <node.c>...\n"
           "  node-editor-registry <out.h> <node_editor.c>...\n"
           "  android-entry <out.c>                   write the SDL_main wrapper source\n"
+          "  android-keygen <keys_dir>\n"
           "  apk-pack <stage_dir> <out.apk> <keys_dir> <package> <label> <version_name> <version_code> <min_sdk> <target_sdk>\n"
           "  require-lib <label> <arch> <path>       check that a library exists for the arch\n"
           "  copy-dir <src> <dst> [--skip name]...   copy a directory tree, skipping parts named <name>\n"
@@ -57,6 +59,7 @@ int main(int argc, char **argv) {
     if (strcmp(cmd, "node-registry") == 0) return cmd_node_registry(argc, argv);
     if (strcmp(cmd, "node-editor-registry") == 0) return cmd_node_editor_registry(argc, argv);
     if (strcmp(cmd, "android-entry") == 0) return cmd_android_entry(argc, argv);
+    if (strcmp(cmd, "android-keygen") == 0) return cmd_android_keygen(argc, argv);
     if (strcmp(cmd, "apk-pack") == 0) return cmd_apk_pack(argc, argv);
     if (strcmp(cmd, "require-lib") == 0) return cmd_require_lib(argc, argv);
     if (strcmp(cmd, "copy-dir") == 0) return cmd_copy_dir(argc, argv);

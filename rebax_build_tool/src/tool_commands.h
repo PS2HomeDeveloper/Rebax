@@ -8,8 +8,9 @@
  * Rebax Engine
  * Copyright (c) 2026 PS2HomeDeveloper
  *
- * Licensed under the MIT License.
- * See the LICENSE file for details.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 #ifndef TOOL_COMMANDS_H
@@ -29,6 +30,7 @@ int cmd_copy_dir(int argc, char **argv);
 int cmd_asset_manifest(int argc, char **argv);
 int cmd_android_entry(int argc, char **argv);
 int cmd_apk_pack(int argc, char **argv);
+int cmd_android_keygen(int argc, char **argv);
 int cmd_require_lib(int argc, char **argv);
 int cmd_ios_plist(int argc, char **argv);
 int cmd_zip_dir(int argc, char **argv);

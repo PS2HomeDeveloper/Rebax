@@ -1,93 +1,77 @@
-# Rebax
+# Rebax Engine
 
-Rebax is a 2D and 3D game engine and editor for creating games and applications that run on the **PlayStation 2**.
+Rebax Engine is a cross-platform engine for creating applications and games. It is built for native, low-level development: a project is exported as a real program for the target platform, with no bundled interpreter or virtual machine.
 
-The project aims to bring together tools from the **PS2 Developer Community** and transform traditionally command-line-based workflows into an easy-to-use graphical application.
+Website and downloads: **https://rebax.pages.dev/**
 
-Rebax is designed to simplify the development process by providing a graphical interface and hiding unnecessary low-level details, allowing developers to focus on creating their games and applications rather than manually managing complex toolchain commands.
+## Status
 
-## Export Formats
+Rebax is in early development. The table shows what has been tested so far.
 
-Rebax supports exporting projects in the following formats:
-
-- **ISO**
-- **Raw ELF**
-
-## Build Requirements
-
-The following requirements are needed to build Rebax.
-
-### 1. Internet Connection
-
-An active internet connection is required to download the appropriate toolchain package during the build process.
-
-### 2. GCC or Clang
-
-A C compiler such as **GCC** or **Clang** is required to compile the project's C source files and produce the Rebax executable.
-
-### 3. Make
-
-**GNU Make** is required to run the project's build system and compile Rebax.
-
-### 4. SDL2
-
-The **SDL2** library is required for Rebax's graphical interface, window management, input handling, and other platform-level functionality.
-
-### 5. wget or curl
-
-Either **wget** or **curl** is required to download the prebuilt toolchain package corresponding to the target architecture.
-
-## Installing the Requirements
-
-### Linux
-
-### Windows
-
-### macOS
-
-### Android
-
-## Building
-
-## Usage
-
-## Notes
-
-### Platform Support and Testing
-
-Rebax is built for Windows, Linux, macOS, Android and iOS. All builds are produced automatically by GitHub Actions, but the maintainer does not have every kind of device, so the amount of real testing differs between platforms.
-
-| Platform | How it is tested |
+| Platform | Status |
 | --- | --- |
-| Android | Tested on a real device, including the full PlayStation 2 export. |
-| Linux | Tested on Termux:X11 on an Android phone and on a Linux desktop in GitHub Codespaces (Xvfb, XFCE, x11vnc and noVNC). |
-| Windows | Tested in an emulated environment. |
-| macOS | Built by GitHub Actions only. Not tested on a real Mac. |
-| iOS | Built by GitHub Actions only. Not tested on a real device. |
+| Linux | Tested |
+| Android | Tested on a device |
+| PlayStation 2 | Tested on real hardware |
+| Windows | Not yet tested |
+| macOS | Not yet tested |
+| iOS | Not yet tested |
+| PlayStation 1 | Not yet tested |
 
-macOS and iOS are experimental and are not guaranteed to work. Bug reports and test results for any platform are welcome.
+Reports from people who try the untested platforms are very welcome.
 
-### Reporting Problems
+## Download
 
-Each time you start an export, Rebax writes a log file that records every step. If the export fails or Rebax closes by itself, attach this file to your report. If the program crashed, the last line of the file starts with `CRASH` and shows where it stopped.
+Prebuilt packages for every release are available on the [website](https://rebax.pages.dev/) and on the [Releases](https://github.com/PS2HomeDeveloper/Rebax/releases) page.
 
-The file is overwritten on every export. It is located at:
+## Building from source
 
-| Platform | Log file |
+You need Git and `make`. A C compiler is optional: when none is installed, the build downloads one automatically.
+
+```
+git clone https://github.com/PS2HomeDeveloper/Rebax.git
+cd Rebax
+make
+```
+
+`make` builds Rebax for the machine you are using. To build for another platform, give the platform and the architecture:
+
+```
+make <platform> <architecture>
+```
+
+| Platform | Architectures |
 | --- | --- |
-| Windows | `%LOCALAPPDATA%\Rebax\export_log.txt` |
-| Linux | `~/.local/share/Rebax/export_log.txt` |
-| macOS | `~/Library/Application Support/Rebax/export_log.txt` |
-| Android | `Rebax_export_log.txt` in the main storage folder (`/storage/emulated/0/`) |
+| `windows` | `x86_64`, `x86`, `arm64`, `arm` |
+| `linux` | `x86_64`, `x86`, `arm64`, `arm` |
+| `macos` | `x86_64`, `arm64` |
+| `ios` | `arm64`, `x86_64` |
+| `android` | `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64` |
 
-Exporting is not supported on iOS, so it does not create a log there.
+For Android, `make android all` builds one APK that contains all four architectures, and `make android <architecture>` builds a single one. Results are written to `build/output/`.
 
-### iOS
+The older form `make linux-x86_64` still works.
 
-- The iOS package (`.ipa`) is **not signed**. It cannot be installed on a device as downloaded. It must be signed first, either with your own Apple ID or developer account, or with a sideloading tool such as AltStore or Sideloadly. Signing is up to whoever installs it.
-- The iOS build is experimental. It has not been tested on a real device and is not guaranteed to work.
-- **Exporting is not supported on iOS.** iOS does not allow apps to run other programs, so the export toolchains cannot run there. On iOS you can create and edit projects, then copy the project folder to a PC, Mac or Linux computer and export it from there. The app stores its files in its Documents folder, which should be available in the Files app.
+### Android signing
+
+Android packages are signed with the file `keystore/rebax_signing.pem`, which holds an unencrypted RSA private key followed by its certificate, both in PEM format. If the file does not exist, the build creates one. To create it without building, run `make keygen`. Keep the file and use the same one for every release, because Android only updates an app that is signed with the same key. Never commit it: the `keystore` folder is ignored by Git.
+
+## Repositories
+
+| Repository | Purpose |
+| --- | --- |
+| [Rebax](https://github.com/PS2HomeDeveloper/Rebax) | The engine and editor (this repository) |
+| [Rebax SDKs](https://github.com/PS2HomeDeveloper/Rebax-SDKs) | SDK packages for each target |
+| [Rebax Toolchains](https://github.com/PS2HomeDeveloper/Rebax-Toolchains) | Compiler packages |
+| [Rebax Website](https://github.com/PS2HomeDeveloper/Rebax-Website) | The website |
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first, and the [Code of Conduct](CODE_OF_CONDUCT.md). To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-Rebax is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+- The engine, the editor and the build tool are licensed under the [Mozilla Public License 2.0](LICENSE).
+- The runtime SDK in [`sdks/rebax`](sdks/rebax), which is compiled into the programs you export, is licensed under the [MIT License](sdks/rebax/LICENSE). Programs and games you make with Rebax belong to you.
+- Third-party software is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- "Rebax", "Rebax Engine" and the Rebax logo are trademarks of PS2HomeDeveloper. See the [trademark policy](TRADEMARKS.md).

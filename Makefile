@@ -201,8 +201,44 @@ ifeq ($(SELECTED_GOAL),android-arm64)
   SELECTED_GOAL := android-arm64-v8a
 endif
 
+PLATFORM_WORDS := linux windows macos ios android
+ARCH_WORDS := x86_64 x86 arm64 arm arm64-v8a armeabi-v7a
+ANDROID_ABIS := arm64-v8a armeabi-v7a x86 x86_64
+UNIVERSAL := 0
+GOAL_PLATFORM := $(firstword $(filter $(PLATFORM_WORDS),$(GOALS)))
+GOAL_ARCH := $(firstword $(filter $(ARCH_WORDS),$(GOALS)))
+ifeq ($(SELECTED_GOAL),)
+  ifneq ($(GOAL_ARCH),)
+    ifeq ($(GOAL_PLATFORM),)
+      $(error Name a platform before the architecture, for example: make linux $(GOAL_ARCH))
+    endif
+  endif
+  ifneq ($(GOAL_PLATFORM),)
+    ifeq ($(GOAL_PLATFORM),android)
+      ifeq ($(GOAL_ARCH),)
+        UNIVERSAL := 1
+      else ifneq ($(filter all,$(GOALS)),)
+        UNIVERSAL := 1
+      endif
+      GOAL_ARCH := $(or $(filter-out arm64 arm,$(GOAL_ARCH)),$(if $(filter arm64,$(GOAL_ARCH)),arm64-v8a),$(if $(filter arm,$(GOAL_ARCH)),armeabi-v7a))
+    else
+      GOAL_ARCH := $(or $(GOAL_ARCH),$(HOST_ARCH))
+    endif
+    ifeq ($(UNIVERSAL),0)
+      SELECTED_GOAL := $(GOAL_PLATFORM)-$(GOAL_ARCH)
+      ifeq ($(filter $(SELECTED_GOAL),$(ALL_TARGET_GOALS)),)
+        $(error $(SELECTED_GOAL) is not a supported target)
+      endif
+    endif
+  endif
+endif
+
 TARGET_PLATFORM := $(HOST_PLATFORM)
 TARGET_ARCH := $(HOST_ARCH)
+ifeq ($(UNIVERSAL),1)
+  TARGET_PLATFORM := android
+  TARGET_ARCH := universal
+endif
 ifneq ($(SELECTED_GOAL),)
   TARGET_PLATFORM := $(firstword $(subst -, ,$(SELECTED_GOAL)))
   TARGET_ARCH := $(patsubst $(TARGET_PLATFORM)-%,%,$(SELECTED_GOAL))
@@ -239,6 +275,8 @@ ifeq ($(WANT_APK),1)
   endif
 endif
 
+APK_PART ?= 0
+UNI_STAGE := $(APK_DIR)/universal
 APK_TARGET_SDK := 28
 APK_MIN_SDK := 24
 APK_PACKAGE := org.rebax.engine
@@ -342,8 +380,11 @@ endif
 	@echo ok> $@
 endif
 
-.PHONY: rebax-build-tool tool
+.PHONY: rebax-build-tool tool keygen
 rebax-build-tool tool: $(RTOOL)
+
+keygen: $(RTOOL)
+	@$(RTOOL) android-keygen $(KEYS_DIR)
 
 SRC_DIR := src
 GEN_DIR := $(BUILD_DIR)/generated
@@ -373,9 +414,9 @@ DEPS := $(SRC_OBJS:.o=.d) $(THIRD_PARTY_OBJS:.o=.d)
 
 .PHONY: all clean clean-tool clean-cache clean-all objects libs engine-objs third-party-objs run generate bundle-runtime-libs bundle-resources bundle-packages gen-icons gen-node-registry gen-node-editor-registry \
   build-selected apk-selected apk-package ios-package \
-  $(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS)
+  $(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) $(PLATFORM_WORDS) $(ARCH_WORDS)
 
-$(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) objects libs: all
+$(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) $(PLATFORM_WORDS) $(ARCH_WORDS) objects libs: all
 
 SUB_GOAL := $(if $(filter 1,$(WANT_APK)),apk-selected,build-selected)
 ifneq ($(filter objects,$(MAKECMDGOALS)),)
@@ -400,10 +441,24 @@ install-local-packages:
 	@sdk_archive=""; for f in "sdks/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)/sdk.tar.xz" "sdks/sdk.tar.xz"; do if [ -f "$$f" ]; then sdk_archive="$$f"; break; fi; done; if [ -n "$$sdk_archive" ]; then echo "Installing local SDK archive: $$sdk_archive"; tar -xf "$$sdk_archive" -C sdks && mkdir -p $(CACHE_DIR)/packages && mv -f "$$sdk_archive" $(CACHE_DIR)/packages/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
 endif
 
+ifeq ($(UNIVERSAL),1)
+all: $(RTOOL) generate
+	@$(RTOOL) rm $(UNI_STAGE)
+	+$(MAKE) --no-print-directory android-arm64-v8a APK_PART=1 APK_STAGE=$(UNI_STAGE)
+	+$(MAKE) --no-print-directory android-armeabi-v7a APK_PART=1 APK_STAGE=$(UNI_STAGE)
+	+$(MAKE) --no-print-directory android-x86 APK_PART=1 APK_STAGE=$(UNI_STAGE)
+	+$(MAKE) --no-print-directory android-x86_64 APK_PART=1 APK_STAGE=$(UNI_STAGE)
+	@echo Packaging $(APK_OUT)
+	@$(RTOOL) mkdir $(OUTPUT_ROOT)
+	@$(RTOOL) apk-pack $(UNI_STAGE) $(APK_OUT) $(KEYS_DIR) $(APK_PACKAGE) $(APK_LABEL) $(patsubst v%,%,$(ENGINE_VERSION)) 1 $(APK_MIN_SDK) $(APK_TARGET_SDK)
+	@$(RTOOL) rm $(UNI_STAGE)
+	@echo APK ready: $(APK_OUT)
+else
 all: $(RTOOL) generate
 	@$(RTOOL) mkdir $(ENV_DIR)
 	@$(RTOOL) env $(TARGET_PLATFORM) $(TARGET_ARCH) $(HOST_PLATFORM) $(HOST_ARCH) $(ENV_MK)
-	+$(MAKE) --no-print-directory RBX_TOOL_READY=1 HOST_PLATFORM=$(HOST_PLATFORM) HOST_ARCH=$(HOST_ARCH) HOST_TRIPLE=$(HOST_TRIPLE) TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) WANT_APK=$(WANT_APK) $(SUB_GOAL)
+	+$(MAKE) --no-print-directory RBX_TOOL_READY=1 HOST_PLATFORM=$(HOST_PLATFORM) HOST_ARCH=$(HOST_ARCH) HOST_TRIPLE=$(HOST_TRIPLE) TARGET_PLATFORM=$(TARGET_PLATFORM) TARGET_ARCH=$(TARGET_ARCH) WANT_APK=$(WANT_APK) APK_PART=$(APK_PART) $(SUB_GOAL)
+endif
 
 build-selected: $(TARGET) bundle-runtime-libs bundle-resources bundle-packages $(if $(filter ios,$(TARGET_PLATFORM)),ios-package)
 
@@ -482,7 +537,7 @@ DEX_FILE := $(SDK_DIR)/graphics/dex/classes.dex
 
 apk-package: $(OBJS)
 	@$(RTOOL) mkdir $(APK_DIR) $(OUTPUT_ROOT)
-	@$(RTOOL) rm $(APK_STAGE)
+	@$(RTOOL) rm $(if $(filter 1,$(APK_PART)),$(APK_LIB_DIR),$(APK_STAGE))
 	@$(RTOOL) mkdir $(APK_STAGE) $(APK_LIB_DIR)
 	@echo Packaging $(APK_OUT)
 	@$(RTOOL) require-lib SDL2 $(SDL2_EXPECT_ARCH) $(SDL2_LIB_FILE)
@@ -503,9 +558,9 @@ apk-package: $(OBJS)
 	@$(RTOOL) android-entry $(APK_DIR)/rebax_android_entry.c
 	$(TARGET_CC) $(TARGET_CFLAGS) -c $(APK_DIR)/rebax_android_entry.c -o $(APK_DIR)/rebax_android_entry.o
 	$(TARGET_CC) $(TARGET_LDPRE) -shared -o $(APK_LIB_DIR)/libmain.so $(OBJS) $(APK_DIR)/rebax_android_entry.o $(TARGET_LDPOST)
-	@$(RTOOL) apk-pack $(APK_STAGE) $(APK_OUT) $(KEYS_DIR) $(APK_PACKAGE) $(APK_LABEL) $(patsubst v%,%,$(ENGINE_VERSION)) 1 $(APK_MIN_SDK) $(APK_TARGET_SDK)
-	@$(RTOOL) rm $(APK_STAGE)
-	@echo APK ready: $(APK_OUT)
+	$(if $(filter 1,$(APK_PART)),,@$(RTOOL) apk-pack $(APK_STAGE) $(APK_OUT) $(KEYS_DIR) $(APK_PACKAGE) $(APK_LABEL) $(patsubst v%,%,$(ENGINE_VERSION)) 1 $(APK_MIN_SDK) $(APK_TARGET_SDK))
+	$(if $(filter 1,$(APK_PART)),,@$(RTOOL) rm $(APK_STAGE))
+	$(if $(filter 1,$(APK_PART)),@echo Android $(TARGET_ARCH) staged,@echo APK ready: $(APK_OUT))
 
 CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdks/rebax/common/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
 ifeq ($(TARGET_PLATFORM),android)

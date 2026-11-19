@@ -1,0 +1,15 @@
+build/
+build_cache/
+keystore/
+toolchains/
+rebax_build_tool/bin/
+rebax_build_tool/obj/
+sdks/*
+!sdks/rebax/
+*.o
+*.d
+*.apk
+*.ipa
+*.exe
+.DS_Store
+Thumbs.db

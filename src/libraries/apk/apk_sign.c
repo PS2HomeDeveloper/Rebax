@@ -8,8 +8,9 @@
  * Rebax Engine
  * Copyright (c) 2026 PS2HomeDeveloper
  *
- * Licensed under the MIT License.
- * See the LICENSE file for details.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 #include "libraries/apk/apk_sign.h"
@@ -21,6 +22,7 @@
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/md.h"
+#include "mbedtls/pem.h"
 #include "mbedtls/pk.h"
 #include "mbedtls/rsa.h"
 #include "mbedtls/sha256.h"
@@ -28,8 +30,7 @@
 
 #include "filesystem/rebax_fs.h"
 
-#define KEY_FILE "rebax_debug_key.pem"
-#define CERT_FILE "rebax_debug_cert.der"
+#define SIGN_FILE "rebax_signing.pem"
 #define V2_BLOCK_ID 0x7109871au
 #define ALGO_RSA_PKCS1_SHA256 0x0103u
 
@@ -67,7 +68,7 @@ static int write_file(const char *path, const void *data, size_t len) {
     return fclose(f) == 0 && ok;
 }
 
-static int create_key(apk_key_t *k, const char *key_path, const char *cert_path, char *err, size_t cap) {
+static int create_key(apk_key_t *k, const char *sign_path, char *err, size_t cap) {
     printf("Creating the APK signing key (only the first time)\n");
     fflush(stdout);
     const mbedtls_pk_info_t *info = mbedtls_pk_info_from_type(MBEDTLS_PK_RSA);
@@ -108,7 +109,22 @@ static int create_key(apk_key_t *k, const char *key_path, const char *cert_path,
     k->cert_len = (size_t)der_len;
     free(der);
 
-    if (!write_file(key_path, pem, strlen((char *)pem)) || !write_file(cert_path, k->cert, k->cert_len)) {
+    unsigned char *cert_pem = (unsigned char *)malloc(4096);
+    size_t cert_pem_len = 0;
+    if (!cert_pem || mbedtls_pem_write_buffer("-----BEGIN CERTIFICATE-----\n", "-----END CERTIFICATE-----\n", k->cert, k->cert_len, cert_pem, 4096, &cert_pem_len) != 0) {
+        free(cert_pem);
+        set_err(err, cap, "cannot encode the signing certificate");
+        return 0;
+    }
+    size_t key_len = strlen((char *)pem);
+    unsigned char *all = (unsigned char *)malloc(key_len + cert_pem_len);
+    if (!all) { free(cert_pem); return 0; }
+    memcpy(all, pem, key_len);
+    memcpy(all + key_len, cert_pem, cert_pem_len);
+    int saved = write_file(sign_path, all, key_len + cert_pem_len);
+    free(all);
+    free(cert_pem);
+    if (!saved) {
         set_err(err, cap, "cannot save the signing key");
         return 0;
     }
@@ -126,17 +142,29 @@ apk_key_t *apk_key_open(const char *dir, char *err, size_t err_cap) {
         apk_key_close(k);
         return NULL;
     }
-    char key_path[1024], cert_path[1024];
-    snprintf(key_path, sizeof(key_path), "%s/%s", dir, KEY_FILE);
-    snprintf(cert_path, sizeof(cert_path), "%s/%s", dir, CERT_FILE);
-    if (rebax_fs_exists(key_path) && rebax_fs_exists(cert_path)) {
-        if (mbedtls_pk_parse_keyfile(&k->pk, key_path, NULL, mbedtls_ctr_drbg_random, &k->drbg) == 0 && read_file(cert_path, &k->cert, &k->cert_len)) return k;
-        set_err(err, err_cap, "the saved signing key cannot be read; delete the keystore folder to create a new one");
+    char sign_path[1024];
+    snprintf(sign_path, sizeof(sign_path), "%s/%s", dir, SIGN_FILE);
+    if (rebax_fs_exists(sign_path)) {
+        mbedtls_x509_crt crt;
+        mbedtls_x509_crt_init(&crt);
+        int ok = mbedtls_pk_parse_keyfile(&k->pk, sign_path, NULL, mbedtls_ctr_drbg_random, &k->drbg) == 0 && mbedtls_x509_crt_parse_file(&crt, sign_path) == 0 && crt.raw.len > 0;
+        if (ok) {
+            k->cert = (unsigned char *)malloc(crt.raw.len);
+            if (k->cert) {
+                memcpy(k->cert, crt.raw.p, crt.raw.len);
+                k->cert_len = crt.raw.len;
+            } else {
+                ok = 0;
+            }
+        }
+        mbedtls_x509_crt_free(&crt);
+        if (ok) return k;
+        set_err(err, err_cap, "the signing file cannot be read; it must hold an unencrypted private key followed by its certificate in PEM format");
         apk_key_close(k);
         return NULL;
     }
     rebax_fs_mkdir_p(dir);
-    if (!create_key(k, key_path, cert_path, err, err_cap)) {
+    if (!create_key(k, sign_path, err, err_cap)) {
         apk_key_close(k);
         return NULL;
     }

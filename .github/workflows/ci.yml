@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, platform: linux, arch: x86_64 }
+          - { runner: windows-2025, platform: windows, arch: x86_64 }
+          - { runner: macos-14, platform: macos, arch: arm64 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install make on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install -y make
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            MAKE_BIN="/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe"
+          else
+            MAKE_BIN=make
+          fi
+          "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
+
+      - name: Check the output
+        shell: bash
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          test -d "build/output/Rebax-Engine-${version}-${{ matrix.platform }}-${{ matrix.arch }}"

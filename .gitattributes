@@ -1,0 +1,9 @@
+* text=auto
+*.png binary
+*.ttf binary
+*.woff2 binary
+*.xz binary
+*.zip binary
+*.pem text eol=lf
+*.sh text eol=lf
+Makefile text eol=lf

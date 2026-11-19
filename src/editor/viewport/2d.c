@@ -8,8 +8,9 @@
  * Rebax Engine
  * Copyright (c) 2026 PS2HomeDeveloper
  *
- * Licensed under the MIT License.
- * See the LICENSE file for details.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 /* 2D editor camera, expandable virtual-world scrollbars, and transform gizmos. */

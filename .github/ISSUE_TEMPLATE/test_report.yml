@@ -1,0 +1,27 @@
+name: Test report
+description: Tell us how Rebax works on a platform
+labels: [testing]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Windows, Linux, macOS, Android, iOS, PlayStation 2, PlayStation 1]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Rebax version
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and architecture
+  - type: textarea
+    id: result
+    attributes:
+      label: What worked and what did not?
+    validations:
+      required: true

@@ -8,8 +8,9 @@
  * Rebax Engine
  * Copyright (c) 2026 PS2HomeDeveloper
  *
- * Licensed under the MIT License.
- * See the LICENSE file for details.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 #include <stdint.h>
@@ -19,6 +20,7 @@
 
 #include "filesystem/rebax_fs.h"
 #include "libraries/apk/apk_pack.h"
+#include "libraries/apk/apk_sign.h"
 #include "tool_commands.h"
 #include "tool_common.h"
 
@@ -83,6 +85,16 @@ int cmd_apk_pack(int argc, char **argv) {
     ensure_parent_dir(cfg.out_path);
     char err[512];
     if (!apk_pack(&cfg, err, sizeof(err))) die("%s", err);
+    return 0;
+}
+
+int cmd_android_keygen(int argc, char **argv) {
+    if (argc != 3) die("usage: android-keygen <keys_dir>");
+    char err[512];
+    apk_key_t *k = apk_key_open(argv[2], err, sizeof(err));
+    if (!k) die("%s", err);
+    apk_key_close(k);
+    printf("Signing file: %s/rebax_signing.pem\n", argv[2]);
     return 0;
 }
 
