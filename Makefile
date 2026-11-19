@@ -7,6 +7,7 @@ APK_STAGE := $(APK_DIR)/stage
 RTOOL_DIR := rebax_build_tool
 RTOOL_SRC_DIR := $(RTOOL_DIR)/src
 ifeq ($(OS),Windows_NT)
+  SHELL := cmd.exe
   RTOOL_EXE := .exe
 else
   RTOOL_EXE :=

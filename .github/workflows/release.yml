@@ -64,6 +64,8 @@ jobs:
 
       - name: Build
         shell: bash
+        env:
+          REBAX_COMPILER: package
         run: |
           case "${{ runner.os }}" in
             Windows) MAKE_BIN="/c/ProgramData/chocolatey/lib/make/tools/install/bin/make.exe" ;;

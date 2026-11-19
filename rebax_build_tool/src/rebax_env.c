@@ -444,7 +444,10 @@ int rebax_env_main(int argc, char **argv) {
         return 0;
     }
 
-    if (find_in_path("clang", cc, sizeof(cc))) {
+    const char *forced = getenv("REBAX_COMPILER");
+    int force_package = forced && strcmp(forced, "package") == 0;
+
+    if (!force_package && find_in_path("clang", cc, sizeof(cc))) {
         snprintf(cc, sizeof(cc), "clang");
         clang_flags(&f, t, sdk, builtins, empty);
         if (probe(cc, &f, probe_dir)) {
@@ -455,7 +458,7 @@ int rebax_env_main(int argc, char **argv) {
         printf("The system clang cannot build for %s-%s.\n", tp, ta);
     }
 
-    for (int i = 0; i < 3 && t->gcc[i]; i++) {
+    for (int i = 0; !force_package && i < 3 && t->gcc[i]; i++) {
         char found[PATH_CAP];
         if (!find_in_path(t->gcc[i], found, sizeof(found))) continue;
         gcc_flags(&f, t, sdk);
@@ -466,8 +469,17 @@ int rebax_env_main(int argc, char **argv) {
         }
     }
 
-    fail("no compiler found for %s-%s: install clang with lld, a gcc that builds for that target, or place rebax-clang-%s-%s.tar.xz next to the project", tp, ta, hp, ha);
-    return 1;
+    {
+        static const char *const host_need[] = { "bin", NULL };
+        snprintf(url, sizeof(url), "rebax-clang-%s-%s.tar.xz", hp, ha);
+        fetch(TOOLCHAINS_URL, url, extract, host_clang_dir, host_need);
+        snprintf(cc, sizeof(cc), "%s/bin/clang%s", host_clang_dir, exe_ext);
+        if (!rebax_fs_exists(cc)) fail("the compiler package %s has no clang", url);
+        clang_flags(&f, t, sdk, builtins, empty);
+        write_env(out, cc, "clang", &f, sdk, clang_dir, t);
+        printf("Compiler: %s (clang package)\n", cc);
+        return 0;
+    }
 }
 
 int rebax_package_archive_main(int argc, char **argv) {
