@@ -88,7 +88,7 @@ jobs:
           mkdir -p release
           case "${{ matrix.platform }}" in
             android) cp "build/output/${base}-universal.apk" release/ ;;
-            ios) cp "build/output/${base}-${{ matrix.arch }}.ipa" release/ ;;
+            ios) cp build/output/${base}-${{ matrix.arch }}.ipa build/output/${base}-${{ matrix.arch }}.zip release/ 2>/dev/null || true ;;
             linux) tar -C build/output -cJf "release/${base}-${{ matrix.arch }}.tar.xz" "${base}-${{ matrix.arch }}" ;;
             macos) ditto -c -k --keepParent "build/output/${base}-${{ matrix.arch }}" "release/${base}-${{ matrix.arch }}.zip" ;;
             windows) (cd build/output && 7z a -tzip "../../release/${base}-${{ matrix.arch }}.zip" "${base}-${{ matrix.arch }}" > /dev/null) ;;

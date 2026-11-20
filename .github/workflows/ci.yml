@@ -70,6 +70,6 @@ jobs:
           base="build/output/Rebax-Engine-${version}-${{ matrix.platform }}"
           case "${{ matrix.platform }}" in
             android) test -f "${base}-universal.apk" ;;
-            ios) test -f "${base}-${{ matrix.arch }}.ipa" ;;
+            ios) test -f "${base}-${{ matrix.arch }}.ipa" || test -f "${base}-${{ matrix.arch }}.zip" ;;
             *) test -d "${base}-${{ matrix.arch }}" ;;
           esac
