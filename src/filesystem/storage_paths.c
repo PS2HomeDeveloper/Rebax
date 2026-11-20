@@ -32,7 +32,6 @@ static char g_root_dir[REBAX_PATH_MAX];
 static char g_toolchains_dir[REBAX_PATH_MAX];
 static char g_sdks_dir[REBAX_PATH_MAX];
 static char g_tools_dir[REBAX_PATH_MAX];
-static char g_node_resources_dir[REBAX_PATH_MAX];
 static char g_temp_export_dir[REBAX_PATH_MAX];
 static char g_editor_dir[REBAX_PATH_MAX];
 static char g_shipped_dir[REBAX_PATH_MAX];
@@ -65,7 +64,6 @@ static void compute_paths(void) {
     snprintf(g_toolchains_dir, sizeof(g_toolchains_dir), "%s/toolchains", g_root_dir);
     snprintf(g_sdks_dir, sizeof(g_sdks_dir), "%s/sdks", g_root_dir);
     snprintf(g_tools_dir, sizeof(g_tools_dir), "%s/tools", g_root_dir);
-    snprintf(g_node_resources_dir, sizeof(g_node_resources_dir), "%s/sdks/rebax", g_root_dir);
     snprintf(g_temp_export_dir, sizeof(g_temp_export_dir), "%s/Temp/export", g_root_dir);
     snprintf(g_editor_dir, sizeof(g_editor_dir), "%s/Editor", g_root_dir);
 
@@ -92,7 +90,6 @@ const char *rebax_toolchains_dir(void) { compute_paths(); return g_toolchains_di
 const char *rebax_toolchain_dir(void) { compute_paths(); return g_toolchains_dir; }
 const char *rebax_sdks_dir(void) { compute_paths(); return g_sdks_dir; }
 const char *rebax_tools_dir(void) { compute_paths(); return g_tools_dir; }
-const char *rebax_node_resources_dir(void) { compute_paths(); return g_node_resources_dir; }
 const char *rebax_temp_export_dir(void) { compute_paths(); return g_temp_export_dir; }
 const char *rebax_editor_dir(void) { compute_paths(); return g_editor_dir; }
 
@@ -131,20 +128,6 @@ static int android_setup_needed(void) {
     return !same;
 }
 
-static void android_copy_node_file(const char *relative, void *user) {
-    int *ok = (int *)user;
-    char asset[REBAX_PATH_MAX], dest[REBAX_PATH_MAX], parent[REBAX_PATH_MAX];
-    snprintf(asset, sizeof(asset), "sdks/rebax/%s", relative);
-    snprintf(dest, sizeof(dest), "%s/%s", g_node_resources_dir, relative);
-    snprintf(parent, sizeof(parent), "%s", dest);
-    char *slash = strrchr(parent, '/');
-    if (slash) {
-        *slash = '\0';
-        rebax_fs_mkdir_p(parent);
-    }
-    if (!asset_file_copy(asset, dest)) *ok = 0;
-}
-
 static void android_copy_tool_file(const char *relative, void *user) {
     int *ok = (int *)user;
     char asset[REBAX_PATH_MAX], dest[REBAX_PATH_MAX], parent[REBAX_PATH_MAX];
@@ -161,12 +144,6 @@ static void android_copy_tool_file(const char *relative, void *user) {
 
 static int android_setup(void) {
     int ok = 1;
-    asset_file_list_tree("sdks/rebax/", android_copy_node_file, &ok);
-    if (!ok) {
-        fprintf(stderr, "[rebax] FAILED: cannot copy the node sources.\n");
-        return 0;
-    }
-
     asset_file_list_tree("tools/", android_copy_tool_file, &ok);
     if (!ok) {
         fprintf(stderr, "[rebax] FAILED: cannot copy the tools.\n");

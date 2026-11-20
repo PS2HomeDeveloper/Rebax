@@ -72,6 +72,6 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first,
 ## License
 
 - The engine, the editor and the build tool are licensed under the [Mozilla Public License 2.0](LICENSE).
-- The runtime SDK in [`sdks/rebax`](sdks/rebax), which is compiled into the programs you export, is licensed under the [MIT License](sdks/rebax/LICENSE). Programs and games you make with Rebax belong to you.
+- The runtime SDK in [`sdk`](sdk), which is compiled into the programs you export, is licensed under the [MIT License](sdk/LICENSE). Programs and games you make with Rebax belong to you.
 - Third-party software is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - "Rebax", "Rebax Engine" and the Rebax logo are trademarks of PS2HomeDeveloper. See the [trademark policy](TRADEMARKS.md).

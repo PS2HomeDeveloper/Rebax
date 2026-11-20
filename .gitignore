@@ -4,8 +4,7 @@ keystore/
 toolchains/
 rebax_build_tool/bin/
 rebax_build_tool/obj/
-sdks/*
-!sdks/rebax/
+sdks/
 *.o
 *.d
 *.apk

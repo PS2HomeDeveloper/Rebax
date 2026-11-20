@@ -397,7 +397,7 @@ ICON_ATLAS_HEADER := $(GEN_DIR)/icon_atlas_pages.h
 ICON_ATLAS_PNGS := $(sort $(wildcard $(ICON_ATLAS_DIR)/icons[0-9]*.png))
 ICON_SOURCE_FILES := $(sort $(wildcard $(ICON_SRC_DIR)/*.png))
 rwildcard = $(filter-out $(patsubst %/,%,$(wildcard $1*/)),$(wildcard $1$2)) $(foreach d,$(wildcard $1*/),$(call rwildcard,$d,$2))
-NODE_SDK_DIR := sdks/rebax/ps2
+NODE_SDK_DIR := sdk/ps2
 NODE_SRC_DIR := $(NODE_SDK_DIR)/nodes/src
 NODE_EDITOR_SRC_DIR := $(SRC_DIR)/dev_systems/nodes/editor
 NODE_SOURCE_FILES := $(sort $(wildcard $(NODE_SRC_DIR)/*.c))
@@ -464,7 +464,6 @@ endif
 build-selected: $(TARGET) bundle-runtime-libs bundle-resources bundle-packages $(if $(filter ios,$(TARGET_PLATFORM)),ios-package)
 
 bundle-packages: $(TARGET) | $(RTOOL)
-	$(if $(filter ios,$(TARGET_PLATFORM)),,@$(RTOOL) copy-tree sdks/rebax $(OUTPUT_DIR)/sdks/rebax)
 	$(if $(or $(filter ios,$(TARGET_PLATFORM)),$(TOOLS_FILES)),,@$(RTOOL) mkdir $(OUTPUT_DIR)/tools)
 	$(if $(and $(TOOLS_FILES),$(filter-out ios,$(TARGET_PLATFORM))),@$(RTOOL) copy-tree tools $(OUTPUT_DIR)/tools)
 
@@ -551,7 +550,6 @@ apk-package: $(OBJS)
 	@$(RTOOL) cp $(DEX_FILE) $(APK_STAGE)/classes.dex
 	@echo Copying assets
 	@$(RTOOL) copy-dir $(RESOURCES_DIR) $(APK_ASSETS)/resources --skip icons_src
-		@$(RTOOL) copy-dir sdks/rebax $(APK_ASSETS)/sdks/rebax
 		$(if $(TOOLS_FILES),@$(RTOOL) copy-dir tools $(APK_ASSETS)/tools)
 		@$(RTOOL) write-text $(APK_ASSETS)/rebax_sources_stamp.txt $(ENGINE_VERSION)-@time@
 	@$(RTOOL) asset-manifest $(APK_ASSETS) $(APK_ASSETS)/rebax_assets.txt
@@ -563,7 +561,7 @@ apk-package: $(OBJS)
 	$(if $(filter 1,$(APK_PART)),,@$(RTOOL) rm $(APK_STAGE))
 	$(if $(filter 1,$(APK_PART)),@echo Android $(TARGET_ARCH) staged,@echo APK ready: $(APK_OUT))
 
-CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdks/rebax/common/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
+CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdk/common/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
 ifeq ($(TARGET_PLATFORM),android)
   CFLAGS += -fPIC
 endif

@@ -33,7 +33,7 @@ The following software is not stored in this repository. It is downloaded as par
 
 ## Your exported programs
 
-The programs you export with Rebax include the runtime SDK from `sdks/rebax`, which is under the MIT License, and the SDK and compiler runtime libraries of the platform you export to. Depending on the platform, the license terms of those libraries may require a notice in your distribution. Check the notices of the [Rebax SDKs](https://github.com/PS2HomeDeveloper/Rebax-SDKs) repository for the platform you target.
+The programs you export with Rebax include the runtime SDK from `sdk`, which is under the MIT License, and the SDK and compiler runtime libraries of the platform you export to. Depending on the platform, the license terms of those libraries may require a notice in your distribution. Check the notices of the [Rebax SDKs](https://github.com/PS2HomeDeveloper/Rebax-SDKs) repository for the platform you target.
 
 ## Reporting a mistake
 

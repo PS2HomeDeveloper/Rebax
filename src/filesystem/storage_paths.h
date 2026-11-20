@@ -21,7 +21,6 @@ const char *rebax_toolchains_dir(void);
 const char *rebax_toolchain_dir(void);
 const char *rebax_sdks_dir(void);
 const char *rebax_tools_dir(void);
-const char *rebax_node_resources_dir(void);
 const char *rebax_temp_export_dir(void);
 const char *rebax_editor_dir(void);
 

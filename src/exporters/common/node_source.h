@@ -18,7 +18,7 @@
 
 typedef void (*node_source_name_cb)(const char *name, void *user);
 
-void node_source_use(const char *sdk_name);
+void node_source_use(const char *sdk_name, const char *sdk_root);
 int node_source_is_modern(void);
 int node_source_is_ps1(void);
 int node_source_list(node_source_name_cb callback, void *user);

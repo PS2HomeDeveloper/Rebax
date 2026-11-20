@@ -18,15 +18,15 @@
  * node_registry.h
  * ============================================================
  * A "view" copy of the data for each node type, for the editor/engine side -
- * intentionally separate from the real node_interface_t in sdks/rebax/include/nodes/
+ * intentionally separate from the real node_interface_t in sdk/common/include/
  * (that one is compiled by the target toolchains only and never reaches editor code).
  *
  * Used by any UI that needs to display information about a node type: its name,
  * its icon, and its list of properties (for the properties panel).
  *
  * Its data is **generated automatically at build time** (node_registry_generated.h)
- * from the @NODE line in each sdks/rebax/src/nodes (.c files) - no manual edits here
- * or in node_registry.c. A new node = a new file in sdks/rebax/src/nodes containing
+ * from the @NODE line in each sdk/<target>/nodes/src (.c files) - no manual edits here
+ * or in node_registry.c. A new node = a new file in sdk/<target>/nodes/src containing
  * a single @NODE line; it appears automatically on the next build.
  * ============================================================
  */
@@ -35,7 +35,7 @@
 #define NODE_REGISTRY_H
 
 #include "node_types.h"
-#include "node_interface.h" /* Shared node property types (sdks/rebax/include/nodes) */
+#include "node_interface.h" /* Shared node property types (sdk/include/nodes) */
 
 typedef struct {
     node_type_t type;

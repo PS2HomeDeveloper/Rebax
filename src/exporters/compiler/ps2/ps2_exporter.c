@@ -156,8 +156,12 @@ int ps2_export_start(const char *exe_name, int is_release, const char *output_di
     g_output_dir[sizeof(g_output_dir) - 1] = '\0';
 
     resolve_ps2_roots();
-    node_source_use("ps2");
-    snprintf(g_nodes_src_dir, sizeof(g_nodes_src_dir), "%s/rebax/ps2", rebax_sdks_dir());
+    {
+        char sdk_root[1536];
+        snprintf(sdk_root, sizeof(sdk_root), "%s/ps2", rebax_sdks_dir());
+        node_source_use("ps2", sdk_root);
+        snprintf(g_nodes_src_dir, sizeof(g_nodes_src_dir), "%s/rebax/ps2", sdk_root);
+    }
 
     /* Export workspace - a fixed folder in the rebax tree (Temp/export), not
      * next to the executable nor inside the project folder - ensures reliable

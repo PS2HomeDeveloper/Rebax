@@ -11,7 +11,7 @@ All notable changes to Rebax Engine are recorded here. The format follows [Keep 
 - Release workflow that publishes packages for every supported platform.
 
 ### Changed
-- The engine, editor and build tool are now licensed under the Mozilla Public License 2.0. The runtime SDK in `sdks/rebax` stays under the MIT License.
+- The engine, editor and build tool are now licensed under the Mozilla Public License 2.0. The runtime SDK in `sdk` stays under the MIT License.
 - Android packages are signed with a single signing file, `keystore/rebax_signing.pem`.
 - Platform and architecture can be written as separate words: `make linux x86_64`.
 

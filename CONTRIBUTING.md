@@ -27,7 +27,7 @@ See "Building from source" in the [README](README.md). Run `make` and make sure 
 | Folder | Contents |
 | --- | --- |
 | `src/` | The engine and editor |
-| `sdks/rebax/` | The runtime SDK that is compiled into exported programs (MIT) |
+| `sdk/` | The runtime SDK that is compiled into exported programs (MIT) |
 | `rebax_build_tool/` | The build tool used by the Makefile |
 | `third_party/` | Third-party source used by the engine |
 | `resources/` | Fonts, images and certificates |
