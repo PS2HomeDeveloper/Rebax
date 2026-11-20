@@ -73,3 +73,11 @@ jobs:
             ios) test -f "${base}-${{ matrix.arch }}.ipa" || test -f "${base}-${{ matrix.arch }}.zip" ;;
             *) test -d "${base}-${{ matrix.arch }}" ;;
           esac
+
+      - name: Upload the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
+          path: build/output
+          retention-days: 7
+          if-no-files-found: error
