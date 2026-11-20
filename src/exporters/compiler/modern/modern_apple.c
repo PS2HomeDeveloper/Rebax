@@ -34,8 +34,8 @@
 
 int modern_configure_apple(const modern_config_t *config) {
     char path[MODERN_PATH_CAP];
-    modern_appendf(g_modern_compile_flags, sizeof(g_modern_compile_flags), " -nostdlibinc -isysroot \"%s\" -isystem \"%s/include\" -F\"%s/standard/Frameworks\" -F\"%s/graphics/Frameworks\"", config->empty_sysroot, config->standard, g_modern_sdk_root, g_modern_sdk_root);
-    modern_appendf(g_modern_link_pre, sizeof(g_modern_link_pre), "--target=%s -isysroot \"%s\" -fuse-ld=lld -nostdlib -Wl,-dead_strip", config->triple, config->empty_sysroot);
+    modern_appendf(g_modern_compile_flags, sizeof(g_modern_compile_flags), " -nostdlibinc -isysroot \"%s\" -isystem \"%s/include\" -F\"%s/standard/System/Library/Frameworks\" -F\"%s/graphics/System/Library/Frameworks\"", config->empty_sysroot, config->standard, g_modern_sdk_root, g_modern_sdk_root);
+    modern_appendf(g_modern_link_pre, sizeof(g_modern_link_pre), "--target=%s -isysroot \"%s\" -fuse-ld=lld -nostdlib -Wl,-dead_strip -Wl,-syslibroot,\"%s/standard\" -Wl,-syslibroot,\"%s/graphics\"", config->triple, config->empty_sysroot, g_modern_sdk_root, g_modern_sdk_root);
     modern_appendf(g_modern_link_post, sizeof(g_modern_link_post), "-L\"%s/lib\" -L\"%s/lib\" -L\"%s/lib\" -lSDL2 -liconv -lSystem", config->standard, config->runtime, config->graphics);
     snprintf(path, sizeof(path), "%s/graphics/lib/libSDL2.a", g_modern_sdk_root);
     return modern_require_file(path, "SDL2 static library");
@@ -44,11 +44,11 @@ int modern_configure_apple(const modern_config_t *config) {
 void modern_add_frameworks(const char *sdk_root, const char *const *names) {
     char path[MODERN_PATH_CAP];
     for (int i = 0; names[i] != NULL; i++) {
-        snprintf(path, sizeof(path), "%s/standard/Frameworks/%s.framework", sdk_root, names[i]);
+        snprintf(path, sizeof(path), "%s/standard/System/Library/Frameworks/%s.framework", sdk_root, names[i]);
         if (rebax_fs_is_dir(path)) modern_appendf(g_modern_link_post, sizeof(g_modern_link_post), " -framework %s", names[i]);
         else {
-            snprintf(path, sizeof(path), "%s/graphics/Frameworks/%s.framework", sdk_root, names[i]);
-            if (rebax_fs_is_dir(path)) modern_appendf(g_modern_link_post, sizeof(g_modern_link_post), " -F\"%s/graphics/Frameworks\" -framework %s", sdk_root, names[i]);
+            snprintf(path, sizeof(path), "%s/graphics/System/Library/Frameworks/%s.framework", sdk_root, names[i]);
+            if (rebax_fs_is_dir(path)) modern_appendf(g_modern_link_post, sizeof(g_modern_link_post), " -F\"%s/graphics/System/Library/Frameworks\" -framework %s", sdk_root, names[i]);
         }
     }
 }

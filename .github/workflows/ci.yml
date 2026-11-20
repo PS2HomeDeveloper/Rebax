@@ -41,7 +41,13 @@ jobs:
       - name: Install make on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install -y make
+        run: |
+          for ($i = 1; $i -le 5; $i++) {
+            choco install -y make
+            if (Test-Path "C:\ProgramData\chocolatey\lib\make\tools\install\bin\make.exe") { exit 0 }
+            Start-Sleep -Seconds (15 * $i)
+          }
+          exit 1
 
       - name: Install make on macOS
         if: runner.os == 'macOS'

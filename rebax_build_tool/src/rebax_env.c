@@ -276,8 +276,12 @@ typedef struct {
 static void framework_list(flags_t *f, const char *sdk, const char *const *names) {
     char path[PATH_CAP];
     for (int i = 0; names[i]; i++) {
-        snprintf(path, sizeof(path), "%s/standard/Frameworks/%s.framework", sdk, names[i]);
-        if (rebax_fs_is_dir(path)) append(f->ldsdl, sizeof(f->ldsdl), " -framework %s", names[i]);
+        int found = 0;
+        snprintf(path, sizeof(path), "%s/standard/System/Library/Frameworks/%s.framework", sdk, names[i]);
+        if (rebax_fs_is_dir(path)) found = 1;
+        snprintf(path, sizeof(path), "%s/graphics/System/Library/Frameworks/%s.framework", sdk, names[i]);
+        if (rebax_fs_is_dir(path)) found = 1;
+        if (found) append(f->ldsdl, sizeof(f->ldsdl), " -framework %s", names[i]);
     }
 }
 
@@ -310,9 +314,9 @@ static int clang_flags(flags_t *f, const target_t *t, const char *sdk, const cha
         append(f->ldsdl, FLAGS_CAP, "-lSDL2 -liconv -lm -llog -landroid -lOpenSLES -lc -ldl %s", builtins);
         return 1;
     }
-    append(f->cflags, FLAGS_CAP, "--target=%s -isysroot %s -nostdlibinc -isystem %s/standard/include -F%s/standard/Frameworks -F%s/graphics/Frameworks -I%s/graphics/include/SDL2", t->triple, empty, sdk, sdk, sdk, sdk);
-    append(f->ldpre, FLAGS_CAP, "--target=%s -isysroot %s -fuse-ld=lld -nostdlib", t->triple, empty);
-    append(f->ldpost, FLAGS_CAP, "-L%s/standard/lib -L%s/runtime/lib -L%s/graphics/lib -F%s/standard/Frameworks -F%s/graphics/Frameworks", sdk, sdk, sdk, sdk, sdk);
+    append(f->cflags, FLAGS_CAP, "--target=%s -isysroot %s -nostdlibinc -isystem %s/standard/include -F%s/standard/System/Library/Frameworks -F%s/graphics/System/Library/Frameworks -I%s/graphics/include/SDL2", t->triple, empty, sdk, sdk, sdk, sdk);
+    append(f->ldpre, FLAGS_CAP, "--target=%s -isysroot %s -fuse-ld=lld -nostdlib -Wl,-syslibroot,%s/standard -Wl,-syslibroot,%s/graphics", t->triple, empty, sdk, sdk);
+    append(f->ldpost, FLAGS_CAP, "-L%s/standard/lib -L%s/runtime/lib -L%s/graphics/lib -F%s/standard/System/Library/Frameworks -F%s/graphics/System/Library/Frameworks", sdk, sdk, sdk, sdk, sdk);
     append(f->ldsdl, FLAGS_CAP, "-lSDL2 -liconv");
     if (strcmp(p, "macos") == 0) {
         static const char *const names[] = { "Cocoa", "CoreAudio", "AudioToolbox", "CoreVideo", "IOKit", "ForceFeedback", "Carbon", "CoreServices", "CoreFoundation", "Foundation", "AppKit", "Metal", "QuartzCore", "OpenGL", "CoreHaptics", "GameController", NULL };
