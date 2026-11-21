@@ -22,7 +22,9 @@
 
 #include "filesystem/rebax_fs.h"
 
-#define ENGINE_VERSION "1.0.0"
+#define REBAX_STR2(x) #x
+#define REBAX_STR(x) REBAX_STR2(x)
+#define ENGINE_VERSION REBAX_STR(REBAX_ENGINE_VERSION)
 #define FILE_MAX 8192
 
 static int is_dir(const char *path) {

@@ -184,7 +184,7 @@ endif
 
 
 TERMUX_PREFIX := $(if $(PREFIX),$(PREFIX),/data/data/com.termux/files/usr)
-ENGINE_VERSION := v1.0.0
+ENGINE_VERSION := v0.1.0
 
 TARGET_GOALS := linux-x86_64 linux-x86 linux-arm64 linux-arm windows-x86_64 windows-x86 windows-arm64 windows-arm android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 macos-arm64 macos-x86_64 ios-arm64 ios-x86_64
 ALL_TARGET_GOALS := $(TARGET_GOALS) android-arm64
@@ -317,7 +317,7 @@ RTOOL_SRC_HEADERS := $(wildcard $(RTOOL_SRC_DIR)/*.h)
 RTOOL_ALL_SRCS := $(RTOOL_C_SOURCES) $(RTOOL_THIRD_PARTY)
 rtool_obj = $(RTOOL_OBJ_DIR)/o-$(subst /,-,$(1:.c=.o))
 RTOOL_OBJS := $(foreach s,$(RTOOL_ALL_SRCS),$(call rtool_obj,$(s)))
-RTOOL_CCFLAGS := -std=c99 -O1 -w -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L $(RTOOL_PLATFORM_CFLAGS) $(RTOOL_INCLUDES) $(BOOT_CFLAGS)
+RTOOL_CCFLAGS := -std=c99 -O1 -w -DZ7_ST -D_7ZIP_ST -D_POSIX_C_SOURCE=200809L -DREBAX_ENGINE_VERSION=$(patsubst v%,%,$(ENGINE_VERSION)) $(RTOOL_PLATFORM_CFLAGS) $(RTOOL_INCLUDES) $(BOOT_CFLAGS)
 RTOOL_BOOT_NEED := $(if $(filter 1,$(RBX_BOOT)),$(BOOT_CLANG_OK) $(BOOT_SDK_OK))
 
 ifeq ($(wildcard $(RTOOL)),)
@@ -341,7 +341,7 @@ endif
 
 ifeq ($(RBX_BOOT),1)
 TOOLCHAINS_URL := https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/latest/download
-SDKS_URL := https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/latest/download
+SDKS_URL := https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/download/$(ENGINE_VERSION)
 ifeq ($(OS),Windows_NT)
   BOOT_GET = curl.exe -L --fail -# --create-dirs -o $(1) $(2)
   BOOT_DEL = -del /q $(subst /,\,$(1))
@@ -561,7 +561,7 @@ apk-package: $(OBJS)
 	$(if $(filter 1,$(APK_PART)),,@$(RTOOL) rm $(APK_STAGE))
 	$(if $(filter 1,$(APK_PART)),@echo Android $(TARGET_ARCH) staged,@echo APK ready: $(APK_OUT))
 
-CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdk/common/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
+CFLAGS := -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -DREBAX_ENGINE_VERSION=$(patsubst v%,%,$(ENGINE_VERSION)) -I$(SRC_DIR) $(addprefix -I,$(sort $(dir $(call rwildcard,$(NODE_SDK_DIR)/,*.h)))) $(addprefix -I,$(sort $(dir $(call rwildcard,sdk/common/,*.h)))) -Ithird_party -Ithird_party/mbedtls/include -I$(GEN_DIR) -MMD -MP
 ifeq ($(TARGET_PLATFORM),android)
   CFLAGS += -fPIC
 endif

@@ -36,7 +36,9 @@
 #include "filesystem/resources.h"
 
 #define TOOLCHAINS_URL "https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/latest/download"
-#define SDKS_URL "https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/latest/download"
+#define REBAX_STR2(x) #x
+#define REBAX_STR(x) REBAX_STR2(x)
+#define SDKS_URL "https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/download/v" REBAX_STR(REBAX_ENGINE_VERSION)
 #define PATH_CAP 1536
 #define MAX_JOBS 40
 

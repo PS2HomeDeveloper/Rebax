@@ -7,17 +7,28 @@ on:
         description: Release notes (leave empty to generate them automatically)
         required: false
         type: string
-      prerelease:
-        description: Mark as a pre-release
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
 
 jobs:
+  check:
+    name: Check the version
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
+          echo "Version: $version"
+          echo "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "ENGINE_VERSION must look like v1.2.3"; exit 1; }
+          if gh release view "$version" > /dev/null 2>&1; then echo "The release $version already exists. Change ENGINE_VERSION in the Makefile."; exit 1; fi
+          gh release view "$version" --repo PS2HomeDeveloper/Rebax-SDKs > /dev/null 2>&1 || { echo "Rebax-SDKs has no release $version. Run Build SDK packages there first."; exit 1; }
+
   build:
+    needs: check
     name: ${{ matrix.platform }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -120,12 +131,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NOTES: ${{ inputs.notes }}
-          PRERELEASE: ${{ inputs.prerelease }}
         run: |
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           ls -l packages
           flags=()
-          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          case "$version" in v0.*) flags+=(--prerelease);; esac
           if gh release view "$version" > /dev/null 2>&1; then
             gh release upload "$version" packages/* --clobber
             if [ -n "$NOTES" ]; then gh release edit "$version" --notes "$NOTES"; fi
