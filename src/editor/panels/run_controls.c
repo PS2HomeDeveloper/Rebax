@@ -132,7 +132,7 @@ void run_controls_draw(int window_w) {
     ui_kit_outline(l.group_x, l.group_y, l.group_w, GROUP_H, 9, 78, 81, 89);
     if (ui_kit_hover(l.play_x, l.group_y, PLAY_W, GROUP_H)) ui_kit_rect(l.play_x, l.group_y + 2, PLAY_W, GROUP_H - 4, 7, 66, 69, 77);
     if (!running && (g_menu_open || ui_kit_hover(l.more_x, l.group_y, MORE_W, GROUP_H))) ui_kit_rect(l.more_x, l.group_y + 2, MORE_W, GROUP_H - 4, 7, 66, 69, 77);
-    window_fill_rect(l.more_x - 1, l.group_y + 7, 1, GROUP_H - 14, 84, 87, 95);
+    window_fill_rect(l.more_x - 1, l.group_y + 7, 1, GROUP_H - 14, UI_RGB(UI_COLOR_SCROLL_TRACK));
     icon_atlas_draw(running ? ICON_stop : ICON_tree_expand_collapse, l.play_x + (PLAY_W - ICON_PX) / 2, l.group_y + (GROUP_H - ICON_PX) / 2, ICON_PX);
     if (!running) icon_atlas_draw(ICON_more, l.more_x + (MORE_W - ICON_PX) / 2, l.group_y + (GROUP_H - ICON_PX) / 2, ICON_PX);
     const char *msg = run_session_message()[0] ? run_session_message() : g_notice;
@@ -161,7 +161,7 @@ void run_controls_draw_menu(int window_w) {
         if (list[i].has_settings && list[i].available) {
             int sx = x + w - SETTINGS_W;
             if (hover && mx >= sx) ui_kit_rect(sx, y + 3, SETTINGS_W - 3, h - 6, 7, 70, 90, 110);
-            window_fill_rect(sx - 1, y + 8, 1, h - 16, 90, 105, 120);
+            window_fill_rect(sx - 1, y + 8, 1, h - 16, UI_RGB(UI_COLOR_TEXT_DISABLED));
             icon_atlas_draw(ICON_more, sx + (SETTINGS_W - 3 - 20) / 2, y + (h - 20) / 2, 20);
         }
     }

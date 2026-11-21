@@ -23,6 +23,7 @@
  * ============================================================
  */
 
+#include "editor/ui/theme.h"
 #include "dev_systems/nodes/editor/node_editor_interface.h"
 #include "editor/viewport/2d.h"
 #include "platform/common/window.h"
@@ -38,11 +39,11 @@ void element2d_editor_draw(const node_property_value_t *values, int property_cou
     viewport_2d_project(values[0].f, values[1].f, cam_x, cam_y, cam_w, cam_h, &sx, &sy);
 
     /* A subtle white dot that always indicates the node's position - regardless of selection */
-    window_fill_rect(sx - MARKER_HALF, sy - MARKER_HALF, MARKER_HALF * 2, MARKER_HALF * 2, 225, 225, 225);
+    window_fill_rect(sx - MARKER_HALF, sy - MARKER_HALF, MARKER_HALF * 2, MARKER_HALF * 2, UI_RGB(UI_COLOR_TEXT_PRIMARY));
 
     if (selected) {
-        window_fill_rect(sx - SELECT_CROSS_HALF, sy - 1, SELECT_CROSS_HALF * 2, 2, 70, 220, 120);
-        window_fill_rect(sx - 1, sy - SELECT_CROSS_HALF, 2, SELECT_CROSS_HALF * 2, 70, 220, 120);
+        window_fill_rect(sx - SELECT_CROSS_HALF, sy - 1, SELECT_CROSS_HALF * 2, 2, UI_RGB(UI_COLOR_SUCCESS));
+        window_fill_rect(sx - 1, sy - SELECT_CROSS_HALF, 2, SELECT_CROSS_HALF * 2, UI_RGB(UI_COLOR_SUCCESS));
     }
 }
 

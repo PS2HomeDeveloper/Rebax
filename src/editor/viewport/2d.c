@@ -14,6 +14,7 @@
  */
 
 /* 2D editor camera, expandable virtual-world scrollbars, and transform gizmos. */
+#include "editor/ui/theme.h"
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
@@ -240,10 +241,10 @@ static void draw_axis_scrollbar(int horizontal, int track_start, int track_len,
         : (my >= thumb_start && my < thumb_start + thumb_len && mx >= cross_start && mx < cross_start + cross_len);
     if (hover) thumb_color = 155;
     if (horizontal) {
-        window_fill_rect(track_start, cross_start, track_len, cross_len, 40, 43, 48);
+        window_fill_rect(track_start, cross_start, track_len, cross_len, UI_RGB(UI_COLOR_SURFACE_PANEL));
         window_fill_rect(thumb_start, cross_start + 1, thumb_len, cross_len - 2, thumb_color, thumb_color, thumb_color);
     } else {
-        window_fill_rect(cross_start, track_start, cross_len, track_len, 40, 43, 48);
+        window_fill_rect(cross_start, track_start, cross_len, track_len, UI_RGB(UI_COLOR_SURFACE_PANEL));
         window_fill_rect(cross_start + 1, thumb_start, cross_len - 2, thumb_len, thumb_color, thumb_color, thumb_color);
     }
 }
@@ -373,7 +374,7 @@ static void draw_gizmo(int x, int y) {
         window_fill_rect(x + offset, y - GIZMO_LENGTH, 1, height + 1,
                          AXIS_Y_R, AXIS_Y_G, AXIS_Y_B);
     }
-    window_fill_rect(x - 4, y - 4, 8, 8, 235, 235, 235);
+    window_fill_rect(x - 4, y - 4, 8, 8, UI_RGB(UI_COLOR_TEXT_PRIMARY));
 }
 
 static void draw_marquee(void) {
@@ -382,10 +383,10 @@ static void draw_marquee(void) {
     int top = g_marquee_start_y < g_marquee_y ? g_marquee_start_y : g_marquee_y;
     int bottom = g_marquee_start_y > g_marquee_y ? g_marquee_start_y : g_marquee_y;
     if (right <= left || bottom <= top) return;
-    window_fill_rect(left, top, right - left, 1, 75, 155, 255);
-    window_fill_rect(left, bottom, right - left, 1, 75, 155, 255);
-    window_fill_rect(left, top, 1, bottom - top, 75, 155, 255);
-    window_fill_rect(right, top, 1, bottom - top, 75, 155, 255);
+    window_fill_rect(left, top, right - left, 1, UI_RGB(UI_COLOR_SELECTION));
+    window_fill_rect(left, bottom, right - left, 1, UI_RGB(UI_COLOR_SELECTION));
+    window_fill_rect(left, top, 1, bottom - top, UI_RGB(UI_COLOR_SELECTION));
+    window_fill_rect(right, top, 1, bottom - top, UI_RGB(UI_COLOR_SELECTION));
 }
 
 void viewport_2d_draw(int x, int y, int w, int h) {
@@ -419,10 +420,10 @@ void viewport_2d_draw(int x, int y, int w, int h) {
     int left = origin_x - (int)(reference_width * g_zoom / 2.0f);
     int top = origin_y - (int)(reference_height * g_zoom / 2.0f);
     int frame_w = (int)(reference_width * g_zoom), frame_h = (int)(reference_height * g_zoom);
-    window_fill_rect(left, top, frame_w, 2, 245, 190, 55);
-    window_fill_rect(left, top + frame_h - 2, frame_w, 2, 245, 190, 55);
-    window_fill_rect(left, top, 2, frame_h, 245, 190, 55);
-    window_fill_rect(left + frame_w - 2, top, 2, frame_h, 245, 190, 55);
+    window_fill_rect(left, top, frame_w, 2, UI_RGB(UI_COLOR_WARNING));
+    window_fill_rect(left, top + frame_h - 2, frame_w, 2, UI_RGB(UI_COLOR_WARNING));
+    window_fill_rect(left, top, 2, frame_h, UI_RGB(UI_COLOR_WARNING));
+    window_fill_rect(left + frame_w - 2, top, 2, frame_h, UI_RGB(UI_COLOR_WARNING));
 
     for (int i = 0; i < scene_data_get_node_count(); i++) {
         node_type_t type = scene_data_get_type(i);

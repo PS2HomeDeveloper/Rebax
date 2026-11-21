@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -87,7 +88,7 @@ static window_texture_t *shape_texture(int w, int h, int radius, int r, int g, i
     shape_image_t outer = shape_provider_render_rect(w, h, radius, (unsigned char)r, (unsigned char)g, (unsigned char)b);
     if (!outer.pixels) return NULL;
     if (ring && w > 4 && h > 4) {
-        shape_image_t inner = shape_provider_render_rect(w - 2, h - 2, radius > 1 ? radius - 1 : 0, 0, 0, 0);
+        shape_image_t inner = shape_provider_render_rect(w - 2, h - 2, radius > 1 ? radius - 1 : 0, UI_RGB(UI_COLOR_BACKDROP));
         if (inner.pixels) {
             for (int y = 0; y < inner.height; y++)
                 for (int x = 0; x < inner.width; x++) {

@@ -90,8 +90,8 @@ jobs:
             *) MAKE_BIN=make ;;
           esac
           if [ "${{ matrix.platform }}" = "android" ]; then
-            "$MAKE_BIN" android
-            for abi in arm64-v8a armeabi-v7a x86 x86_64; do "$MAKE_BIN" android-$abi; done
+            "$MAKE_BIN" android universal
+            "$MAKE_BIN" android all
           else
             "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
           fi

@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "editor/ui/theme.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -190,12 +191,12 @@ void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h) {
                     line_bottom = y + j * tree->style.row_height + tree->style.row_height / 2;
                 }
             }
-            window_fill_rect(line_x, line_top, 1, line_bottom - line_top, 255, 255, 255);
+            window_fill_rect(line_x, line_top, 1, line_bottom - line_top, UI_RGB(UI_COLOR_TEXT_BRIGHT));
         }
         if (item->depth > 0) {
             int parent_line_x = base_x - tree->style.indent_step + tree->style.icon_size / 2;
             int mid_y = row_y + tree->style.row_height / 2;
-            window_fill_rect(parent_line_x, mid_y, base_x - parent_line_x, 1, 255, 255, 255);
+            window_fill_rect(parent_line_x, mid_y, base_x - parent_line_x, 1, UI_RGB(UI_COLOR_TEXT_BRIGHT));
         }
 
         int icon_x = base_x + tree->style.icon_size + tree->style.arrow_icon_gap;
@@ -210,7 +211,7 @@ void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h) {
                                 tree->style.icon_size, tree->style.icon_size);
         } else if (item->icon_id == ICON_Folder) {
             icon_atlas_draw_tinted(item->icon_id, icon_x, icon_y,
-                                   tree->style.icon_size, 230, 200, 60);
+                                   tree->style.icon_size, UI_RGB(UI_COLOR_WARNING));
         } else {
             icon_atlas_draw(item->icon_id, icon_x, icon_y, tree->style.icon_size);
         }

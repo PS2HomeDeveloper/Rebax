@@ -584,9 +584,9 @@ void editor_workspace_draw(int window_w, int window_h) {
         g_status_tex = ui_make_text_texture(status, FONT_WEIGHT_REGULAR, 10, &g_status_w, &g_status_h);
         snprintf(g_status_cache, sizeof(g_status_cache), "%s", status);
     }
-    window_fill_rect(0, window_h - 20, window_w, 20, 22, 23, 26);
-    window_fill_rect(0, window_h - 20, window_w, 1, 60, 62, 67);
-    if (g_status_tex) window_draw_texture_tinted(g_status_tex, 10, window_h - 15, g_status_w, g_status_h, 165, 170, 178);
+    window_fill_rect(0, window_h - 20, window_w, 20, UI_RGB(UI_COLOR_SURFACE_BASE));
+    window_fill_rect(0, window_h - 20, window_w, 1, UI_RGB(UI_COLOR_SURFACE_BORDER));
+    if (g_status_tex) window_draw_texture_tinted(g_status_tex, 10, window_h - 15, g_status_w, g_status_h, UI_RGB(UI_COLOR_TEXT_MUTED));
 
     run_controls_draw_menu(window_w);
     add_node_dialog_draw(window_w, window_h);

@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
 #include "editor/dialogs/ps2_network.h"
@@ -182,7 +183,7 @@ void ps2_network_dialog_draw(int window_w, int window_h) {
     for (int i = 0; i < 4; i++) {
         char num[8];
         snprintf(num, sizeof(num), "%d", i + 1);
-        ui_kit_rect(card_x + 14, ty + 1, 20, 20, 10, 0x3B, 0x5B, 0x74);
+        ui_kit_rect(card_x + 14, ty + 1, 20, 20, 10, UI_RGB(UI_COLOR_BUTTON_BLUE));
         ui_kit_text(num, 12, card_x + 14 + (20 - ui_kit_text_width(num, 12)) / 2, ty + 3, 240, 240, 240);
         ui_kit_text(step_text(i), 13, card_x + 44, ty + 2, 210, 214, 220);
         ty += 24;

@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -103,7 +104,7 @@ static void ensure_ready(void) {
 
     g_install_btn = labeled_button_create("Install", FONT_WEIGHT_REGULAR, 13, 14, 6, 4,
                                           UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g, UI_COLOR_BUTTON_BLUE.b);
-    g_remove_btn = labeled_button_create("Uninstall", FONT_WEIGHT_REGULAR, 13, 14, 6, 4, 0x74, 0x3B, 0x3B);
+    g_remove_btn = labeled_button_create("Uninstall", FONT_WEIGHT_REGULAR, 13, 14, 6, 4, UI_RGB(UI_COLOR_DANGER_BG));
     if (g_install_btn.width > 0) {
         g_install_shape = window_create_texture(g_install_btn.shape_img.pixels, g_install_btn.shape_img.width, g_install_btn.shape_img.height);
         g_install_text = window_create_texture(g_install_btn.text_img.pixels, g_install_btn.text_img.width, g_install_btn.text_img.height);
@@ -295,7 +296,7 @@ void packages_dialog_draw(int window_w, int window_h) {
     compute_layout(window_w, window_h, &l);
     ui_dialog_draw_backdrop(window_w, window_h);
     ui_dialog_draw_frame(l.x, l.y, l.w, l.h);
-    window_fill_rect(l.x, l.y, l.w, TITLEBAR_H, 0x29, 0x2B, 0x30);
+    window_fill_rect(l.x, l.y, l.w, TITLEBAR_H, UI_RGB(UI_COLOR_SURFACE_PANEL));
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, l.x, l.y, TITLEBAR_H, PAD);
     ui_dialog_draw_close_button(l.x + l.w - PAD - CLOSE_SIZE, l.y + (TITLEBAR_H - CLOSE_SIZE) / 2, CLOSE_SIZE);
 
@@ -306,10 +307,10 @@ void packages_dialog_draw(int window_w, int window_h) {
     static char host_line[96];
     snprintf(host_line, sizeof(host_line), "This device: %s", package_host_text());
     cache_set(&g_host_cache, host_line, 12);
-    if (g_host_cache.tex) window_draw_texture_tinted(g_host_cache.tex, hx, hy + g_section_h + 6, g_host_cache.w, g_host_cache.h, 170, 175, 182);
+    if (g_host_cache.tex) window_draw_texture_tinted(g_host_cache.tex, hx, hy + g_section_h + 6, g_host_cache.w, g_host_cache.h, UI_RGB(UI_COLOR_TEXT_MUTED));
 
     int comp_y = l.y + TITLEBAR_H + 70;
-    window_fill_rect(l.list_x, comp_y, l.list_w, ROW_H - 4, 0x30, 0x32, 0x37);
+    window_fill_rect(l.list_x, comp_y, l.list_w, ROW_H - 4, UI_RGB(UI_COLOR_SURFACE_CONTROL));
     if (g_compiler_tex) window_draw_texture(g_compiler_tex, l.list_x + 12, comp_y + (ROW_H - 4 - g_compiler_h) / 2, g_compiler_w, g_compiler_h);
     pkg_state_t cs = package_host_compiler_state();
     int right = l.list_x + l.list_w - 12;
@@ -319,7 +320,7 @@ void packages_dialog_draw(int window_w, int window_h) {
     }
     draw_state(cs, right, comp_y + (ROW_H - 4) / 2);
 
-    window_fill_rect(l.list_x, l.list_y - 4, l.list_w, l.list_h + 8, 0x2E, 0x30, 0x35);
+    window_fill_rect(l.list_x, l.list_y - 4, l.list_w, l.list_h + 8, UI_RGB(UI_COLOR_SURFACE_PANEL));
     window_set_clip_rect(l.list_x, l.list_y, l.list_w, l.list_h);
     row_t rows[64];
     int count = build_rows(rows, 64);
@@ -332,7 +333,7 @@ void packages_dialog_draw(int window_w, int window_h) {
         int is_arch = r->arch >= 0;
         int hover = ui_point_in_rect(mx, my, l.list_x, ry, l.list_w, ROW_H) && ui_point_in_rect(mx, my, l.list_x, l.list_y, l.list_w, l.list_h);
         if (hover) window_fill_rect(l.list_x, ry, l.list_w, ROW_H - 2, UI_COLOR_HOVER_BLUE.r, UI_COLOR_HOVER_BLUE.g, UI_COLOR_HOVER_BLUE.b);
-        else window_fill_rect(l.list_x, ry, l.list_w, ROW_H - 2, 0x35, 0x37, 0x3C);
+        else window_fill_rect(l.list_x, ry, l.list_w, ROW_H - 2, UI_RGB(UI_COLOR_SURFACE_BORDER));
         int cy = ry + (ROW_H - 2) / 2;
         int tx = l.list_x + 12 + (is_arch ? INDENT : 0);
         if (!is_arch && package_platform_has_archs(r->platform)) {
@@ -364,7 +365,7 @@ void packages_dialog_draw(int window_w, int window_h) {
 
     if (g_templates_tex) window_draw_texture(g_templates_tex, l.list_x, l.templates_y, g_templates_w, g_templates_h);
     if (g_templates_empty_tex) window_draw_texture_tinted(g_templates_empty_tex, l.list_x, l.templates_y + g_templates_h + 8,
-                                                          g_templates_empty_w, g_templates_empty_h, 170, 175, 182);
+                                                          g_templates_empty_w, g_templates_empty_h, UI_RGB(UI_COLOR_TEXT_MUTED));
 
     pkg_status_t st;
     package_get_status(&st);
@@ -376,10 +377,10 @@ void packages_dialog_draw(int window_w, int window_h) {
         cache_set(&g_percent_line, line, 12);
         if (g_title_line.tex) window_draw_texture(g_title_line.tex, l.list_x, l.progress_y, g_title_line.w, g_title_line.h);
         if (g_percent_line.tex) window_draw_texture_tinted(g_percent_line.tex, l.list_x + l.list_w - g_percent_line.w, l.progress_y,
-                                                           g_percent_line.w, g_percent_line.h, 170, 175, 182);
+                                                           g_percent_line.w, g_percent_line.h, UI_RGB(UI_COLOR_TEXT_MUTED));
         int by = l.progress_y + 24;
-        window_fill_rect(l.list_x, by, l.list_w, 8, 0x22, 0x23, 0x27);
-        window_fill_rect(l.list_x, by, l.list_w * st.percent / 100, 8, 0x4F, 0x86, 0xB5);
+        window_fill_rect(l.list_x, by, l.list_w, 8, UI_RGB(UI_COLOR_SURFACE_RAISED));
+        window_fill_rect(l.list_x, by, l.list_w * st.percent / 100, 8, UI_RGB(UI_COLOR_BUTTON_BLUE));
     } else {
         cache_set(&g_title_line, "", 13);
         cache_set(&g_percent_line, "", 12);

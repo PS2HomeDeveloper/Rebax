@@ -48,7 +48,7 @@ void ui_dialog_draw_frame(int x, int y, int w, int h) {
         g_frame_tex = NULL;
         g_frame_w = w;
         g_frame_h = h;
-        shape_image_t outer = shape_provider_render_rect(w + FRAME_BORDER * 2, h + FRAME_BORDER * 2, FRAME_RADIUS + FRAME_BORDER, 0, 0, 0);
+        shape_image_t outer = shape_provider_render_rect(w + FRAME_BORDER * 2, h + FRAME_BORDER * 2, FRAME_RADIUS + FRAME_BORDER, UI_RGB(UI_COLOR_BACKDROP));
         shape_image_t inner = shape_provider_render_rect(w, h, FRAME_RADIUS, UI_COLOR_PANEL_BG.r, UI_COLOR_PANEL_BG.g, UI_COLOR_PANEL_BG.b);
         if (outer.pixels != NULL && inner.pixels != NULL) {
             for (int row = 0; row < inner.height; row++) {
@@ -94,7 +94,7 @@ static void ensure_close_button(int size) {
     if (g_close_x_tex != NULL) window_destroy_texture(g_close_x_tex);
     g_close_bg_tex = g_close_x_tex = NULL;
     g_close_size = size;
-    shape_image_t shape = shape_provider_render_rect(size, size, 5, 90, 40, 40);
+    shape_image_t shape = shape_provider_render_rect(size, size, 5, UI_RGB(UI_COLOR_DANGER_BG));
     if (shape.pixels != NULL) {
         g_close_bg_tex = window_create_texture(shape.pixels, shape.width, shape.height);
         shape_provider_free_image(&shape);

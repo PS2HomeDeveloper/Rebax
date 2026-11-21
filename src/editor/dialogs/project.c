@@ -243,7 +243,8 @@ static void chip_rect(int index, int count, int field_x, int field_w, int row_y,
 }
 
 static void draw_chip(window_texture_t *tex, int tw, int th, int x, int y, int w, int selected, int enabled) {
-    unsigned char r = selected ? 0x3B : 0x2A, g = selected ? 0x5B : 0x2C, b = selected ? 0x74 : 0x30;
+    ui_color_t chip = selected ? UI_COLOR_BUTTON_BLUE : UI_COLOR_SURFACE_CONTROL;
+    unsigned char r = chip.r, g = chip.g, b = chip.b;
     window_fill_rect(x, y, w, CHIP_HEIGHT, r, g, b);
     if (tex == NULL) return;
     unsigned char c = enabled ? 0xF0 : 0x80;
@@ -426,7 +427,7 @@ void project_dialog_draw(int window_w, int window_h) {
         draw_chip(g_type_tex[i], g_type_w[i], g_type_h[i], cx, dy + TYPE_ROW_Y, cw, g_type == (project_type_t)i, 1);
     }
     if (g_type_hint_tex[g_type] != NULL)
-        window_draw_texture_tinted(g_type_hint_tex[g_type], field_x, dy + TYPE_ROW_Y + CHIP_HEIGHT + 6, g_type_hint_w[g_type], g_type_hint_h[g_type], 140, 146, 156);
+        window_draw_texture_tinted(g_type_hint_tex[g_type], field_x, dy + TYPE_ROW_Y + CHIP_HEIGHT + 6, g_type_hint_w[g_type], g_type_hint_h[g_type], UI_RGB(UI_COLOR_TEXT_FAINT));
     if (g_label_dev_tex != NULL)
         window_draw_texture(g_label_dev_tex, field_x, dy + DEV_ROW_Y - g_label_dev_h - 4, g_label_dev_w, g_label_dev_h);
     for (int i = 0; i < DEV_SYSTEM_COUNT; i++) {
@@ -435,7 +436,7 @@ void project_dialog_draw(int window_w, int window_h) {
         draw_chip(g_dev_tex[i], g_dev_w[i], g_dev_h[i], cx, dy + DEV_ROW_Y, cw, g_dev == (dev_system_t)i, ok);
         if (!ok && g_soon_tex != NULL)
             window_draw_texture_tinted(g_soon_tex, cx + cw - g_soon_w - 6, dy + DEV_ROW_Y + CHIP_HEIGHT - g_soon_h - 2,
-                                       g_soon_w, g_soon_h, 0xD0, 0xA0, 0x50);
+                                       g_soon_w, g_soon_h, UI_RGB(UI_COLOR_WARNING));
     }
 
     /* Path validation message - redrawn only if it actually changed */

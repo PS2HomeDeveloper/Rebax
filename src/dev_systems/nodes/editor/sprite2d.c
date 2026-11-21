@@ -39,6 +39,7 @@
  * ============================================================
  */
 
+#include "editor/ui/theme.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -141,11 +142,11 @@ void sprite2d_editor_draw(const node_property_value_t *values, int property_coun
 
     /* A faint white dot always indicates the node's position (its origin) - even
      * if the image hasn't loaded or failed yet - exactly like Element2D */
-    window_fill_rect(sx - MARKER_HALF, sy - MARKER_HALF, MARKER_HALF * 2, MARKER_HALF * 2, 225, 225, 225);
+    window_fill_rect(sx - MARKER_HALF, sy - MARKER_HALF, MARKER_HALF * 2, MARKER_HALF * 2, UI_RGB(UI_COLOR_TEXT_PRIMARY));
 
     if (selected) {
-        window_fill_rect(sx - SELECT_CROSS_HALF, sy - 1, SELECT_CROSS_HALF * 2, 2, 70, 220, 120);
-        window_fill_rect(sx - 1, sy - SELECT_CROSS_HALF, 2, SELECT_CROSS_HALF * 2, 70, 220, 120);
+        window_fill_rect(sx - SELECT_CROSS_HALF, sy - 1, SELECT_CROSS_HALF * 2, 2, UI_RGB(UI_COLOR_SUCCESS));
+        window_fill_rect(sx - 1, sy - SELECT_CROSS_HALF, 2, SELECT_CROSS_HALF * 2, UI_RGB(UI_COLOR_SUCCESS));
     }
 }
 

@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     (void)argv;
     /* Previously smaller size to fit mobile screens inside Termux:X11 -
      * window will be resizable later anyway */
-    if (!window_init("Rebax_Engine", 900, 560)) {
+    if (!window_init("Rebax Engine", 900, 560)) {
         return 1;
     }
 

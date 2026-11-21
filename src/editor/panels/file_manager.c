@@ -872,7 +872,7 @@ void file_manager_draw(int window_w, int window_h) {
     ui_dialog_draw_close_button(dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE,
                                 dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2, CLOSE_BTN_SIZE);
 
-    window_fill_rect(dx + DIALOG_PADDING, dy + TITLEBAR_HEIGHT, DIALOG_WIDTH - DIALOG_PADDING * 2, 1, 60, 60, 60);
+    window_fill_rect(dx + DIALOG_PADDING, dy + TITLEBAR_HEIGHT, DIALOG_WIDTH - DIALOG_PADDING * 2, 1, UI_RGB(UI_COLOR_SURFACE_BORDER));
 
     /* --- Path bar --- */
     int crumb_y = dy + TITLEBAR_HEIGHT;
@@ -899,7 +899,7 @@ void file_manager_draw(int window_w, int window_h) {
     if (g_filter_label_tex != NULL) {
         int fx = dx + DIALOG_WIDTH - DIALOG_PADDING - g_filter_label_w;
         window_draw_texture_tinted(g_filter_label_tex, fx, crumb_y + (CRUMB_BAR_HEIGHT - g_filter_label_h) / 2,
-                                    g_filter_label_w, g_filter_label_h, 150, 150, 150);
+                                    g_filter_label_w, g_filter_label_h, UI_RGB(UI_COLOR_TEXT_FAINT));
     }
     {
         static const char *labels[5] = { "Devices", "New folder", "Manage", "Rename", "Delete" };
@@ -959,7 +959,7 @@ void file_manager_draw(int window_w, int window_h) {
         unsigned char tint = is_dim ? 100 : 255;
 
         if (e->is_dir) {
-            icon_atlas_draw_tinted(ICON_Folder, icon_area_x, icon_area_y, GRID_ICON_SIZE, 230, 200, 60);
+            icon_atlas_draw_tinted(ICON_Folder, icon_area_x, icon_area_y, GRID_ICON_SIZE, UI_RGB(UI_COLOR_WARNING));
         } else if (e->thumb_tex != NULL) {
             /* Real thumbnail image - drawn centered in the icon square preserving its aspect ratio */
             int tw = e->thumb_w, th = e->thumb_h;
@@ -1039,9 +1039,9 @@ void file_manager_draw(int window_w, int window_h) {
          * a second custom texture for the disabled state (window_draw_texture_tinted
          * is perfectly sufficient for this purpose) */
         window_draw_texture_tinted(g_select_btn_tex, select_x, buttons_y, g_select_btn.width, g_select_btn.height,
-                                    90, 90, 90);
+                                    UI_RGB(UI_COLOR_TEXT_DISABLED));
         window_draw_texture_tinted(g_select_txt_tex, select_x + g_select_btn.text_offset_x, buttons_y + g_select_btn.text_offset_y,
-                                    g_select_btn.text_img.width, g_select_btn.text_img.height, 150, 150, 150);
+                                    g_select_btn.text_img.width, g_select_btn.text_img.height, UI_RGB(UI_COLOR_TEXT_FAINT));
     }
 
     if (g_prompt != PROMPT_NONE) {

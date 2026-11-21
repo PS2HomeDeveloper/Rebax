@@ -14,6 +14,7 @@
  */
 
 /* Project center screen: a recent projects list stored inside Rebax/Editor. */
+#include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -224,10 +225,10 @@ void ui_project_center_draw(int window_w, int window_h) {
     build_visuals();
     ui_rect_t searchbar, projects, actions;
     ui_project_center_layout(window_w, window_h, &searchbar, &projects, &actions);
-    window_fill_rect(0, 0, window_w, window_h, 27, 29, 33);
-    window_fill_rect(searchbar.x, searchbar.y, searchbar.w, searchbar.h, 19, 19, 19);
-    window_fill_rect(projects.x, projects.y, projects.w, projects.h, 40, 42, 46);
-    window_fill_rect(actions.x, actions.y, actions.w, actions.h, 31, 32, 36);
+    window_fill_rect(0, 0, window_w, window_h, UI_RGB(UI_COLOR_SURFACE_RAISED));
+    window_fill_rect(searchbar.x, searchbar.y, searchbar.w, searchbar.h, UI_RGB(UI_COLOR_SURFACE_BASE));
+    window_fill_rect(projects.x, projects.y, projects.w, projects.h, UI_RGB(UI_COLOR_SURFACE_PANEL));
+    window_fill_rect(actions.x, actions.y, actions.w, actions.h, UI_RGB(UI_COLOR_SURFACE_RAISED));
     if (g_title_tex) window_draw_texture(g_title_tex, projects.x + LIST_PADDING, projects.y + 16, g_title_w, g_title_h);
     if (g_subtitle_tex) window_draw_texture(g_subtitle_tex, projects.x + LIST_PADDING, projects.y + 42, g_subtitle_w, g_subtitle_h);
 
@@ -262,9 +263,9 @@ void ui_project_center_draw(int window_w, int window_h) {
         if (window_key_just_pressed_enter()) open_selected_project();
     }
     if (count == 0) {
-        window_fill_rect(projects.x + LIST_PADDING, list_top, list_w, 58, 48, 50, 55);
+        window_fill_rect(projects.x + LIST_PADDING, list_top, list_w, 58, UI_RGB(UI_COLOR_SURFACE_CONTROL));
         if (g_empty_tex) window_draw_texture_tinted(g_empty_tex, projects.x + LIST_PADDING + 14,
-                                                     list_top + 20, g_empty_w, g_empty_h, 180, 184, 190);
+                                                     list_top + 20, g_empty_w, g_empty_h, UI_RGB(UI_COLOR_TEXT_MUTED));
     } else {
         for (int i = g_scroll_first; i < count && i < g_scroll_first + visible; i++) {
             int ry = list_top + (i - g_scroll_first) * ROW_HEIGHT;
@@ -276,9 +277,9 @@ void ui_project_center_draw(int window_w, int window_h) {
             project_visual_t *v = &g_visuals[i];
             int tx = projects.x + LIST_PADDING + 14;
             if (v->name_tex) window_draw_texture(v->name_tex, tx, ry + 7, v->name_w, v->name_h);
-            if (v->path_tex) window_draw_texture_tinted(v->path_tex, tx, ry + 27, v->path_w, v->path_h, 175, 180, 186);
+            if (v->path_tex) window_draw_texture_tinted(v->path_tex, tx, ry + 27, v->path_w, v->path_h, UI_RGB(UI_COLOR_TEXT_MUTED));
             if (v->date_tex) window_draw_texture_tinted(v->date_tex, projects.x + projects.w - v->date_w - LIST_PADDING - 12,
-                                                          ry + 8, v->date_w, v->date_h, 145, 150, 158);
+                                                          ry + 8, v->date_w, v->date_h, UI_RGB(UI_COLOR_TEXT_FAINT));
             if (interactive && window_mouse_left_just_pressed() && ui_point_in_rect(window_mouse_x(), window_mouse_y(),
                     projects.x + LIST_PADDING, ry, list_w, ROW_HEIGHT - 5)) {
                 int double_click = (g_last_clicked_project == i &&
@@ -313,7 +314,7 @@ void ui_project_center_draw(int window_w, int window_h) {
     if (g_notice_frames > 0) {
         if (g_notice_tex) window_draw_texture_tinted(g_notice_tex, actions.x + 12,
                                       actions.y + actions.h - g_notice_h - 18,
-                                      g_notice_w, g_notice_h, 220, 195, 125);
+                                      g_notice_w, g_notice_h, UI_RGB(UI_COLOR_WARNING_SOFT));
         g_notice_frames--;
     }
     (void)list_w;

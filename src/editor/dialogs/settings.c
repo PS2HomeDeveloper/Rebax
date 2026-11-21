@@ -180,7 +180,7 @@ void project_settings_dialog_draw(int window_w, int window_h) {
         draw_label("Width", x, dy + 112); draw_label("Height", x + 178, dy + 112);
         text_field_draw(&g_width, x, dy + 142, 150, FIELD_H, 16); text_field_draw(&g_height, x + 178, dy + 142, 150, FIELD_H, 16);
         draw_label("Presets", x, dy + 190);
-        for (int i = 0; i < 5; i++) { int px = x + (i % 3) * 150, py = dy + 208 + (i / 3) * 38; window_fill_rect(px, py, 140, PRESET_H, 55, 58, 64); char label[32]; snprintf(label, sizeof(label), "%d x %d", g_preset_w[i], g_preset_h[i]); int tw, th; window_texture_t *t = make(label, 12, &tw, &th); draw_text(t, px + 8, py + 8, tw, th, 220); if (t) window_destroy_texture(t); }
+        for (int i = 0; i < 5; i++) { int px = x + (i % 3) * 150, py = dy + 208 + (i / 3) * 38; window_fill_rect(px, py, 140, PRESET_H, UI_RGB(UI_COLOR_SURFACE_BORDER)); char label[32]; snprintf(label, sizeof(label), "%d x %d", g_preset_w[i], g_preset_h[i]); int tw, th; window_texture_t *t = make(label, 12, &tw, &th); draw_text(t, px + 8, py + 8, tw, th, 220); if (t) window_destroy_texture(t); }
         int cw = field_value(&g_width, 640), ch = field_value(&g_height, 448); draw_label(cw >= ch ? "Orientation: Landscape" : "Orientation: Portrait", x, dy + 306);
         draw_label("Custom values are saved to project.rebax.", x, dy + 344);
     } else { draw_label("This section is planned for a future release.", x, dy + 120); }

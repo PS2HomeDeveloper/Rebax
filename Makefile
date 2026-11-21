@@ -206,6 +206,7 @@ PLATFORM_WORDS := linux windows macos ios android
 ARCH_WORDS := x86_64 x86 arm64 arm arm64-v8a armeabi-v7a
 ANDROID_ABIS := arm64-v8a armeabi-v7a x86 x86_64
 UNIVERSAL := 0
+ANDROID_ALL := 0
 GOAL_PLATFORM := $(firstword $(filter $(PLATFORM_WORDS),$(GOALS)))
 GOAL_ARCH := $(firstword $(filter $(ARCH_WORDS),$(GOALS)))
 ifeq ($(SELECTED_GOAL),)
@@ -217,15 +218,17 @@ ifeq ($(SELECTED_GOAL),)
   ifneq ($(GOAL_PLATFORM),)
     ifeq ($(GOAL_PLATFORM),android)
       ifeq ($(GOAL_ARCH),)
-        UNIVERSAL := 1
-      else ifneq ($(filter all,$(GOALS)),)
-        UNIVERSAL := 1
+        ifneq ($(filter all,$(GOALS)),)
+          ANDROID_ALL := 1
+        else
+          UNIVERSAL := 1
+        endif
       endif
       GOAL_ARCH := $(or $(filter-out arm64 arm,$(GOAL_ARCH)),$(if $(filter arm64,$(GOAL_ARCH)),arm64-v8a),$(if $(filter arm,$(GOAL_ARCH)),armeabi-v7a))
     else
       GOAL_ARCH := $(or $(GOAL_ARCH),$(HOST_ARCH))
     endif
-    ifeq ($(UNIVERSAL),0)
+    ifeq ($(UNIVERSAL)$(ANDROID_ALL),00)
       SELECTED_GOAL := $(GOAL_PLATFORM)-$(GOAL_ARCH)
       ifeq ($(filter $(SELECTED_GOAL),$(ALL_TARGET_GOALS)),)
         $(error $(SELECTED_GOAL) is not a supported target)
@@ -236,7 +239,7 @@ endif
 
 TARGET_PLATFORM := $(HOST_PLATFORM)
 TARGET_ARCH := $(HOST_ARCH)
-ifeq ($(UNIVERSAL),1)
+ifneq ($(UNIVERSAL)$(ANDROID_ALL),00)
   TARGET_PLATFORM := android
   TARGET_ARCH := universal
 endif
@@ -415,9 +418,9 @@ DEPS := $(SRC_OBJS:.o=.d) $(THIRD_PARTY_OBJS:.o=.d)
 
 .PHONY: all clean clean-tool clean-cache clean-all objects libs engine-objs third-party-objs run generate bundle-runtime-libs bundle-resources bundle-packages gen-icons gen-node-registry gen-node-editor-registry \
   build-selected apk-selected apk-package ios-package \
-  $(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) $(PLATFORM_WORDS) $(ARCH_WORDS)
+  $(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) $(PLATFORM_WORDS) $(ARCH_WORDS) universal
 
-$(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) $(PLATFORM_WORDS) $(ARCH_WORDS) objects libs: all
+$(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) $(PLATFORM_WORDS) $(ARCH_WORDS) objects libs universal: all
 
 SUB_GOAL := $(if $(filter 1,$(WANT_APK)),apk-selected,build-selected)
 ifneq ($(filter objects,$(MAKECMDGOALS)),)
@@ -442,7 +445,13 @@ install-local-packages:
 	@sdk_archive=""; for f in "sdks/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)/sdk.tar.xz" "sdks/sdk.tar.xz"; do if [ -f "$$f" ]; then sdk_archive="$$f"; break; fi; done; if [ -n "$$sdk_archive" ]; then echo "Installing local SDK archive: $$sdk_archive"; tar -xf "$$sdk_archive" -C sdks && mkdir -p $(CACHE_DIR)/packages && mv -f "$$sdk_archive" $(CACHE_DIR)/packages/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
 endif
 
-ifeq ($(UNIVERSAL),1)
+ifeq ($(ANDROID_ALL),1)
+all: $(RTOOL) generate
+	+$(MAKE) --no-print-directory android-arm64-v8a
+	+$(MAKE) --no-print-directory android-armeabi-v7a
+	+$(MAKE) --no-print-directory android-x86
+	+$(MAKE) --no-print-directory android-x86_64
+else ifeq ($(UNIVERSAL),1)
 all: $(RTOOL) generate
 	@$(RTOOL) rm $(UNI_STAGE)
 	+$(MAKE) --no-print-directory android-arm64-v8a APK_PART=1 APK_STAGE=$(UNI_STAGE)

@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "editor/ui/theme.h"
 #include "editor/ui/scrollbar.h"
 #include "platform/common/window.h"
 
@@ -66,6 +67,6 @@ void ui_scrollbar_draw(int scroll_offset, int x, int w,
     if (max_scroll < 0) max_scroll = 0;
     int thumb_y, thumb_h;
     compute_thumb(scroll_offset, viewport_y, viewport_h, content_h, max_scroll, &thumb_y, &thumb_h);
-    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, viewport_y, UI_SCROLLBAR_WIDTH, viewport_h, 48, 48, 48);
-    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, thumb_y, UI_SCROLLBAR_WIDTH, thumb_h, 112, 112, 112);
+    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, viewport_y, UI_SCROLLBAR_WIDTH, viewport_h, UI_RGB(UI_COLOR_SURFACE_CONTROL));
+    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, thumb_y, UI_SCROLLBAR_WIDTH, thumb_h, UI_RGB(UI_COLOR_SCROLL_THUMB));
 }

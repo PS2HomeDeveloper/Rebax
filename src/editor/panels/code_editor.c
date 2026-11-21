@@ -562,11 +562,11 @@ void code_editor_update(int x, int y, int w, int h) {
 void code_editor_draw(int x, int y, int w, int h) {
     if (!g_active) return;
     rebuild_line_cache();
-    ui_color_t panel = {0x19, 0x1D, 0x24, 0xFF};
-    ui_color_t toolbar = {0x24, 0x2B, 0x35, 0xFF};
-    ui_color_t gutter = {0x15, 0x18, 0x1E, 0xFF};
-    ui_color_t code_bg = {0x1C, 0x21, 0x2A, 0xFF};
-    ui_color_t active_line = {0x25, 0x2E, 0x3A, 0xFF};
+    ui_color_t panel = UI_COLOR_SURFACE_RAISED;
+    ui_color_t toolbar = UI_COLOR_SURFACE_PANEL;
+    ui_color_t gutter = UI_COLOR_SURFACE_BASE;
+    ui_color_t code_bg = UI_COLOR_SURFACE_RAISED;
+    ui_color_t active_line = UI_COLOR_SURFACE_CONTROL;
     window_fill_rect(x, y, w, h, panel.r, panel.g, panel.b);
     window_fill_rect(x, y, w, CODE_EDITOR_TOOLBAR_HEIGHT, toolbar.r, toolbar.g, toolbar.b);
     const char *buttons[4] = { "New", "Open", "Save", "Save As" };
@@ -603,11 +603,11 @@ void code_editor_draw(int x, int y, int w, int h) {
     for (int row = 0; row < visible; row++) {
         int line = g_scroll_line + row;
         if (line >= g_cached_line_count) break;
-        if (g_line_number_text[line]) window_draw_texture_tinted(g_line_number_text[line], x + 6, top + row * CODE_EDITOR_LINE_HEIGHT + 4, g_line_number_w[line], g_line_number_h[line], 120, 135, 150);
+        if (g_line_number_text[line]) window_draw_texture_tinted(g_line_number_text[line], x + 6, top + row * CODE_EDITOR_LINE_HEIGHT + 4, g_line_number_w[line], g_line_number_h[line], UI_RGB(UI_COLOR_TEXT_DISABLED));
     }
     int cx = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(line_start_for_cursor(), g_cursor - line_start_for_cursor()) - g_scroll_x;
     int cy = top + (current - g_scroll_line) * CODE_EDITOR_LINE_HEIGHT;
-    if (g_has_focus && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH) window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, 90, 210, 240);
+    if (g_has_focus && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH) window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
     window_fill_rect(x, bottom, w, CODE_EDITOR_STATUS_HEIGHT, toolbar.r, toolbar.g, toolbar.b);
     char status[256];
     snprintf(status, sizeof(status), "%s  |  Ln %d, Col %d  |  %s", g_status, current + 1, cursor_column() + 1,

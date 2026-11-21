@@ -38,8 +38,8 @@ static int g_inset_bottom = 0;
 
 static void apply_window_size(int raw_width, int raw_height) {
 #if defined(__ANDROID__)
-    int side = raw_height / 24;
-    int bottom = raw_height / 36;
+    int side = raw_height / 40;
+    int bottom = raw_height / 60;
     if (raw_width - 2 * side > 0 && raw_height - side - bottom > 0) {
         g_inset_left = side;
         g_inset_right = side;
@@ -212,6 +212,10 @@ void window_poll_events(void) {
         } else if (event.type == SDL_MOUSEMOTION) {
             g_mouse_x = event.motion.x - g_inset_left;
             g_mouse_y = event.motion.y - g_inset_top;
+            if (g_mouse_x < 0) g_mouse_x = 0;
+            if (g_mouse_y < 0) g_mouse_y = 0;
+            if (g_mouse_x >= g_width) g_mouse_x = g_width - 1;
+            if (g_mouse_y >= g_height) g_mouse_y = g_height - 1;
             g_mouse_delta_x += event.motion.xrel;
             g_mouse_delta_y += event.motion.yrel;
         } else if (event.type == SDL_TEXTINPUT) {
@@ -245,7 +249,7 @@ void window_poll_events(void) {
 void window_clear(unsigned char r, unsigned char g, unsigned char b) {
     if (g_inset_left != 0 || g_inset_top != 0 || g_inset_right != 0 || g_inset_bottom != 0) {
         SDL_RenderSetViewport(g_renderer, NULL);
-        SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+        SDL_SetRenderDrawColor(g_renderer, r, g, b, 255);
         SDL_RenderClear(g_renderer);
         SDL_Rect safe_area = { g_inset_left, g_inset_top, g_width, g_height };
         SDL_RenderSetViewport(g_renderer, &safe_area);

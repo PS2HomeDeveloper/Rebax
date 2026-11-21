@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
 #include "editor/dialogs/emulator_select.h"
@@ -129,7 +130,7 @@ void emulator_select_dialog_draw(int window_w, int window_h) {
         int found = emulator_catalog_is_installed(e);
         int chosen = strcmp(selected, e->id) == 0;
         ui_kit_rect(row.x, row.y, row.w, row.h, 9, 36, 37, 42);
-        if (chosen) ui_kit_outline(row.x, row.y, row.w, row.h, 9, 0x4A, 0x82, 0xB0);
+        if (chosen) ui_kit_outline(row.x, row.y, row.w, row.h, 9, UI_RGB(UI_COLOR_INFO));
         ui_kit_text(e->name, 16, row.x + 16, row.y + 14, 235, 238, 242);
         const char *state = chosen ? "Selected" : (found ? "Found" : (run_host_is_desktop() ? "Not found - press Locate" : "Press Select if it is installed"));
         ui_kit_text(state, 12, row.x + 16, row.y + 44, chosen ? 110 : 150, chosen ? 190 : 156, chosen ? 235 : 165);

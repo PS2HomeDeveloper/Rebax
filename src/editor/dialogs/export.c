@@ -246,7 +246,8 @@ void export_dialog_update(int window_w, int window_h) {
 }
 static void draw_card(int x, int y, int index) {
     int enabled = project_allows(index), installed = platform_installed(index), selected = index == g_selected;
-    unsigned char r = selected ? UI_COLOR_BUTTON_BLUE.r : 45, g = selected ? UI_COLOR_BUTTON_BLUE.g : 47, b = selected ? UI_COLOR_BUTTON_BLUE.b : 51;
+    ui_color_t card = selected ? UI_COLOR_BUTTON_BLUE : UI_COLOR_SURFACE_CONTROL;
+    unsigned char r = card.r, g = card.g, b = card.b;
     window_fill_rect(x, y, CARD_W, CARD_H, r, g, b); draw_text(g_platforms[index].label, x + 10, y + 12, 14, enabled ? 235 : 125, enabled ? 235 : 125, enabled ? 235 : 125);
     draw_text(!enabled ? "Not for this project" : installed ? "Installed" : "Not installed", x + 10, y + 38, 11, installed && enabled ? 115 : 205, installed && enabled ? 210 : 155, installed && enabled ? 135 : 105);
 }
@@ -257,22 +258,22 @@ void export_dialog_draw(int window_w, int window_h) {
     ui_dialog_draw_close_button(dx + PAGE_W - PAD - 22, dy + 11, 22);
     int modern = project_modern();
     if (modern) {
-        draw_text("Platforms", dx + PAD, dy + 56, 13, 160, 165, 172);
+        draw_text("Platforms", dx + PAD, dy + 56, 13, UI_RGB(UI_COLOR_TEXT_MUTED));
         for (int i = 0; i < MODERN_COUNT; i++) draw_card(dx + PAD + (i % 2) * (CARD_W + CARD_GAP), dy + 82 + (i / 2) * (CARD_H + CARD_GAP), i);
     }
     int dxx = dx + detail_x();
     int fy = dy + footer_y();
     int panel_bottom = fy - 14;
-    window_fill_rect(dxx - 14, dy + 52, PAGE_W - detail_x() - PAD + 14, panel_bottom - (dy + 52), 34, 36, 40);
-    draw_text(g_platforms[g_selected].label, dxx, dy + 70, 18, 235, 235, 235);
+    window_fill_rect(dxx - 14, dy + 52, PAGE_W - detail_x() - PAD + 14, panel_bottom - (dy + 52), UI_RGB(UI_COLOR_SURFACE_PANEL));
+    draw_text(g_platforms[g_selected].label, dxx, dy + 70, 18, UI_RGB(UI_COLOR_TEXT_PRIMARY));
     int status = current_status();
     int path_w = 360 - btn_w(B_BROWSE) - 10;
     if (status == 0) {
-        draw_text("Output name", dxx, dy + 120, 12, 170, 175, 182); text_field_draw(&g_name, dxx, dy + 142, 360, FIELD_H, 16);
-        draw_text("Output folder", dxx, dy + 192, 12, 170, 175, 182); text_field_draw(&g_path, dxx, dy + 214, path_w, FIELD_H, 16);
+        draw_text("Output name", dxx, dy + 120, 12, UI_RGB(UI_COLOR_TEXT_MUTED)); text_field_draw(&g_name, dxx, dy + 142, 360, FIELD_H, 16);
+        draw_text("Output folder", dxx, dy + 192, 12, UI_RGB(UI_COLOR_TEXT_MUTED)); text_field_draw(&g_path, dxx, dy + 214, path_w, FIELD_H, 16);
         btn_draw(B_BROWSE, dxx + path_w + 10, dy + 214);
         if (g_platforms[g_selected].modern) {
-            draw_text("Architectures (installed only)", dxx, dy + 286, 12, 170, 175, 182);
+            draw_text("Architectures (installed only)", dxx, dy + 286, 12, UI_RGB(UI_COLOR_TEXT_MUTED));
             for (int i = 0; i < arch_count(); i++) {
                 int ay = dy + 322 + i * 30, installed = package_arch_state(g_platforms[g_selected].package_id, i) == PKG_STATE_INSTALLED;
                 window_fill_rect(dxx, ay, 320, 26, installed ? 56 : 43, installed ? 62 : 45, installed ? 70 : 48);
@@ -281,17 +282,17 @@ void export_dialog_draw(int window_w, int window_h) {
             }
         }
         int my0 = dy + mode_y();
-        draw_text("Build mode", dxx, my0, 12, 170, 175, 182);
+        draw_text("Build mode", dxx, my0, 12, UI_RGB(UI_COLOR_TEXT_MUTED));
         btn_draw(g_release ? B_DEBUG_OFF : B_DEBUG_ON, dxx, my0 + 30);
         btn_draw(g_release ? B_RELEASE_ON : B_RELEASE_OFF, dxx + btn_w(B_DEBUG_ON) + BTN_GAP, my0 + 30);
-        if (g_error_text[0]) draw_text(g_error_text, dxx, my0 + 82, 11, 235, 105, 95);
+        if (g_error_text[0]) draw_text(g_error_text, dxx, my0 + 82, 11, UI_RGB(UI_COLOR_DANGER));
     } else {
         int total = 12, done = status == 2 ? total : (g_log_count > 0 ? g_log_count % total : 1); if (done > total) done = total;
         draw_text(g_status_text, dxx, dy + 124, 14, status == 3 ? 240 : 220, status == 3 ? 120 : 220, status == 3 ? 110 : 220);
-        window_fill_rect(dxx, dy + 164, 480, 12, 55, 58, 64); window_fill_rect(dxx, dy + 164, 480 * done / total, 12, 80, 155, 210);
-        char progress[64]; snprintf(progress, sizeof(progress), "%d/%d", done, total); draw_text(progress, dxx + 490, dy + 162, 11, 180, 185, 190);
-        if (status == 3 && g_log_count > 0) draw_text(g_logs[g_log_count - 1], dxx, dy + 204, 11, 240, 150, 140);
-        if (g_details) { for (int i = 0; i < g_log_count && i < LOG_SHOWN; i++) draw_text(g_logs[i], dxx, dy + 240 + i * 17, 10, 175, 180, 188); }
+        window_fill_rect(dxx, dy + 164, 480, 12, UI_RGB(UI_COLOR_SURFACE_BORDER)); window_fill_rect(dxx, dy + 164, 480 * done / total, 12, UI_RGB(UI_COLOR_INFO));
+        char progress[64]; snprintf(progress, sizeof(progress), "%d/%d", done, total); draw_text(progress, dxx + 490, dy + 162, 11, UI_RGB(UI_COLOR_TEXT_MUTED));
+        if (status == 3 && g_log_count > 0) draw_text(g_logs[g_log_count - 1], dxx, dy + 204, 11, UI_RGB(UI_COLOR_DANGER_SOFT));
+        if (g_details) { for (int i = 0; i < g_log_count && i < LOG_SHOWN; i++) draw_text(g_logs[i], dxx, dy + 240 + i * 17, 10, UI_RGB(UI_COLOR_TEXT_MUTED)); }
     }
     int right = dx + PAGE_W - PAD;
     int main_id = status == 0 || status == 1 ? B_CANCEL : B_CLOSE;
