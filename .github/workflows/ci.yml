@@ -61,7 +61,12 @@ jobs:
             macOS) MAKE_BIN=gmake ;;
             *) MAKE_BIN=make ;;
           esac
-          "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
+          if [ "${{ matrix.platform }}" = "android" ]; then
+            "$MAKE_BIN" android
+            for abi in arm64-v8a armeabi-v7a x86 x86_64; do "$MAKE_BIN" android-$abi; done
+          else
+            "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
+          fi
 
       - name: Check the output
         shell: bash
@@ -69,7 +74,7 @@ jobs:
           version=$(grep -m1 '^ENGINE_VERSION' Makefile | sed -E 's/^ENGINE_VERSION[[:space:]]*:=[[:space:]]*//')
           base="build/output/Rebax-Engine-${version}-${{ matrix.platform }}"
           case "${{ matrix.platform }}" in
-            android) test -f "${base}-universal.apk" ;;
+            android) test -f "${base}-universal.apk" && test -f "${base}-arm64-v8a.apk" && test -f "${base}-armeabi-v7a.apk" && test -f "${base}-x86.apk" && test -f "${base}-x86_64.apk" ;;
             ios) test -f "${base}-${{ matrix.arch }}.ipa" || test -f "${base}-${{ matrix.arch }}.zip" ;;
             *) test -d "${base}-${{ matrix.arch }}" ;;
           esac

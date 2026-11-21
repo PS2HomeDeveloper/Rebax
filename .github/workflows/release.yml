@@ -89,7 +89,12 @@ jobs:
             macOS) MAKE_BIN=gmake ;;
             *) MAKE_BIN=make ;;
           esac
-          "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
+          if [ "${{ matrix.platform }}" = "android" ]; then
+            "$MAKE_BIN" android
+            for abi in arm64-v8a armeabi-v7a x86 x86_64; do "$MAKE_BIN" android-$abi; done
+          else
+            "$MAKE_BIN" ${{ matrix.platform }} ${{ matrix.arch }}
+          fi
 
       - name: Package
         shell: bash
@@ -98,7 +103,7 @@ jobs:
           base="Rebax-Engine-${version}-${{ matrix.platform }}"
           mkdir -p release
           case "${{ matrix.platform }}" in
-            android) cp "build/output/${base}-universal.apk" release/ ;;
+            android) cp build/output/${base}-*.apk release/ ;;
             ios) cp build/output/${base}-${{ matrix.arch }}.ipa build/output/${base}-${{ matrix.arch }}.zip release/ 2>/dev/null || true ;;
             linux) tar -C build/output -cJf "release/${base}-${{ matrix.arch }}.tar.xz" "${base}-${{ matrix.arch }}" ;;
             macos) ditto -c -k --keepParent "build/output/${base}-${{ matrix.arch }}" "release/${base}-${{ matrix.arch }}.zip" ;;
