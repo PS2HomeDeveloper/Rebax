@@ -249,7 +249,6 @@ static void draw_card(int x, int y, int index) {
     unsigned char r = selected ? UI_COLOR_BUTTON_BLUE.r : 45, g = selected ? UI_COLOR_BUTTON_BLUE.g : 47, b = selected ? UI_COLOR_BUTTON_BLUE.b : 51;
     window_fill_rect(x, y, CARD_W, CARD_H, r, g, b); draw_text(g_platforms[index].label, x + 10, y + 12, 14, enabled ? 235 : 125, enabled ? 235 : 125, enabled ? 235 : 125);
     draw_text(!enabled ? "Not for this project" : installed ? "Installed" : "Not installed", x + 10, y + 38, 11, installed && enabled ? 115 : 205, installed && enabled ? 210 : 155, installed && enabled ? 135 : 105);
-    if (g_platforms[index].modern) { char buf[40]; snprintf(buf, sizeof(buf), "%d architectures", package_platform_arch_count(g_platforms[index].package_id)); draw_text(buf, x + 10, y + 58, 10, 155, 160, 168); }
 }
 void export_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;

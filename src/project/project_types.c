@@ -19,7 +19,8 @@
 #include <string.h>
 
 static const char *const TYPE_IDS[PROJECT_TYPE_COUNT] = {"modern", "ps2", "ps1"};
-static const char *const TYPE_LABELS[PROJECT_TYPE_COUNT] = {"Modern Platforms", "PlayStation 2", "PlayStation 1"};
+static const char *const TYPE_LABELS[PROJECT_TYPE_COUNT] = {"Desktop and Mobile", "PlayStation 2", "PlayStation 1"};
+static const char *const TYPE_HINTS[PROJECT_TYPE_COUNT] = {"Windows, Linux, macOS, Android and iOS", "", ""};
 static const char *const SYSTEM_IDS[DEV_SYSTEM_COUNT] = {"nodes", "native"};
 static const char *const SYSTEM_LABELS[DEV_SYSTEM_COUNT] = {"Nodes", "Near-Native"};
 static const char *const METHOD_IDS[EXPORT_METHOD_COUNT] = {"compiler", "template"};
@@ -42,6 +43,7 @@ static int parse_id(const char *const *ids, int count, const char *id, int *out)
 
 const char *project_type_id(project_type_t type) { return (unsigned)type < PROJECT_TYPE_COUNT ? TYPE_IDS[type] : TYPE_IDS[0]; }
 const char *project_type_label(project_type_t type) { return (unsigned)type < PROJECT_TYPE_COUNT ? TYPE_LABELS[type] : TYPE_LABELS[0]; }
+const char *project_type_hint(project_type_t type) { return (unsigned)type < PROJECT_TYPE_COUNT ? TYPE_HINTS[type] : ""; }
 int project_type_parse(const char *id, project_type_t *out) { int v; if (!parse_id(TYPE_IDS, PROJECT_TYPE_COUNT, id, &v)) return 0; *out = (project_type_t)v; return 1; }
 
 const char *dev_system_id(dev_system_t system) { return (unsigned)system < DEV_SYSTEM_COUNT ? SYSTEM_IDS[system] : SYSTEM_IDS[0]; }

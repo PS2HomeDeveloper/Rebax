@@ -44,6 +44,7 @@ typedef enum {
 
 const char *project_type_id(project_type_t type);
 const char *project_type_label(project_type_t type);
+const char *project_type_hint(project_type_t type);
 int project_type_parse(const char *id, project_type_t *out);
 
 const char *dev_system_id(dev_system_t system);

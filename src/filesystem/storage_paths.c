@@ -80,6 +80,7 @@ static void compute_paths(void) {
     rebax_fs_mkdir_p(g_toolchains_dir);
     rebax_fs_mkdir_p(g_sdks_dir);
     rebax_fs_mkdir_p(g_tools_dir);
+    rebax_fs_remove_recursive(g_temp_export_dir);
     rebax_fs_mkdir_p(g_temp_export_dir);
     rebax_fs_mkdir_p(g_editor_dir);
     g_paths_ready = 1;

@@ -76,6 +76,8 @@ static project_type_t g_type = PROJECT_TYPE_MODERN;
 static dev_system_t g_dev = DEV_SYSTEM_NODES;
 static window_texture_t *g_type_tex[PROJECT_TYPE_COUNT];
 static int g_type_w[PROJECT_TYPE_COUNT], g_type_h[PROJECT_TYPE_COUNT];
+static window_texture_t *g_type_hint_tex[PROJECT_TYPE_COUNT];
+static int g_type_hint_w[PROJECT_TYPE_COUNT], g_type_hint_h[PROJECT_TYPE_COUNT];
 static window_texture_t *g_dev_tex[DEV_SYSTEM_COUNT];
 static int g_dev_w[DEV_SYSTEM_COUNT], g_dev_h[DEV_SYSTEM_COUNT];
 static window_texture_t *g_soon_tex = NULL;
@@ -138,6 +140,10 @@ static void ensure_ready(void) {
     g_label_dev_tex = ui_make_text_texture("Development system", FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE, &g_label_dev_w, &g_label_dev_h);
     for (int i = 0; i < PROJECT_TYPE_COUNT; i++)
         g_type_tex[i] = ui_make_text_texture(project_type_label((project_type_t)i), FONT_WEIGHT_REGULAR, 14, &g_type_w[i], &g_type_h[i]);
+    for (int i = 0; i < PROJECT_TYPE_COUNT; i++) {
+        const char *hint = project_type_hint((project_type_t)i);
+        g_type_hint_tex[i] = hint[0] ? ui_make_text_texture(hint, FONT_WEIGHT_REGULAR, 11, &g_type_hint_w[i], &g_type_hint_h[i]) : NULL;
+    }
     for (int i = 0; i < DEV_SYSTEM_COUNT; i++)
         g_dev_tex[i] = ui_make_text_texture(dev_system_label((dev_system_t)i), FONT_WEIGHT_REGULAR, 14, &g_dev_w[i], &g_dev_h[i]);
     g_soon_tex = ui_make_text_texture("soon", FONT_WEIGHT_REGULAR, 11, &g_soon_w, &g_soon_h);
@@ -419,6 +425,8 @@ void project_dialog_draw(int window_w, int window_h) {
         chip_rect(i, PROJECT_TYPE_COUNT, field_x, field_w, 0, &cx, &cw);
         draw_chip(g_type_tex[i], g_type_w[i], g_type_h[i], cx, dy + TYPE_ROW_Y, cw, g_type == (project_type_t)i, 1);
     }
+    if (g_type_hint_tex[g_type] != NULL)
+        window_draw_texture_tinted(g_type_hint_tex[g_type], field_x, dy + TYPE_ROW_Y + CHIP_HEIGHT + 6, g_type_hint_w[g_type], g_type_hint_h[g_type], 140, 146, 156);
     if (g_label_dev_tex != NULL)
         window_draw_texture(g_label_dev_tex, field_x, dy + DEV_ROW_Y - g_label_dev_h - 4, g_label_dev_w, g_label_dev_h);
     for (int i = 0; i < DEV_SYSTEM_COUNT; i++) {
@@ -493,6 +501,8 @@ void project_dialog_shutdown(void) {
     if (g_soon_tex) window_destroy_texture(g_soon_tex);
     for (int i = 0; i < PROJECT_TYPE_COUNT; i++) if (g_type_tex[i]) window_destroy_texture(g_type_tex[i]);
     for (int i = 0; i < DEV_SYSTEM_COUNT; i++) if (g_dev_tex[i]) window_destroy_texture(g_dev_tex[i]);
+    for (int i = 0; i < PROJECT_TYPE_COUNT; i++) if (g_type_hint_tex[i]) window_destroy_texture(g_type_hint_tex[i]);
+    memset(g_type_hint_tex, 0, sizeof(g_type_hint_tex));
     memset(g_type_tex, 0, sizeof(g_type_tex));
     memset(g_dev_tex, 0, sizeof(g_dev_tex));
     g_soon_tex = g_label_type_tex = g_label_dev_tex = NULL;
