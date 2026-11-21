@@ -1,0 +1,22 @@
+name: Rebuild SDK packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "sdk/**"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Start the SDK build
+        env:
+          GH_TOKEN: ${{ secrets.SDKS_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "SDKS_DISPATCH_TOKEN is not set, the SDK packages were not rebuilt."
+            exit 1
+          fi
+          gh api repos/PS2HomeDeveloper/Rebax-SDKs/dispatches -f event_type=rebax-sdk-changed
