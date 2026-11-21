@@ -80,9 +80,55 @@ jobs:
           esac
 
       - name: Upload the build
+        if: matrix.platform != 'android'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-${{ matrix.arch }}
           path: build/output
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Android universal
+        if: matrix.platform == 'android'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-universal
+          path: build/output/*-universal.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Android arm64-v8a
+        if: matrix.platform == 'android'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64-v8a
+          path: build/output/*-arm64-v8a.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Android armeabi-v7a
+        if: matrix.platform == 'android'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-armeabi-v7a
+          path: build/output/*-armeabi-v7a.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Android x86
+        if: matrix.platform == 'android'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-x86
+          path: build/output/*-x86.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Android x86_64
+        if: matrix.platform == 'android'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-x86_64
+          path: build/output/*-x86_64.apk
           retention-days: 7
           if-no-files-found: error
