@@ -82,6 +82,7 @@ int cmd_apk_pack(int argc, char **argv) {
     cfg.version_code = (uint32_t)strtoul(argv[8], NULL, 10);
     cfg.min_sdk = (uint32_t)strtoul(argv[9], NULL, 10);
     cfg.target_sdk = (uint32_t)strtoul(argv[10], NULL, 10);
+    cfg.activity_name = "org.rebax.game.GameActivity";
     ensure_parent_dir(cfg.out_path);
     char err[512];
     if (!apk_pack(&cfg, err, sizeof(err))) die("%s", err);
