@@ -107,11 +107,11 @@ static void ensure_ready(void) {
     g_remove_btn = labeled_button_create("Uninstall", FONT_WEIGHT_REGULAR, 13, 14, 6, 4, UI_RGB(UI_COLOR_DANGER_BG));
     if (g_install_btn.width > 0) {
         g_install_shape = window_create_texture(g_install_btn.shape_img.pixels, g_install_btn.shape_img.width, g_install_btn.shape_img.height);
-        g_install_text = window_create_texture(g_install_btn.text_img.pixels, g_install_btn.text_img.width, g_install_btn.text_img.height);
+        g_install_text = window_create_texture(g_install_btn.text_img.pixels, g_install_btn.text_img.px_w, g_install_btn.text_img.px_h);
     }
     if (g_remove_btn.width > 0) {
         g_remove_shape = window_create_texture(g_remove_btn.shape_img.pixels, g_remove_btn.shape_img.width, g_remove_btn.shape_img.height);
-        g_remove_text = window_create_texture(g_remove_btn.text_img.pixels, g_remove_btn.text_img.width, g_remove_btn.text_img.height);
+        g_remove_text = window_create_texture(g_remove_btn.text_img.pixels, g_remove_btn.text_img.px_w, g_remove_btn.text_img.px_h);
     }
 }
 

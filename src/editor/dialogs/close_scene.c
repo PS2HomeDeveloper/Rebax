@@ -64,17 +64,17 @@ static void ensure_ready(void) {
     g_btn_save = labeled_button_create("Save", FONT_WEIGHT_REGULAR, 13, 18, 8, 4,
                                         UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g, UI_COLOR_BUTTON_BLUE.b);
     g_save_bg  = window_create_texture(g_btn_save.shape_img.pixels, g_btn_save.width, g_btn_save.height);
-    g_save_txt = window_create_texture(g_btn_save.text_img.pixels, g_btn_save.text_img.width, g_btn_save.text_img.height);
+    g_save_txt = window_create_texture(g_btn_save.text_img.pixels, g_btn_save.text_img.px_w, g_btn_save.text_img.px_h);
 
     g_btn_dont_save = labeled_button_create("Don't Save", FONT_WEIGHT_REGULAR, 13, 18, 8, 4,
                                              UI_COLOR_GRAY_MUTED.r, UI_COLOR_GRAY_MUTED.g, UI_COLOR_GRAY_MUTED.b);
     g_dont_save_bg  = window_create_texture(g_btn_dont_save.shape_img.pixels, g_btn_dont_save.width, g_btn_dont_save.height);
-    g_dont_save_txt = window_create_texture(g_btn_dont_save.text_img.pixels, g_btn_dont_save.text_img.width, g_btn_dont_save.text_img.height);
+    g_dont_save_txt = window_create_texture(g_btn_dont_save.text_img.pixels, g_btn_dont_save.text_img.px_w, g_btn_dont_save.text_img.px_h);
 
     g_btn_cancel = labeled_button_create("Cancel", FONT_WEIGHT_REGULAR, 13, 18, 8, 4,
                                           UI_COLOR_GRAY_MUTED.r, UI_COLOR_GRAY_MUTED.g, UI_COLOR_GRAY_MUTED.b);
     g_cancel_bg  = window_create_texture(g_btn_cancel.shape_img.pixels, g_btn_cancel.width, g_btn_cancel.height);
-    g_cancel_txt = window_create_texture(g_btn_cancel.text_img.pixels, g_btn_cancel.text_img.width, g_btn_cancel.text_img.height);
+    g_cancel_txt = window_create_texture(g_btn_cancel.text_img.pixels, g_btn_cancel.text_img.px_w, g_btn_cancel.text_img.px_h);
 }
 
 void close_scene_dialog_open(int tab_index) {

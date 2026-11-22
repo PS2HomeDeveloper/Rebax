@@ -79,7 +79,7 @@ static void ui_tree_cache_name(ui_tree_t *tree, int index, const char *name) {
     ui_tree_free_cache_item(cached);
     cached->name = strdup(name);
     font_text_image_t text = font_render_text(name, FONT_WEIGHT_REGULAR, tree->style.font_pixel_size);
-    cached->name_tex = (text.pixels != NULL) ? window_create_texture(text.pixels, text.width, text.height) : NULL;
+    cached->name_tex = (text.pixels != NULL) ? window_create_texture(text.pixels, text.px_w, text.px_h) : NULL;
     cached->name_w = text.width;
     cached->name_h = text.height;
     font_free_text_image(&text);

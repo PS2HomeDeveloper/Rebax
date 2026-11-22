@@ -42,11 +42,15 @@ typedef struct {
     unsigned char *pixels; /* Its length is width * height * 4 bytes */
     int width;
     int height;
+    int px_w;
+    int px_h;
 } font_text_image_t;
 
 /* Loads the two bundled font files (only once). Returns 1 on success
  * and 0 on failure. Must be called before any call to font_render_text */
 int font_init(void);
+
+void font_set_scale(float scale);
 
 /* Renders text (sentence, character, number - any string) at the requested weight and size
  * (pixel_size is approximately the character height in pixels, same concept as the usual "font size").

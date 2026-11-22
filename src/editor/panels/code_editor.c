@@ -462,7 +462,7 @@ static void rebuild_line_cache(void) {
         colorize_line(g_cached_line[line], (int)n, rgb, &in_block_comment);
         font_text_image_t image = font_render_text_colored(g_cached_line[line], FONT_WEIGHT_REGULAR, CODE_FONT, rgb);
         if (image.pixels != NULL) {
-            g_line_text[line] = window_create_texture(image.pixels, image.width, image.height);
+            g_line_text[line] = window_create_texture(image.pixels, image.px_w, image.px_h);
             g_line_width[line] = image.width;
             g_line_height[line] = image.height;
             font_free_text_image(&image);

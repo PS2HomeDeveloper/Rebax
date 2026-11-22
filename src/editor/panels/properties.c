@@ -119,7 +119,7 @@ static void rebuild_rows(void) {
 
     font_text_image_t header = font_render_text(header_text, FONT_WEIGHT_BOLD, 15);
     if (header.pixels != NULL) {
-        g_header_tex = window_create_texture(header.pixels, header.width, header.height);
+        g_header_tex = window_create_texture(header.pixels, header.px_w, header.px_h);
         g_header_w = header.width;
         g_header_h = header.height;
         font_free_text_image(&header);
@@ -132,7 +132,7 @@ static void rebuild_rows(void) {
         property_row_t *row = &g_rows[g_row_count];
 
         font_text_image_t name_txt = font_render_text(prop->name, FONT_WEIGHT_REGULAR, 13);
-        row->name_tex = (name_txt.pixels != NULL) ? window_create_texture(name_txt.pixels, name_txt.width, name_txt.height) : NULL;
+        row->name_tex = (name_txt.pixels != NULL) ? window_create_texture(name_txt.pixels, name_txt.px_w, name_txt.px_h) : NULL;
         row->name_w = name_txt.width;
         row->name_h = name_txt.height;
         font_free_text_image(&name_txt);
@@ -172,7 +172,7 @@ static void rebuild_rows(void) {
         if (row->is_asset_path) {
             font_text_image_t value_txt = font_render_text(row->field.text, FONT_WEIGHT_REGULAR, 12);
             if (value_txt.pixels != NULL) {
-                row->value_tex = window_create_texture(value_txt.pixels, value_txt.width, value_txt.height);
+                row->value_tex = window_create_texture(value_txt.pixels, value_txt.px_w, value_txt.px_h);
                 row->value_w = value_txt.width;
                 row->value_h = value_txt.height;
                 font_free_text_image(&value_txt);

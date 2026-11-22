@@ -447,7 +447,7 @@ void project_dialog_draw(int window_w, int window_h) {
         }
         font_text_image_t msg = font_render_text(g_path_message, FONT_WEIGHT_REGULAR, 13);
         if (msg.pixels != NULL) {
-            g_path_msg_tex = window_create_texture(msg.pixels, msg.width, msg.height);
+            g_path_msg_tex = window_create_texture(msg.pixels, msg.px_w, msg.px_h);
             g_path_msg_w = msg.width;
             g_path_msg_h = msg.height;
             font_free_text_image(&msg);

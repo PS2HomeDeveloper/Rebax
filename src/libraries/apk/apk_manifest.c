@@ -61,7 +61,7 @@ int apk_manifest_build(const apk_pack_config_t *cfg, byte_buf_t *out) {
     apk_axml_attr_bool(a, "exported", 1);
     apk_axml_attr_hex(a, "launchMode", 1);
     apk_axml_attr_hex(a, "screenOrientation", cfg->screen_orientation != 0 ? cfg->screen_orientation : 6);
-    apk_axml_attr_hex(a, "configChanges", 0x7b0u);
+    apk_axml_attr_hex(a, "configChanges", 0x40007ff4u);
     apk_axml_attr_ref(a, "theme", STYLE_THEME_NOTITLEBAR_FULLSCREEN);
 
     apk_axml_start(a, "intent-filter");

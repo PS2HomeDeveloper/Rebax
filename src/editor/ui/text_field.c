@@ -221,7 +221,7 @@ void text_field_draw(text_field_t *field, int x, int y, int w, int h,
         if (field->text[0] != '\0') {
             font_text_image_t txt = font_render_text(field->text, FONT_WEIGHT_REGULAR, font_pixel_size);
             if (txt.pixels != NULL) {
-                field->_cache_text_tex = window_create_texture(txt.pixels, txt.width, txt.height);
+                field->_cache_text_tex = window_create_texture(txt.pixels, txt.px_w, txt.px_h);
                 field->_cache_text_w = txt.width;
                 field->_cache_text_h = txt.height;
                 font_free_text_image(&txt);

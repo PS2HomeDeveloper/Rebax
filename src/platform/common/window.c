@@ -24,6 +24,7 @@
 #include <string.h>
 #include <SDL.h>
 
+#include "editor/ui/font.h"
 #include "platform/common/window.h"
 
 static SDL_Window   *g_window   = NULL;
@@ -36,21 +37,44 @@ static int g_inset_top = 0;
 static int g_inset_right = 0;
 static int g_inset_bottom = 0;
 
+static float g_scale = 1.0f;
+static int g_background = 0;
+
+static float compute_scale(int raw_height) {
+    float ddpi = 0.0f;
+    if (g_window == NULL || SDL_GetDisplayDPI(0, &ddpi, NULL, NULL) != 0 || ddpi <= 0.0f) return 1.0f;
+#if defined(__ANDROID__) || (defined(__APPLE__) && defined(__arm__)) || (defined(__APPLE__) && defined(__aarch64__) && !defined(__MACH__))
+    float s = ddpi / 220.0f;
+    if (s > 2.0f) s = 2.0f;
+#else
+    float s = ddpi / 144.0f;
+    if (s > 3.0f) s = 3.0f;
+#endif
+    float limit = (float)raw_height / 480.0f;
+    if (s > limit) s = limit;
+    if (s < 1.0f) s = 1.0f;
+    return s;
+}
+
 static void apply_window_size(int raw_width, int raw_height) {
+    g_scale = compute_scale(raw_height);
+    font_set_scale(g_scale);
+    if (g_renderer != NULL) SDL_RenderSetScale(g_renderer, g_scale, g_scale);
+    int logical_width = (int)(raw_width / g_scale);
+    int logical_height = (int)(raw_height / g_scale);
+    g_inset_left = g_inset_right = g_inset_top = g_inset_bottom = 0;
 #if defined(__ANDROID__)
-    int side = raw_height / 40;
-    int bottom = raw_height / 60;
-    if (raw_width - 2 * side > 0 && raw_height - side - bottom > 0) {
+    int side = logical_height / 40;
+    int bottom = logical_height / 60;
+    if (logical_width - 2 * side > 0 && logical_height - side - bottom > 0) {
         g_inset_left = side;
         g_inset_right = side;
         g_inset_top = side;
         g_inset_bottom = bottom;
-    } else {
-        g_inset_left = g_inset_right = g_inset_top = g_inset_bottom = 0;
     }
 #endif
-    g_width = raw_width - g_inset_left - g_inset_right;
-    g_height = raw_height - g_inset_top - g_inset_bottom;
+    g_width = logical_width - g_inset_left - g_inset_right;
+    g_height = logical_height - g_inset_top - g_inset_bottom;
 }
 
 /* mouse state */
@@ -185,8 +209,20 @@ void window_poll_events(void) {
         if (event.type == SDL_QUIT) {
             g_should_close = 1;
         } else if (event.type == SDL_WINDOWEVENT
-                   && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                   && (event.window.event == SDL_WINDOWEVENT_RESIZED
+                       || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)) {
             apply_window_size(event.window.data1, event.window.data2);
+        } else if (event.type == SDL_APP_WILLENTERBACKGROUND) {
+            g_background = 1;
+        } else if (event.type == SDL_APP_DIDENTERFOREGROUND) {
+            int raw_w = 0, raw_h = 0;
+            g_background = 0;
+            SDL_GetWindowSize(g_window, &raw_w, &raw_h);
+            if (raw_w > 0 && raw_h > 0) apply_window_size(raw_w, raw_h);
+            g_mouse_left_down = g_mouse_right_down = g_mouse_middle_down = 0;
+            g_mouse_left_just_pressed = g_mouse_right_just_pressed = g_mouse_middle_just_pressed = 0;
+            g_last_frame_ticks = SDL_GetTicks();
+            g_delta_time = 0.0f;
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
             g_text_input_suppressed = 0;
             if (event.button.button == SDL_BUTTON_LEFT) {
@@ -210,14 +246,14 @@ void window_poll_events(void) {
         } else if (event.type == SDL_MOUSEWHEEL) {
             g_mouse_wheel_delta += event.wheel.y;
         } else if (event.type == SDL_MOUSEMOTION) {
-            g_mouse_x = event.motion.x - g_inset_left;
-            g_mouse_y = event.motion.y - g_inset_top;
+            g_mouse_x = (int)(event.motion.x / g_scale) - g_inset_left;
+            g_mouse_y = (int)(event.motion.y / g_scale) - g_inset_top;
             if (g_mouse_x < 0) g_mouse_x = 0;
             if (g_mouse_y < 0) g_mouse_y = 0;
             if (g_mouse_x >= g_width) g_mouse_x = g_width - 1;
             if (g_mouse_y >= g_height) g_mouse_y = g_height - 1;
-            g_mouse_delta_x += event.motion.xrel;
-            g_mouse_delta_y += event.motion.yrel;
+            g_mouse_delta_x += (int)(event.motion.xrel / g_scale);
+            g_mouse_delta_y += (int)(event.motion.yrel / g_scale);
         } else if (event.type == SDL_TEXTINPUT) {
             strncat(g_text_input_buffer, event.text.text,
                     sizeof(g_text_input_buffer) - strlen(g_text_input_buffer) - 1);
@@ -349,6 +385,7 @@ void window_destroy_texture(window_texture_t *tex) {
 }
 
 void window_present(void) {
+    if (g_background) return;
     SDL_RenderPresent(g_renderer);
 }
 

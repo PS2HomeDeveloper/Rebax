@@ -258,7 +258,7 @@ static void add_entry(const char *full_path, const char *display_name, int is_di
 
     font_text_image_t txt = font_render_text(display_name, FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE);
     if (txt.pixels != NULL) {
-        e->label_tex = window_create_texture(txt.pixels, txt.width, txt.height);
+        e->label_tex = window_create_texture(txt.pixels, txt.px_w, txt.px_h);
         e->label_w = txt.width;
         e->label_h = txt.height;
         font_free_text_image(&txt);

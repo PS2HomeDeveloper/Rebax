@@ -24,7 +24,7 @@ window_texture_t *ui_make_text_texture(const char *text, font_weight_t weight,
     font_text_image_t img = font_render_text(text, weight, pixel_size);
     window_texture_t *tex = NULL;
     if (img.pixels != NULL) {
-        tex = window_create_texture(img.pixels, img.width, img.height);
+        tex = window_create_texture(img.pixels, img.px_w, img.px_h);
         *out_w = img.width;
         *out_h = img.height;
         font_free_text_image(&img);
@@ -45,7 +45,7 @@ void ui_make_blue_button(const char *text, int font_pixel_size,
         *out_btn_tex = window_create_texture(out_btn->shape_img.pixels,
                                               out_btn->shape_img.width, out_btn->shape_img.height);
         *out_txt_tex = window_create_texture(out_btn->text_img.pixels,
-                                              out_btn->text_img.width, out_btn->text_img.height);
+                                              out_btn->text_img.px_w, out_btn->text_img.px_h);
     }
 }
 

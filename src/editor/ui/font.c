@@ -76,6 +76,9 @@ int font_init(void) {
 }
 
 #define FONT_SIZE_BOOST 4
+static float g_scale = 1.0f;
+void font_set_scale(float scale) { g_scale = scale < 1.0f ? 1.0f : scale; }
+static int scaled_px(int pixel_size) { return (int)((pixel_size + FONT_SIZE_BOOST) * g_scale + 0.5f); }
 
 static font_text_image_t font_render_text_internal(const char *text, font_weight_t weight,
                                                     int pixel_size,
@@ -85,7 +88,7 @@ static font_text_image_t font_render_text_internal(const char *text, font_weight
     if (!g_initialized || text == NULL || pixel_size <= 0) {
         return out;
     }
-    pixel_size += FONT_SIZE_BOOST;
+    pixel_size = scaled_px(pixel_size);
 
     stbtt_fontinfo *font = (weight == FONT_WEIGHT_BOLD) ? &g_font_bold : &g_font_regular;
     float scale = stbtt_ScaleForPixelHeight(font, (float)pixel_size);
@@ -160,6 +163,10 @@ static font_text_image_t font_render_text_internal(const char *text, font_weight
         }
     }
 
+    out.px_w = out.width;
+    out.px_h = out.height;
+    out.width = (int)(out.px_w / g_scale + 0.999f);
+    out.height = (int)(out.px_h / g_scale + 0.999f);
     return out;
 }
 
@@ -175,7 +182,7 @@ font_text_image_t font_render_text_colored(const char *text, font_weight_t weigh
 int font_measure_text(const char *text, font_weight_t weight, int pixel_size) {
     if (!g_initialized || text == NULL || pixel_size <= 0) return 0;
     stbtt_fontinfo *font = (weight == FONT_WEIGHT_BOLD) ? &g_font_bold : &g_font_regular;
-    float scale = stbtt_ScaleForPixelHeight(font, (float)(pixel_size + FONT_SIZE_BOOST));
+    float scale = stbtt_ScaleForPixelHeight(font, (float)scaled_px(pixel_size));
     int len = (int)strlen(text), total = 0;
     for (int i = 0; i < len; i++) {
         int advance, lsb;
@@ -183,7 +190,7 @@ int font_measure_text(const char *text, font_weight_t weight, int pixel_size) {
         total += (int)(advance * scale);
         if (i + 1 < len) total += (int)(stbtt_GetCodepointKernAdvance(font, (unsigned char)text[i], (unsigned char)text[i + 1]) * scale);
     }
-    return total;
+    return (int)(total / g_scale + 0.5f);
 }
 
 void font_free_text_image(font_text_image_t *img) {

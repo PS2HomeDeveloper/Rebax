@@ -80,12 +80,12 @@ static void ensure_ready(void) {
     g_cancel_btn = labeled_button_create("Cancel", FONT_WEIGHT_REGULAR, 15, 14, 6, 3,
                                           UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g, UI_COLOR_BUTTON_BLUE.b);
     g_cancel_btn_tex = window_create_texture(g_cancel_btn.shape_img.pixels, g_cancel_btn.shape_img.width, g_cancel_btn.shape_img.height);
-    g_cancel_txt_tex = window_create_texture(g_cancel_btn.text_img.pixels, g_cancel_btn.text_img.width, g_cancel_btn.text_img.height);
+    g_cancel_txt_tex = window_create_texture(g_cancel_btn.text_img.pixels, g_cancel_btn.text_img.px_w, g_cancel_btn.text_img.px_h);
 
     g_add_btn = labeled_button_create("Add", FONT_WEIGHT_REGULAR, 15, 14, 6, 3,
                                        UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g, UI_COLOR_BUTTON_BLUE.b);
     g_add_btn_tex = window_create_texture(g_add_btn.shape_img.pixels, g_add_btn.shape_img.width, g_add_btn.shape_img.height);
-    g_add_txt_tex = window_create_texture(g_add_btn.text_img.pixels, g_add_btn.text_img.width, g_add_btn.text_img.height);
+    g_add_txt_tex = window_create_texture(g_add_btn.text_img.pixels, g_add_btn.text_img.px_w, g_add_btn.text_img.px_h);
 
     icon_atlas_init();
 
@@ -93,7 +93,7 @@ static void ensure_ready(void) {
     for (int i = 0; i < count && i < MAX_NODE_TYPES; i++) {
         const node_registry_entry_t *entry = node_registry_get_by_index(i);
         font_text_image_t txt = font_render_text(entry->name, FONT_WEIGHT_REGULAR, 15);
-        g_name_tex[i] = (txt.pixels != NULL) ? window_create_texture(txt.pixels, txt.width, txt.height) : NULL;
+        g_name_tex[i] = (txt.pixels != NULL) ? window_create_texture(txt.pixels, txt.px_w, txt.px_h) : NULL;
         g_name_w[i] = txt.width;
         g_name_h[i] = txt.height;
         font_free_text_image(&txt);

@@ -122,8 +122,8 @@ static void create_button(center_button_t *button, const char *label) {
                                                button->button.shape_img.width,
                                                button->button.shape_img.height);
         button->text = window_create_texture(button->button.text_img.pixels,
-                                              button->button.text_img.width,
-                                              button->button.text_img.height);
+                                              button->button.text_img.px_w,
+                                              button->button.text_img.px_h);
     }
 }
 

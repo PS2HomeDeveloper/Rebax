@@ -1,18 +1,3 @@
-/*
- *  ____  _____ ____    _    __  __
- * |  _ \| ____| __ )  / \   \ \/ /
- * | |_) |  _| |  _ \ / _ \   \  / 
- * |  _ <| |___| |_) / ___ \  /  \ 
- * |_| \_\_____|____/_/   \_\/_/\_\
- *
- * Rebax Engine
- * Copyright (c) 2026 PS2HomeDeveloper
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- */
-
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdarg.h>
@@ -20,10 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "network/https_client.h"
-#include "network/package_fetch.h"
+#include "https_client.h"
+#include "package_fetch.h"
 #include "rebax_env.h"
-#include "filesystem/rebax_fs.h"
+#include "rebax_fs.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -34,9 +19,7 @@
 #endif
 
 #define TOOLCHAINS_URL "https://github.com/PS2HomeDeveloper/Rebax-Toolchains/releases/latest/download"
-#define REBAX_STR2(x) #x
-#define REBAX_STR(x) REBAX_STR2(x)
-#define SDKS_URL "https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/download/v" REBAX_STR(REBAX_ENGINE_VERSION)
+#define SDKS_URL "https://github.com/PS2HomeDeveloper/Rebax-SDKs/releases/latest/download"
 #define PATH_CAP 1024
 #define FLAGS_CAP 8192
 
@@ -62,7 +45,7 @@ static const target_t TARGETS[] = {
     { "android", "armeabi-v7a", "android-armeabi-v7a", "armv7a-linux-androideabi21", "arm-linux-androideabi", { NULL, NULL, NULL } },
     { "android", "x86", "android-x86", "i686-linux-android21", "i686-linux-android", { NULL, NULL, NULL } },
     { "android", "x86_64", "android-x86_64", "x86_64-linux-android21", "x86_64-linux-android", { NULL, NULL, NULL } },
-    { "macos", "x86_64", "macos-x86_64", "x86_64-apple-macos11.0", "", { NULL, NULL, NULL } },
+    { "macos", "x86_64", "macos-x86_64", "x86_64-apple-macos10.13", "", { NULL, NULL, NULL } },
     { "macos", "arm64", "macos-arm64", "arm64-apple-macos11", "", { NULL, NULL, NULL } },
     { "ios", "arm64", "ios-arm64", "arm64-apple-ios13.0", "", { NULL, NULL, NULL } },
     { "ios", "x86_64", "ios-simulator-x86_64", "x86_64-apple-ios13.0-simulator", "", { NULL, NULL, NULL } }
@@ -122,6 +105,36 @@ static int run(char *const argv[], const char *out_path) {
             if (!out_path) dup2(fd, 2);
             close(fd);
         }
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) return -1;
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
+}
+
+static int run_visible(char *const argv[]) {
+#ifdef _WIN32
+    char line[FLAGS_CAP];
+    line[0] = '\0';
+    for (int i = 0; argv[i]; i++) append(line, sizeof(line), "%s\"%s\"", i ? " " : "", argv[i]);
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    if (!CreateProcessA(NULL, line, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) return -1;
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (int)code;
+#else
+    fflush(stdout);
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
         execvp(argv[0], argv);
         _exit(127);
     }
@@ -214,58 +227,80 @@ static void fetch(const char *base_url, const char *file_name, const char *extra
     }
 }
 
-static int use_local_archive(const char *const *names, const char *extract_dir, const char *check_dir, const char *const *required) {
-    static const char *const places[] = { "", "sdks/", "toolchains/", "packages/" };
-    char path[PATH_CAP], err[512];
-    for (int n = 0; names[n]; n++) {
-        for (int p = 0; p < 4; p++) {
-            snprintf(path, sizeof(path), "%s%s", places[p], names[n]);
-            if (!rebax_fs_exists(path)) continue;
-            printf("Extracting %s\n", path);
-            fflush(stdout);
-            rebax_fs_mkdir_p(extract_dir);
-            if (!rebax_archive_extract_tar_xz(path, extract_dir, NULL, NULL, err, sizeof(err))) {
-                rebax_fs_remove_recursive(check_dir);
-                fail("%s (%s)", err, path);
-            }
-            if (rebax_fs_is_dir(check_dir) && has_children(check_dir, required)) return 1;
-            rebax_fs_remove_recursive(check_dir);
-            fail("the package %s is incomplete", path);
-        }
-    }
-    return 0;
-}
-
 typedef struct {
-    const char *libdir;
-    char *out;
-    size_t cap;
-    int found;
-} builtins_ctx_t;
+    const char *dest;
+    int failed;
+} copy_ctx_t;
 
-static void find_builtins_cb(const char *path, void *user) {
-    builtins_ctx_t *c = (builtins_ctx_t *)user;
-    if (c->found) return;
+static void copy_builtins(const char *path, void *user) {
+    copy_ctx_t *c = (copy_ctx_t *)user;
     const char *name = path;
     for (const char *p = path; *p; p++) if (*p == '/' || *p == '\\') name = p + 1;
     size_t n = strlen(name);
     if (strncmp(name, "libclang_rt.builtins", 20) != 0 || n < 2 || strcmp(name + n - 2, ".a") != 0) return;
-    if (c->libdir && c->libdir[0]) {
-        char needle[PATH_CAP];
-        snprintf(needle, sizeof(needle), "/%s/", c->libdir);
-        if (!strstr(path, needle)) return;
-    }
-    snprintf(c->out, c->cap, "%s", path);
-    c->found = 1;
+    char to[PATH_CAP * 2];
+    snprintf(to, sizeof(to), "%s/%s", c->dest, name);
+    if (!rebax_fs_copy_file(path, to)) c->failed = 1;
+    snprintf(to, sizeof(to), "%s/libclang_rt.builtins.a", c->dest);
+    if (!rebax_fs_copy_file(path, to)) c->failed = 1;
 }
 
-static int find_builtins(const char *sdk, const char *libdir, char *out, size_t cap) {
-    char root[PATH_CAP];
-    snprintf(root, sizeof(root), "%s/runtime/lib", sdk);
-    out[0] = '\0';
-    builtins_ctx_t c = { libdir, out, cap, 0 };
-    rebax_fs_walk_files(root, find_builtins_cb, &c);
-    return c.found;
+typedef struct {
+    const char *src_root;
+    const char *dst_root;
+    int failed;
+} tree_ctx_t;
+
+static void copy_tree_file(const char *path, void *user) {
+    tree_ctx_t *c = (tree_ctx_t *)user;
+    char to[PATH_CAP * 2], dir[PATH_CAP * 2];
+    snprintf(to, sizeof(to), "%s%s", c->dst_root, path + strlen(c->src_root));
+    snprintf(dir, sizeof(dir), "%s", to);
+    for (size_t i = strlen(dir); i > 0; i--) {
+        if (dir[i - 1] == '/' || dir[i - 1] == '\\') { dir[i - 1] = '\0'; break; }
+    }
+    if (!rebax_fs_mkdir_p(dir) || !rebax_fs_copy_file(path, to)) c->failed = 1;
+}
+
+static int read_line(const char *path, char *out, size_t cap) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    if (!fgets(out, (int)cap, f)) { fclose(f); return 0; }
+    fclose(f);
+    size_t n = strlen(out);
+    while (n > 0 && (out[n - 1] == '\n' || out[n - 1] == '\r')) out[--n] = '\0';
+    return n > 0;
+}
+
+static int make_overlay(const char *cc, const target_t *t, const char *sdk, const char *out) {
+    char marker[PATH_CAP], tmp[PATH_CAP], res[PATH_CAP], target_flag[256], inc_src[PATH_CAP], inc_dst[PATH_CAP], lib_dir[PATH_CAP], rt[PATH_CAP], rflag[PATH_CAP];
+    snprintf(marker, sizeof(marker), "%s/.ready", out);
+    if (rebax_fs_exists(marker)) return 1;
+    rebax_fs_remove_recursive(out);
+    if (!rebax_fs_mkdir_p(out)) return 0;
+    snprintf(tmp, sizeof(tmp), "%s/.query", out);
+    snprintf(target_flag, sizeof(target_flag), "--target=%s", t->triple);
+    char *const q1[] = { (char *)cc, target_flag, "-print-resource-dir", NULL };
+    if (run(q1, tmp) != 0 || !read_line(tmp, res, sizeof(res))) return 0;
+    snprintf(inc_src, sizeof(inc_src), "%s/include", res);
+    snprintf(inc_dst, sizeof(inc_dst), "%s/include", out);
+    tree_ctx_t tc = { inc_src, inc_dst, 0 };
+    rebax_fs_walk_files(inc_src, copy_tree_file, &tc);
+    if (tc.failed) return 0;
+    snprintf(rflag, sizeof(rflag), "-resource-dir=%s", out);
+    char *const q2[] = { (char *)cc, rflag, target_flag, "-print-runtime-dir", NULL };
+    if (run(q2, tmp) != 0 || !read_line(tmp, lib_dir, sizeof(lib_dir))) return 0;
+    if (!rebax_fs_mkdir_p(lib_dir)) return 0;
+    snprintf(rt, sizeof(rt), "%s/runtime/lib", sdk);
+    copy_ctx_t cc_ctx = { lib_dir, 0 };
+    rebax_fs_walk_files(rt, copy_builtins, &cc_ctx);
+    if (cc_ctx.failed) return 0;
+    rebax_fs_remove_recursive(tmp);
+    FILE *m = fopen(marker, "wb");
+    if (!m) return 0;
+    fputs("ok\n", m);
+    fclose(m);
+    return 1;
 }
 
 typedef struct {
@@ -278,16 +313,12 @@ typedef struct {
 static void framework_list(flags_t *f, const char *sdk, const char *const *names) {
     char path[PATH_CAP];
     for (int i = 0; names[i]; i++) {
-        int found = 0;
-        snprintf(path, sizeof(path), "%s/standard/System/Library/Frameworks/%s.framework", sdk, names[i]);
-        if (rebax_fs_is_dir(path)) found = 1;
-        snprintf(path, sizeof(path), "%s/graphics/System/Library/Frameworks/%s.framework", sdk, names[i]);
-        if (rebax_fs_is_dir(path)) found = 1;
-        if (found) append(f->ldsdl, sizeof(f->ldsdl), " -framework %s", names[i]);
+        snprintf(path, sizeof(path), "%s/standard/Frameworks/%s.framework", sdk, names[i]);
+        if (rebax_fs_is_dir(path)) append(f->ldsdl, sizeof(f->ldsdl), " -framework %s", names[i]);
     }
 }
 
-static int clang_flags(flags_t *f, const target_t *t, const char *sdk, const char *builtins, const char *empty) {
+static int clang_flags(flags_t *f, const target_t *t, const char *sdk, const char *overlay, const char *empty) {
     memset(f, 0, sizeof(*f));
     const char *p = t->platform;
     if (strcmp(p, "linux") == 0) {
@@ -298,27 +329,22 @@ static int clang_flags(flags_t *f, const target_t *t, const char *sdk, const cha
         return 1;
     }
     if (strcmp(p, "windows") == 0) {
-        char static_sdl[PATH_CAP];
-        snprintf(static_sdl, sizeof(static_sdl), "%s/graphics/lib/libSDL2.a", sdk);
-        append(f->cflags, FLAGS_CAP, "--target=%s --sysroot=%s/standard -I%s/graphics/include/SDL2", t->triple, sdk, sdk);
-        append(f->ldpre, FLAGS_CAP, "--target=%s --sysroot=%s/standard -fuse-ld=lld -static -nodefaultlibs", t->triple, sdk);
+        append(f->cflags, FLAGS_CAP, "-resource-dir %s --target=%s --sysroot=%s/standard -I%s/graphics/include/SDL2", overlay, t->triple, sdk, sdk);
+        append(f->ldpre, FLAGS_CAP, "-resource-dir %s --target=%s --sysroot=%s/standard -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind -static", overlay, t->triple, sdk);
         append(f->ldpost, FLAGS_CAP, "-L%s/runtime/lib -L%s/graphics/lib", sdk, sdk);
-        if (rebax_fs_exists(static_sdl))
-            append(f->ldsdl, FLAGS_CAP, "-lmingw32 -lSDL2main -lSDL2 -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid -lws2_32 -lbcrypt -lmingwex -lmoldname -lmsvcrt -lkernel32 -ladvapi32 %s", builtins);
-        else
-            append(f->ldsdl, FLAGS_CAP, "-lmingw32 -lSDL2main %s/graphics/lib/libSDL2.dll.a -lws2_32 -lbcrypt -lmingwex -lmoldname -lmsvcrt -lkernel32 -ladvapi32 -lshell32 -luser32 %s", sdk, builtins);
+        append(f->ldsdl, FLAGS_CAP, "-lmingw32 -lSDL2main %s/graphics/lib/libSDL2.dll.a -lws2_32 -lbcrypt", sdk);
         return 1;
     }
     if (strcmp(p, "android") == 0) {
-        append(f->cflags, FLAGS_CAP, "--target=%s --sysroot=%s/standard -fPIC -I%s/graphics/include/SDL2", t->triple, sdk, sdk);
-        append(f->ldpre, FLAGS_CAP, "--target=%s --sysroot=%s/standard -fuse-ld=lld -nodefaultlibs", t->triple, sdk);
+        append(f->cflags, FLAGS_CAP, "-resource-dir %s --target=%s --sysroot=%s/standard -fPIC -I%s/graphics/include/SDL2", overlay, t->triple, sdk, sdk);
+        append(f->ldpre, FLAGS_CAP, "-resource-dir %s --target=%s --sysroot=%s/standard -fuse-ld=lld -rtlib=compiler-rt", overlay, t->triple, sdk);
         append(f->ldpost, FLAGS_CAP, "-L%s/runtime/lib/%s -L%s/standard/usr/lib/%s/21 -L%s/standard/usr/lib/%s -L%s/graphics/lib", sdk, t->libdir, sdk, t->libdir, sdk, t->libdir, sdk);
-        append(f->ldsdl, FLAGS_CAP, "-lSDL2 -liconv -lm -llog -landroid -lOpenSLES -lc -ldl %s", builtins);
+        append(f->ldsdl, FLAGS_CAP, "-lSDL2 -liconv -lm -llog -landroid -lOpenSLES");
         return 1;
     }
-    append(f->cflags, FLAGS_CAP, "--target=%s -isysroot %s -nostdlibinc -isystem %s/standard/include -F%s/standard/System/Library/Frameworks -F%s/graphics/System/Library/Frameworks -I%s/graphics/include/SDL2", t->triple, empty, sdk, sdk, sdk, sdk);
-    append(f->ldpre, FLAGS_CAP, "--target=%s -isysroot %s -fuse-ld=lld -nostdlib -Wl,-syslibroot,%s/standard -Wl,-syslibroot,%s/graphics", t->triple, empty, sdk, sdk);
-    append(f->ldpost, FLAGS_CAP, "-L%s/standard/lib -L%s/runtime/lib -L%s/graphics/lib -F%s/standard/System/Library/Frameworks -F%s/graphics/System/Library/Frameworks", sdk, sdk, sdk, sdk, sdk);
+    append(f->cflags, FLAGS_CAP, "--target=%s -isysroot %s -nostdlibinc -isystem %s/standard/include -F%s/standard/Frameworks -F%s/graphics/Frameworks -I%s/graphics/include/SDL2", t->triple, empty, sdk, sdk, sdk, sdk);
+    append(f->ldpre, FLAGS_CAP, "--target=%s -isysroot %s -fuse-ld=lld -nostdlib", t->triple, empty);
+    append(f->ldpost, FLAGS_CAP, "-L%s/standard/lib -L%s/runtime/lib -L%s/graphics/lib", sdk, sdk, sdk);
     append(f->ldsdl, FLAGS_CAP, "-lSDL2 -liconv");
     if (strcmp(p, "macos") == 0) {
         static const char *const names[] = { "Cocoa", "CoreAudio", "AudioToolbox", "CoreVideo", "IOKit", "ForceFeedback", "Carbon", "CoreServices", "CoreFoundation", "Foundation", "AppKit", "Metal", "QuartzCore", "OpenGL", "CoreHaptics", "GameController", NULL };
@@ -361,7 +387,7 @@ static int probe(const char *cc, const flags_t *f, const char *dir) {
     for (char *tok = strtok(copy, " "); tok && n < 158; tok = strtok(NULL, " ")) argv[n++] = tok;
     argv[n] = NULL;
     if (run(argv, NULL) != 0) return 0;
-    snprintf(copy, sizeof(copy), "%s %s %s %s %s -o %s", cc, f->ldpre, obj, f->ldpost, f->ldsdl, exe);
+    snprintf(copy, sizeof(copy), "%s %s %s %s -o %s", cc, f->ldpre, obj, f->ldpost, exe);
     n = 0;
     for (char *tok = strtok(copy, " "); tok && n < 158; tok = strtok(NULL, " ")) argv[n++] = tok;
     argv[n] = NULL;
@@ -399,37 +425,31 @@ int rebax_env_main(int argc, char **argv) {
     int self = strcmp(tp, hp) == 0 && strcmp(ta, ha) == 0;
     if (self && ios) fail("iOS cannot build on itself");
 
-    char sdk[PATH_CAP], clang_dir[PATH_CAP], extract[PATH_CAP], url[PATH_CAP], builtins[PATH_CAP], empty[PATH_CAP], probe_dir[PATH_CAP];
+    char sdk[PATH_CAP], clang_dir[PATH_CAP], extract[PATH_CAP], url[PATH_CAP], overlay[PATH_CAP], empty[PATH_CAP], probe_dir[PATH_CAP];
     snprintf(sdk, sizeof(sdk), "sdks/%s", t->sdk);
     static const char *const sdk_need[] = { "standard", "runtime", "graphics", NULL };
     snprintf(url, sizeof(url), "rebax-sdk-%s.tar.xz", t->sdk);
-    if (!(rebax_fs_is_dir(sdk) && has_children(sdk, sdk_need))) {
-        char n1[PATH_CAP], n2[PATH_CAP];
-        snprintf(n1, sizeof(n1), "%s.tar.xz", t->sdk);
-        snprintf(n2, sizeof(n2), "sdk-%s.tar.xz", t->sdk);
-        const char *const names[] = { url, n1, n2, NULL };
-        use_local_archive(names, "sdks", sdk, sdk_need);
-    }
     fetch(SDKS_URL, url, "sdks", sdk, sdk_need);
 
     clang_dir[0] = '\0';
-    if (!ios) snprintf(clang_dir, sizeof(clang_dir), "toolchains/%s-%s/clang", tp, ta);
+    if (!ios) {
+        static const char *const clang_need[] = { "bin", NULL };
+        snprintf(clang_dir, sizeof(clang_dir), "toolchains/%s/%s/clang", tp, ta);
+        snprintf(extract, sizeof(extract), "toolchains/%s/%s", tp, ta);
+        snprintf(url, sizeof(url), "rebax-clang-%s-%s.tar.xz", tp, ta);
+        fetch(TOOLCHAINS_URL, url, extract, clang_dir, clang_need);
+    }
     char host_clang_dir[PATH_CAP];
-    snprintf(host_clang_dir, sizeof(host_clang_dir), "toolchains/%s-%s/clang", hp, ha);
-    {
-        static const char *const host_need[] = { "bin", NULL };
-        snprintf(extract, sizeof(extract), "toolchains/%s-%s", hp, ha);
-        snprintf(url, sizeof(url), "rebax-clang-%s-%s.tar.xz", hp, ha);
-        if (!(rebax_fs_is_dir(host_clang_dir) && has_children(host_clang_dir, host_need))) {
-            const char *const names[] = { url, NULL };
-            use_local_archive(names, extract, host_clang_dir, host_need);
-        }
+    if (self) {
+        snprintf(host_clang_dir, sizeof(host_clang_dir), "%s", clang_dir);
+    } else {
+        static const char *const clang_need[] = { "bin", NULL };
+        snprintf(host_clang_dir, sizeof(host_clang_dir), "toolchains/%s/%s/clang", hp, ha);
+        (void)clang_need;
     }
 
-    builtins[0] = '\0';
-    if ((strcmp(tp, "windows") == 0 || strcmp(tp, "android") == 0) && !find_builtins(sdk, strcmp(tp, "android") == 0 ? t->libdir : "", builtins, sizeof(builtins)))
-        fail("the compiler runtime library is missing in %s/runtime/lib", sdk);
-    snprintf(empty, sizeof(empty), "build/empty_sysroot");
+    snprintf(overlay, sizeof(overlay), "build/resource-%s", t->sdk);
+    snprintf(empty, sizeof(empty), "build/empty-sysroot");
     snprintf(probe_dir, sizeof(probe_dir), "build/probe");
     rebax_fs_mkdir_p(empty);
 
@@ -442,21 +462,23 @@ int rebax_env_main(int argc, char **argv) {
         "";
 #endif
 
-    snprintf(cc, sizeof(cc), "%s/bin/clang%s", host_clang_dir, exe_ext);
-    if (rebax_fs_exists(cc)) {
-        clang_flags(&f, t, sdk, builtins, empty);
+    if (self) {
+        snprintf(cc, sizeof(cc), "%s/bin/clang%s", host_clang_dir, exe_ext);
+        if (!rebax_fs_exists(cc)) fail("the downloaded clang is missing: %s", cc);
+        clang_flags(&f, t, sdk, overlay, empty);
+        if (!ios && (strcmp(tp, "windows") == 0 || strcmp(tp, "android") == 0) && !make_overlay(cc, t, sdk, overlay))
+            fail("cannot prepare the compiler runtime for %s", t->sdk);
         write_env(out, cc, "clang", &f, sdk, clang_dir, t);
-        printf("Compiler: %s (clang package)\n", cc);
+        printf("Compiler: %s (downloaded clang)\n", cc);
         return 0;
     }
 
-    const char *forced = getenv("REBAX_COMPILER");
-    int force_package = forced && strcmp(forced, "package") == 0;
-
-    if (!force_package && find_in_path("clang", cc, sizeof(cc))) {
+    if (find_in_path("clang", cc, sizeof(cc))) {
         snprintf(cc, sizeof(cc), "clang");
-        clang_flags(&f, t, sdk, builtins, empty);
-        if (probe(cc, &f, probe_dir)) {
+        clang_flags(&f, t, sdk, overlay, empty);
+        int ready = 1;
+        if (strcmp(tp, "windows") == 0 || strcmp(tp, "android") == 0) ready = make_overlay(cc, t, sdk, overlay);
+        if (ready && probe(cc, &f, probe_dir)) {
             write_env(out, cc, "clang", &f, sdk, clang_dir, t);
             printf("Compiler: clang from the system\n");
             return 0;
@@ -464,7 +486,7 @@ int rebax_env_main(int argc, char **argv) {
         printf("The system clang cannot build for %s-%s.\n", tp, ta);
     }
 
-    for (int i = 0; !force_package && i < 3 && t->gcc[i]; i++) {
+    for (int i = 0; i < 3 && t->gcc[i]; i++) {
         char found[PATH_CAP];
         if (!find_in_path(t->gcc[i], found, sizeof(found))) continue;
         gcc_flags(&f, t, sdk);
@@ -475,17 +497,8 @@ int rebax_env_main(int argc, char **argv) {
         }
     }
 
-    {
-        static const char *const host_need[] = { "bin", NULL };
-        snprintf(url, sizeof(url), "rebax-clang-%s-%s.tar.xz", hp, ha);
-        fetch(TOOLCHAINS_URL, url, extract, host_clang_dir, host_need);
-        snprintf(cc, sizeof(cc), "%s/bin/clang%s", host_clang_dir, exe_ext);
-        if (!rebax_fs_exists(cc)) fail("the compiler package %s has no clang", url);
-        clang_flags(&f, t, sdk, builtins, empty);
-        write_env(out, cc, "clang", &f, sdk, clang_dir, t);
-        printf("Compiler: %s (clang package)\n", cc);
-        return 0;
-    }
+    fail("no compiler found for %s-%s: install clang with lld, or a gcc that builds for that target", tp, ta);
+    return 1;
 }
 
 int rebax_package_archive_main(int argc, char **argv) {
