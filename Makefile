@@ -473,7 +473,6 @@ endif
 build-selected: $(TARGET) bundle-runtime-libs bundle-resources bundle-packages $(if $(filter ios,$(TARGET_PLATFORM)),ios-package)
 
 bundle-packages: $(TARGET) | $(RTOOL)
-	$(if $(or $(filter ios,$(TARGET_PLATFORM)),$(TOOLS_FILES)),,@$(RTOOL) mkdir $(OUTPUT_DIR)/tools)
 	$(if $(and $(TOOLS_FILES),$(filter-out ios,$(TARGET_PLATFORM))),@$(RTOOL) copy-tree tools $(OUTPUT_DIR)/tools)
 
 ios-package: $(TARGET) | $(RTOOL)

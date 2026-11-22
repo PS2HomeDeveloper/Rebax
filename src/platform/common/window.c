@@ -35,6 +35,31 @@ static float g_scale = 1.0f;
 static int g_background = 0;
 
 static int g_user_scale_percent = 0;
+static int g_refresh_frames = 0;
+
+#if defined(__ANDROID__)
+#include <stdarg.h>
+#include "filesystem/storage_paths.h"
+static int g_log_lines = 0;
+static void resume_log(const char *fmt, ...) {
+    if (g_log_lines >= 300) return;
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/resume.log", rebax_root_dir());
+    FILE *f = fopen(path, g_log_lines == 0 ? "wb" : "ab");
+    if (f == NULL) return;
+    g_log_lines++;
+    fprintf(f, "%u ", (unsigned)SDL_GetTicks());
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
+#else
+#define resume_log(...) ((void)0)
+#endif
+
 static void apply_window_size(int raw_width, int raw_height);
 
 static float compute_scale(int raw_height) {
@@ -221,9 +246,17 @@ void window_poll_events(void) {
                    && (event.window.event == SDL_WINDOWEVENT_RESIZED
                        || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)) {
             apply_window_size(event.window.data1, event.window.data2);
+            g_refresh_frames = 30;
+            resume_log("window-size %d %d", event.window.data1, event.window.data2);
         } else if (event.type == SDL_APP_WILLENTERBACKGROUND) {
             g_background = 1;
+            resume_log("will-enter-background");
+        } else if (event.type == SDL_RENDER_DEVICE_RESET || event.type == SDL_RENDER_TARGETS_RESET) {
+            g_refresh_frames = 30;
+            resume_log("render-reset %d", (int)event.type);
         } else if (event.type == SDL_APP_DIDENTERFOREGROUND) {
+            g_refresh_frames = 30;
+            resume_log("did-enter-foreground");
             int raw_w = 0, raw_h = 0;
             g_background = 0;
             SDL_GetWindowSize(g_window, &raw_w, &raw_h);
@@ -292,6 +325,13 @@ void window_poll_events(void) {
 }
 
 void window_clear(unsigned char r, unsigned char g, unsigned char b) {
+    if (g_refresh_frames > 0) {
+        SDL_RenderSetViewport(g_renderer, NULL);
+        SDL_RenderSetClipRect(g_renderer, NULL);
+        SDL_RenderSetScale(g_renderer, g_scale, g_scale);
+        SDL_SetRenderDrawColor(g_renderer, r, g, b, 255);
+        SDL_RenderClear(g_renderer);
+    }
     if (g_inset_left != 0 || g_inset_top != 0 || g_inset_right != 0 || g_inset_bottom != 0) {
         SDL_RenderSetViewport(g_renderer, NULL);
         SDL_SetRenderDrawColor(g_renderer, r, g, b, 255);
@@ -393,6 +433,15 @@ void window_destroy_texture(window_texture_t *tex) {
 void window_present(void) {
     if (g_background) return;
     SDL_RenderPresent(g_renderer);
+    if (g_refresh_frames > 0) {
+        if (g_refresh_frames == 30) {
+            int ow = 0, oh = 0, ww = 0, wh = 0;
+            SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
+            SDL_GetWindowSize(g_window, &ww, &wh);
+            resume_log("first-present output %dx%d window %dx%d scale %.2f", ow, oh, ww, wh, g_scale);
+        }
+        g_refresh_frames--;
+    }
 }
 
 int window_get_width(void)  { return g_width; }

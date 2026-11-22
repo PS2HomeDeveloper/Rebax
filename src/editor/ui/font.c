@@ -63,7 +63,7 @@ int font_init(void) {
 
 #define FONT_SIZE_BOOST 4
 static float g_scale = 1.0f;
-void font_set_scale(float scale) { g_scale = scale < 1.0f ? 1.0f : scale; }
+void font_set_scale(float scale) { g_scale = scale < 0.5f ? 0.5f : scale; }
 static int scaled_px(int pixel_size) { return (int)((pixel_size + FONT_SIZE_BOOST) * g_scale + 0.5f); }
 
 static font_text_image_t font_render_text_internal(const char *text, font_weight_t weight,
