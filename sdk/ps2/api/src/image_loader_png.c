@@ -12,14 +12,6 @@
  * See the LICENSE file for details.
  */
 
-/*
- * ============================================================
- * image_loader_png.c
- * ============================================================
- * See image_loader.h for full documentation.
- * ============================================================
- */
-
 #include <gsKit.h>
 #include <gsToolkit.h>
 

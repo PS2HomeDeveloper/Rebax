@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Scene parsing and project-specific scene C generation. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,15 +31,11 @@
 typedef export_rscene_kv_t rscene_kv_t;
 typedef export_rscene_node_t rscene_node_t;
 
-/* ------------------------------------------------------------
- * Small helper utilities
- * ------------------------------------------------------------ */
-
 static void add_unique(char list[][64], int *count, int max, const char *value) {
     for (int i = 0; i < *count; i++) {
         if (strcmp(list[i], value) == 0) return;
     }
-    if (*count >= max) return; /* Maximum limit - silently ignore instead of failing */
+    if (*count >= max) return;
     strncpy(list[*count], value, 63);
     list[*count][63] = '\0';
     (*count)++;
@@ -87,8 +82,6 @@ void export_scene_add_image_path_with_raw(const char *value, int raw_width,
     g_image_paths_count++;
 }
 
-/* Reads an entire file into malloc'd memory - caller frees it.
- * NULL on failure */
 char *export_read_whole_file(const char *path, long *out_size) {
     FILE *f = fopen(path, "rb");
     if (f == NULL) return NULL;
@@ -107,8 +100,6 @@ char *export_read_whole_file(const char *path, long *out_size) {
     return buf;
 }
 
-/* Walks a directory looking for ".rscene" files at any depth - invokes callback
- * for each found file (full path) */
 void export_scene_walk_rscene_files(const char *dir_path, void (*on_file)(const char *path)) {
     DIR *dir = opendir(dir_path);
     if (dir == NULL) return;
@@ -153,29 +144,14 @@ void export_scene_walk_rscene_files(const char *dir_path, void (*on_file)(const 
     free(names);
 }
 
-/* ------------------------------------------------------------
- * Parse project scenes and generate static data (scene_data.c) instead of
- * raw text interpreted at runtime - see the design comment at the top of the file. For
- * each node instance in a scene: read its actual property order/type from
- * node_registry_get() (the same tree used by the properties panel),
- * take its actual value from .rscene or the default if unchanged, and write it
- * as a typed C literal (float/int/string) - the actual bridge to apply them
- * at runtime (property_offsets) already exists in node_interface.h,
- * the generic reader (node_instantiate in scene_runtime.c) uses it directly
- * ------------------------------------------------------------ */
-
 #include "dev_systems/nodes/runtime/node_registry.h"
-#include "stb_image.h" /* The actual implementation is defined once in icon_atlas.c only - here we only use the declarations (stbi_load) to convert project images at export time */
-
+#include "stb_image.h"
 
 export_rscene_node_t g_parsed_nodes[EXPORT_MAX_NODES_PER_SCENE];
 int g_parsed_node_count = 0;
 char g_declared_interfaces[EXPORT_MAX_USED_TYPES][64];
 int g_declared_interfaces_count = 0;
 
-/* Parses a full .rscene file into the g_parsed_nodes array - follows
- * scene_tree_panel_serialize format exactly ("[node N]" starts each block,
- * then type=/name=/parent=/prop:key=value) */
 static void parse_rscene_content(char *content) {
     g_parsed_node_count = 0;
     rscene_node_t *cur = NULL;
@@ -229,10 +205,6 @@ static const node_registry_entry_t *find_registry_entry_by_name(const char *name
     return NULL;
 }
 
-/* The node_interface_t variable name each node file declares - the same
- * convention actually used in src/nodes files (sprite2d.c →
- * sprite2d_interface, element_2d.c → element2d_interface): the type
- * name in lowercase with no added separator */
 static void interface_symbol_name(const char *type_name, char *out, size_t out_size) {
     size_t i = 0;
     for (; type_name[i] != '\0' && i < out_size - 11; i++) {
@@ -242,10 +214,6 @@ static void interface_symbol_name(const char *type_name, char *out, size_t out_s
     strncat(out, "_interface", out_size - strlen(out) - 1);
 }
 
-/* Standard PlayStation 2 resolution (non-interlaced NTSC) - the engine's
- * world origin (0,0) maps exactly to the center of this resolution. A general conversion
- * with no node-type knowledge - any future property in any node named "Position X"/
- * "Position Y" exactly will automatically benefit with no changes here */
 static float reference_screen_width(void) {
     const project_settings_t *settings = current_project_get_settings();
     return settings != NULL && settings->display_width > 0 ? (float)settings->display_width : 640.0f;
@@ -255,13 +223,6 @@ static float reference_screen_height(void) {
     return settings != NULL && settings->display_height > 0 ? (float)settings->display_height : 448.0f;
 }
 
-/* Writes a single property value as a typed C literal - text (strings) are escaped
- * to account for any quotes/backslashes in file paths. property_name
- * decides whether to convert engine coordinates (world center) to actual
- * screen pixel coordinates (top-left) - only for position properties
- * exactly, with no conversion for any other property (size/scaling are written literally),
- * the final value interpreted by the shared runtime code treats it as the node center
- * not a corner - see sprite2d_draw) */
 static void write_c_literal(FILE *f, node_property_type_t type, const char *string_value,
                              const node_property_t *default_prop, const char *property_name) {
     switch (type) {
@@ -297,10 +258,6 @@ static void write_c_literal(FILE *f, node_property_type_t type, const char *stri
     }
 }
 
-/* The unique set of type names actually written as extern declarations
- * (no duplicate declaration of the same type more than once in scene_data.c) */
-
-
 static int ensure_interface_declared(FILE *f, const char *type_name) {
     char symbol[75];
     interface_symbol_name(type_name, symbol, sizeof(symbol));
@@ -314,13 +271,8 @@ static int ensure_interface_declared(FILE *f, const char *type_name) {
     return 1;
 }
 
-/* The generated main file (scene_data.c) - two columns: extern declarations
- * + value arrays (written as we parse), and finally the g_scenes[] table
- * (we write it to a separate temporary file and append it at the end, since
- * it needs to reference all tab arrays that haven't been written yet when
- * processing the first file) */
-FILE *g_codegen_main = NULL;   /* extern decls + value arrays and nodes for each scene */
-FILE *g_codegen_table = NULL;  /* g_scenes[] table lines only - appended at the end */
+FILE *g_codegen_main = NULL;
+FILE *g_codegen_table = NULL;
 
 void export_scene_generate_from_file(const char *path) {
     if (g_codegen_main == NULL || g_codegen_table == NULL) return;
@@ -340,7 +292,6 @@ void export_scene_generate_from_file(const char *path) {
     scene_name[sizeof(scene_name) - 1] = '\0';
     char *dot = strrchr(scene_name, '.');
     if (dot != NULL) *dot = '\0';
-    /* A valid C identifier name - any non-alphanumeric character becomes "_" */
     for (char *p = scene_name; *p != '\0'; p++) {
         if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9'))) {
             *p = '_';
@@ -382,8 +333,6 @@ void export_scene_generate_from_file(const char *path) {
                 write_c_literal(g_codegen_main, prop->type, kv != NULL ? kv->value : NULL, prop, prop->name);
                 fprintf(g_codegen_main, ", /* %s */\n", prop->name);
 
-                /* Source path property (currently an image) with an actual value - accumulated
-                 * to convert into embedded raw pixels (see convert_project_images) */
                 if (prop->is_asset_path && kv != NULL && kv->value[0] != '\0') {
                     const rscene_kv_t *rw = find_prop(node, "Raw Width");
                     const rscene_kv_t *rh = find_prop(node, "Raw Height");
@@ -425,7 +374,6 @@ void export_scene_generate_from_file(const char *path) {
 
     free(content);
 }
-
 
 void export_scene_reset(void) {
     g_parsed_node_count = 0;

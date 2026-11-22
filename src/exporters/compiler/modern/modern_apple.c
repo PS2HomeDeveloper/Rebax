@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-
 #define _POSIX_C_SOURCE 200809L
 
 #include "exporters/compiler/modern/modern_internal.h"
@@ -30,7 +29,6 @@
 #include "exporters/common/export_internal.h"
 #include "filesystem/rebax_fs.h"
 #include "project/current_project.h"
-
 
 int modern_configure_apple(const modern_config_t *config) {
     char path[MODERN_PATH_CAP];

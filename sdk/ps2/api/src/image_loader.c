@@ -12,13 +12,8 @@
  * See the LICENSE file for details.
  */
 
-/* The generic dispatching function only - see image_loader.h for why
- * the actual export doesn't use it (the exporter invokes the
- * functions in the image_loader_*.c files directly instead, depending
- * on which formats are actually used in the project). */
-
 #include <string.h>
-#include <strings.h> /* strcasecmp */
+#include <strings.h>
 
 #include "image_decoder.h"
 
@@ -48,8 +43,6 @@
 #define REBAX_IMAGE_LOADER_TIM2_4HH 1
 #endif
 
-/* true if path ends with ext (case-insensitive) - ext includes the dot
- * itself (example: ends_with(path, ".png")) */
 static int ends_with(const char *path, const char *ext) {
     size_t path_len = strlen(path);
     size_t ext_len = strlen(ext);
@@ -104,5 +97,5 @@ int image_loader_load(GSGLOBAL *gsGlobal, GSTEXTURE *texture, const char *path,
         return image_loader_load_tim(gsGlobal, texture, path);
     }
 
-    return 0; /* Unsupported format (GIF or anything else) */
+    return 0;
 }

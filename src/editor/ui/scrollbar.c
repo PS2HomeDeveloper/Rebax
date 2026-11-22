@@ -18,9 +18,8 @@
 #include "platform/common/window.h"
 
 #define SCROLLBAR_MIN_THUMB  18
-#define SCROLLBAR_GRAB_PAD    3 /* Extra margin to make grabbing the handle easier */
+#define SCROLLBAR_GRAB_PAD    3
 
-/* Computes the handle height and its vertical position */
 static void compute_thumb(int scroll_offset, int viewport_y, int viewport_h,
                            int content_h, int max_scroll,
                            int *out_thumb_y, int *out_thumb_h) {

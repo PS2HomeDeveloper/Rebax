@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* theme.h - shared colors and appearance constants for all engine UIs. */
 #ifndef UI_THEME_H
 #define UI_THEME_H
 
@@ -55,4 +54,4 @@ static const ui_color_t UI_COLOR_DANGER = {0xEB, 0x69, 0x5F, 0xFF};
 static const ui_color_t UI_COLOR_DANGER_SOFT = {0xF0, 0x96, 0x8C, 0xFF};
 static const ui_color_t UI_COLOR_DANGER_BG = {0x5A, 0x28, 0x28, 0xFF};
 
-#endif /* UI_THEME_H */
+#endif

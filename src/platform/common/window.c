@@ -13,12 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * window.c
- * ============================================================
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,11 +71,10 @@ static void apply_window_size(int raw_width, int raw_height) {
     g_height = logical_height - g_inset_top - g_inset_bottom;
 }
 
-/* mouse state */
 static int g_mouse_x = 0;
 static int g_mouse_y = 0;
 static int g_mouse_left_just_pressed = 0;
-static int g_mouse_left_down = 0; /* stays 1 for the duration of the press, not just a single moment */
+static int g_mouse_left_down = 0;
 static int g_mouse_right_just_pressed = 0;
 static int g_mouse_right_down = 0;
 static int g_mouse_middle_just_pressed = 0;
@@ -90,16 +83,13 @@ static int g_mouse_wheel_delta = 0;
 static int g_mouse_delta_x = 0;
 static int g_mouse_delta_y = 0;
 
-/* time - to compute the difference between consecutive frames (delta time) */
 static Uint32 g_last_frame_ticks = 0;
 static float g_delta_time = 0.0f;
 
-/* text input received this frame only */
 static char g_text_input_buffer[64] = "";
 static int g_text_input_wanted = 0;
 static int g_text_input_suppressed = 0;
 
-/* control keys - each is 1 only on the first frame of the press */
 static int g_key_backspace = 0;
 static int g_key_delete    = 0;
 static int g_key_left      = 0;
@@ -114,7 +104,7 @@ static int g_key_up        = 0;
 static int g_key_down      = 0;
 static int g_key_tab       = 0;
 static int g_key_save      = 0;
-static int g_key_f         = 0; /* frame the selected node with the 3D editor camera */
+static int g_key_f         = 0;
 
 #if defined(__ANDROID__)
 #define REBAX_WINDOW_EXTRA_FLAGS SDL_WINDOW_FULLSCREEN_DESKTOP
@@ -175,12 +165,10 @@ static void begin_frame_area(void) {
 }
 
 void window_poll_events(void) {
-    /* delta time - difference between the current tick and the last frame, in seconds */
     Uint32 now_ticks = SDL_GetTicks();
     g_delta_time = (float)(now_ticks - g_last_frame_ticks) / 1000.0f;
     g_last_frame_ticks = now_ticks;
 
-    /* clear all 'for this frame only' states before reading new events */
     g_mouse_left_just_pressed = 0;
     g_mouse_right_just_pressed = 0;
     g_mouse_middle_just_pressed = 0;
@@ -304,8 +292,6 @@ void window_fill_rect(int x, int y, int w, int h,
     SDL_RenderFillRect(g_renderer, &rect);
 }
 
-/* The real definition of the opaque type declared in window.h - simply wraps
- * an SDL_Texture pointer without exposing SDL details outside this file */
 struct window_texture {
     SDL_Texture *sdl_texture;
 };
@@ -340,7 +326,7 @@ void window_draw_texture_tinted(window_texture_t *tex, int x, int y, int w, int 
     SDL_SetTextureColorMod(tex->sdl_texture, r, g, b);
     SDL_Rect dst = { x, y, w, h };
     SDL_RenderCopy(g_renderer, tex->sdl_texture, NULL, &dst);
-    SDL_SetTextureColorMod(tex->sdl_texture, 255, 255, 255); /* return to normal */
+    SDL_SetTextureColorMod(tex->sdl_texture, 255, 255, 255);
 }
 
 void window_draw_texture_region(window_texture_t *tex,
@@ -371,7 +357,6 @@ void window_draw_texture_region_rotated(window_texture_t *tex,
     if (tex == NULL) return;
     SDL_Rect src = { src_x, src_y, src_w, src_h };
     SDL_Rect dst = { dst_x, dst_y, dst_w, dst_h };
-    /* NULL = rotate around the target rectangle center automatically, without flipping */
     SDL_RenderCopyEx(g_renderer, tex->sdl_texture, &src, &dst,
                       angle_degrees, NULL, SDL_FLIP_NONE);
 }
@@ -440,10 +425,6 @@ int window_key_just_pressed_down(void)       { return g_key_down; }
 int window_key_just_pressed_tab(void)        { return g_key_tab; }
 int window_key_just_pressed_save(void)       { return g_key_save; }
 
-/* 'currently pressed' state for camera control keys - read directly from the live
- * keyboard state table that SDL updates itself (unlike the other keys above
- * which are captured from events only on press) - better for continuous movement
- * while held rather than a single press */
 int window_key_down_w(void) { return SDL_GetKeyboardState(NULL)[SDL_SCANCODE_W]; }
 int window_key_down_a(void) { return SDL_GetKeyboardState(NULL)[SDL_SCANCODE_A]; }
 int window_key_down_s(void) { return SDL_GetKeyboardState(NULL)[SDL_SCANCODE_S]; }

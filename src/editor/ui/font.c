@@ -13,20 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * font.c
- * ============================================================
- * Loads the bundled Space Grotesk fonts via stb_truetype, and renders any
- * requested text as an RGBA pixel image (text is white; the fourth channel
- * represents coverage/alpha - ready to be colored to any color at draw time).
- *
- * Note: currently supports only Latin text/numbers (ASCII) - support for
- * Arabic or other languages requires deeper UTF-8 handling and will be
- * added later if needed.
- * ============================================================
- */
-
 #include <stdlib.h>
 #include <string.h>
 
@@ -101,7 +87,6 @@ static font_text_image_t font_render_text_internal(const char *text, font_weight
 
     int len = (int)strlen(text);
 
-    /* First pass: compute total width by summing each glyph advance + kerning between pairs */
     int total_width = 0;
     for (int i = 0; i < len; i++) {
         int advance, lsb;
@@ -124,7 +109,6 @@ static font_text_image_t font_render_text_internal(const char *text, font_weight
         return out;
     }
 
-    /* Second pass: actually draw each glyph at its position into the final image */
     int pen_x = 0;
     for (int i = 0; i < len; i++) {
         int advance, lsb;
@@ -202,8 +186,5 @@ void font_free_text_image(font_text_image_t *img) {
 }
 
 void font_shutdown(void) {
-    /* No need to free any memory here - the font data are direct pointers into
-     * the executable's memory (embedded via objcopy), and not memory
-     * dynamically allocated by stb_truetype */
     g_initialized = 0;
 }

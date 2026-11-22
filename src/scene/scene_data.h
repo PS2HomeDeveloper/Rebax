@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* scene_data.h - live scene data and saving, independent of any rendering interface. */
 #ifndef SCENE_DATA_H
 #define SCENE_DATA_H
 
@@ -43,4 +42,4 @@ int scene_data_serialize(char *buffer, int buffer_size);
 int scene_data_deserialize(const char *buffer);
 void scene_data_shutdown(void);
 
-#endif /* SCENE_DATA_H */
+#endif

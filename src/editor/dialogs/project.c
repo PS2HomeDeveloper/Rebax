@@ -13,12 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * project_dialog.c
- * ============================================================
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +32,7 @@
 #include "editor/core/project_session.h"
 #include "editor/panels/scene_tabs.h"
 #include "editor/ui/loading_screen.h"
-#include "editor/panels/file_manager.h" /* Browse button opens the built-in file browser instead of relying on an external system dialog */
+#include "editor/panels/file_manager.h"
 #include "editor/ui/theme.h"
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
@@ -53,7 +47,6 @@
 #define TITLEBAR_HEIGHT 44
 #define CLOSE_BTN_SIZE 22
 
-/* Colors for the path validation message (green = valid, red = invalid) */
 static const unsigned char COLOR_VALID_R = 0x5C, COLOR_VALID_G = 0xB8, COLOR_VALID_B = 0x5C;
 static const unsigned char COLOR_INVALID_R = 0xD9, COLOR_INVALID_G = 0x5C, COLOR_INVALID_B = 0x5C;
 
@@ -63,7 +56,6 @@ static int g_ready = 0;
 static text_field_t g_name_field;
 static text_field_t g_path_field;
 
-/* Validation state of the entered path - updated every frame during typing */
 static int g_path_valid = 0;
 static int g_scene_switch_blocked = 0;
 static const char *g_create_error = NULL;
@@ -90,14 +82,11 @@ static int g_label_dev_w = 0, g_label_dev_h = 0;
 #define DEV_ROW_Y 320
 static const char *g_path_message = "";
 
-/* Cached image of the validation message - redrawn only if the message or its validity
- * actually changed from the last frame, not every frame */
 static window_texture_t *g_path_msg_tex = NULL;
 static const char *g_path_msg_cached_text = NULL;
 static int g_path_msg_cached_valid = -1;
 static int g_path_msg_w = 0, g_path_msg_h = 0;
 
-/* Pre-sized buttons (browse / cancel / create) - built once only when the dialog is first opened */
 static labeled_button_t  g_browse_btn;
 static labeled_button_t  g_cancel_btn;
 static labeled_button_t  g_create_btn;
@@ -108,7 +97,6 @@ static window_texture_t *g_cancel_txt_tex = NULL;
 static window_texture_t *g_create_btn_tex = NULL;
 static window_texture_t *g_create_txt_tex = NULL;
 
-/* Static text strings (title + field labels) */
 static window_texture_t *g_title_tex = NULL;
 static int g_title_w = 0, g_title_h = 0;
 static window_texture_t *g_label_name_tex = NULL;
@@ -167,7 +155,6 @@ int project_dialog_is_open(void) {
     return g_is_open;
 }
 
-/* Checks whether the entered path is valid to create a project in: must be an absolute path (starts with /), then walk backwards until finding the first path component that actually exists on disk, and verify we have write permission there (missing subfolders after that will be created during the actual creation, so they are not required now) */
 static int path_is_writable_ancestor(const char *path) {
     if (path == NULL || path[0] != '/') {
         return 0;
@@ -191,7 +178,6 @@ static int path_is_writable_ancestor(const char *path) {
     return access("/", W_OK) == 0;
 }
 
-/* Updates g_path_valid and g_path_message based on the current path field contents - called every frame while the dialog is open */
 static void update_path_validation(void) {
     if (strcmp(g_last_name, g_name_field.text) != 0 || strcmp(g_last_path, g_path_field.text) != 0) {
         g_create_error = NULL;
@@ -223,7 +209,6 @@ static void update_path_validation(void) {
     }
 }
 
-/* Called once by the file_manager when the folder chooser closes - either with the selected path (Select pressed), or NULL if the operation was canceled (Cancel or the X close button) - in that case we do not change the path field at all; it stays as it was before opening the browser */
 static void on_browse_result(const char *path, void *user_data) {
     (void)user_data;
     if (path == NULL) {
@@ -275,30 +260,25 @@ void project_dialog_update(int window_w, int window_h) {
     int name_field_y = dy + 80;
     int path_field_y = dy + 148;
 
-    /* The path field is slightly narrower to leave room for the Browse button beside it */
     int path_field_w = field_w - g_browse_btn.width - 8;
 
     text_field_update(&g_name_field, field_x, name_field_y, field_w, FIELD_HEIGHT, field_w);
     text_field_update(&g_path_field, field_x, path_field_y, path_field_w, FIELD_HEIGHT, path_field_w);
 
-    /* Centralized logic to enable/disable text input handling - only once, after both fields update their focused state. Call here only, not inside each field, to ensure correct ordering (no conflicting enable/disable calls at the exact moment of switching focus between fields). */
     if (g_name_field.focused || g_path_field.focused) {
         window_start_text_input();
     } else {
         window_stop_text_input();
     }
 
-    /* Path validity check is updated every frame (reflects any new typing immediately) */
     update_path_validation();
 
-    /* Browse button */
     int browse_x = field_x + path_field_w + 8;
     int browse_y = path_field_y;
     if (window_mouse_left_just_pressed()) {
         int mx = window_mouse_x(), my = window_mouse_y();
         if (mx >= browse_x && mx < browse_x + g_browse_btn.width
             && my >= browse_y && my < browse_y + g_browse_btn.height) {
-            /* Choose a folder from the whole filesystem - no extension filtering (meaningless when choosing a folder), result is delivered via on_browse_result */
             file_manager_open(FILE_MANAGER_ROOT_DEVICE, FILE_MANAGER_MODE_PICK_FOLDER,
                                 NULL, 0, on_browse_result, NULL);
         }
@@ -323,7 +303,6 @@ void project_dialog_update(int window_w, int window_h) {
     int cancel_x = create_x - 8 - g_cancel_btn.width;
     int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
 
-    /* Cancel button */
     if (window_mouse_left_just_pressed()) {
         int mx = window_mouse_x(), my = window_mouse_y();
         if (mx >= cancel_x && mx < cancel_x + g_cancel_btn.width
@@ -335,7 +314,6 @@ void project_dialog_update(int window_w, int window_h) {
         }
     }
 
-    /* Create button - enabled only when the name is not empty and the path is valid */
     if (window_mouse_left_just_pressed()) {
         int mx = window_mouse_x(), my = window_mouse_y();
         if (mx >= create_x && mx < create_x + g_create_btn.width
@@ -393,21 +371,18 @@ void project_dialog_draw(int window_w, int window_h) {
     int path_field_y = dy + 148;
     int path_field_w = field_w - g_browse_btn.width - 8;
 
-    /* Label "Project name" directly above its field */
     if (g_label_name_tex != NULL) {
         window_draw_texture(g_label_name_tex, field_x, name_field_y - g_label_name_h - 4,
                              g_label_name_w, g_label_name_h);
     }
     text_field_draw(&g_name_field, field_x, name_field_y, field_w, FIELD_HEIGHT, FIELD_FONT_SIZE);
 
-    /* Label "Project path" directly above its field */
     if (g_label_path_tex != NULL) {
         window_draw_texture(g_label_path_tex, field_x, path_field_y - g_label_path_h - 4,
                              g_label_path_w, g_label_path_h);
     }
     text_field_draw(&g_path_field, field_x, path_field_y, path_field_w, FIELD_HEIGHT, FIELD_FONT_SIZE);
 
-    /* Browse button next to the path field */
     int browse_x = field_x + path_field_w + 8;
     int browse_y = path_field_y;
     if (g_browse_btn_tex != NULL) {
@@ -439,7 +414,6 @@ void project_dialog_draw(int window_w, int window_h) {
                                        g_soon_w, g_soon_h, UI_RGB(UI_COLOR_WARNING));
     }
 
-    /* Path validation message - redrawn only if it actually changed */
     if (g_path_message != g_path_msg_cached_text || g_path_valid != g_path_msg_cached_valid) {
         if (g_path_msg_tex != NULL) {
             window_destroy_texture(g_path_msg_tex);
@@ -463,7 +437,6 @@ void project_dialog_draw(int window_w, int window_h) {
                                     g_path_msg_w, g_path_msg_h, cr, cg, cb);
     }
 
-    /* Cancel and Create buttons at the bottom of the dialog, right-aligned */
     int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
     int create_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_create_btn.width;
     int cancel_x = create_x - 8 - g_cancel_btn.width;

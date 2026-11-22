@@ -13,12 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * app_state.c
- * ============================================================
- */
-
 #include "core/app_state.h"
 
 static app_screen_t g_current_screen = APP_SCREEN_PROJECT_CENTER;

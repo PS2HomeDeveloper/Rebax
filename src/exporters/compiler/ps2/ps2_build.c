@@ -13,17 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * Direct PS2 toolchain driver.
- *
- * Replaces make and the ps2sdk Makefile.pref / Makefile.eeglobal /
- * Makefile.eeglobal_cpp / Makefile.iopglobal / Makefile.ioprp rule files.
- * Every command below is the one those rule files run, with the same flags and
- * in the same order. Nothing is written to disk except the build products.
- *
- * A build is a list of stages. Jobs inside one stage are independent and run in
- * parallel; the next stage starts when the whole stage has finished.
- */
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
@@ -90,8 +79,6 @@ static char g_sdk_standard[PS2_PATH];
 static char g_sdk_graphics[PS2_PATH];
 static char *g_saved_path;
 
-/* ---------- string builder ---------- */
-
 static void sb_init(sb_t *sb) {
     sb->cap = 256;
     sb->len = 0;
@@ -156,8 +143,6 @@ static void sb_argf(sb_t *sb, const char *fmt, const char *a) {
     sb_arg(sb, buf);
 }
 
-/* ---------- variable expansion for flag lines ($(NAME) and ${NAME}) ---------- */
-
 static const char *variable_value(const char *name) {
     if (strcmp(name, "GCC_PS2") == 0 || strcmp(name, "PS2DEV") == 0) return g_toolchain;
     if (strcmp(name, "SDK_STANDARD") == 0 || strcmp(name, "PS2SDK") == 0) return g_sdk_standard;
@@ -220,8 +205,6 @@ static void sb_flag_list(sb_t *sb, const char *const *list, int count) {
     for (int i = 0; i < count; i++) sb_flag_line(sb, list[i]);
 }
 
-/* ---------- tool paths (gcc-ps2/<ee|iop|dvp>/bin/<prefix><name>) ---------- */
-
 #if defined(_WIN32)
 #define PS2_EXE_SUFFIX ".exe"
 #else
@@ -244,8 +227,6 @@ static int require_directory(const char *path, const char *what) {
     log_push(path);
     return 0;
 }
-
-/* ---------- stages and jobs ---------- */
 
 static void stages_free(void) {
     for (int s = 0; s < g_stage_count; s++) {
@@ -285,8 +266,6 @@ static int stage_add(int stage, const char *label, sb_t *command) {
     s->count++;
     return 1;
 }
-
-/* ---------- source discovery ---------- */
 
 static int has_suffix(const char *name, const char *suffix) {
     size_t n = strlen(name), s = strlen(suffix);
@@ -380,8 +359,6 @@ static void ensure_parent_directory(const char *file_path) {
     rebax_fs_mkdir_p(dir);
 }
 
-/* ---------- environment (PATH only) ---------- */
-
 static void set_env(const char *name, const char *value) {
 #if defined(_WIN32)
     _putenv_s(name, value);
@@ -407,8 +384,6 @@ static void setup_environment(const ps2_build_config_t *cfg) {
     set_env("PATH", path);
     free(path);
 }
-
-/* ---------- EE targets (Makefile.eeglobal / Makefile.eeglobal_cpp) ---------- */
 
 typedef struct {
     char cc[PS2_PATH], cxx[PS2_PATH], as[PS2_PATH], ar[PS2_PATH], strip[PS2_PATH];
@@ -672,8 +647,6 @@ static int plan_ee(const ps2_build_config_t *cfg) {
     return ok;
 }
 
-/* ---------- IOP targets (Makefile.iopglobal / Makefile.ioprp) ---------- */
-
 static int capture_line(const char *command, char *out, size_t size) {
     out[0] = '\0';
     sb_t cmd;
@@ -929,8 +902,6 @@ static int plan_iop(const ps2_build_config_t *cfg) {
     sources_free(sources, source_count);
     return ok;
 }
-
-/* ---------- running ---------- */
 
 static int detect_parallel_jobs(int requested) {
     int n = requested;

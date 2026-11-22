@@ -13,12 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * text_field.c
- * ============================================================
- */
-
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,10 +20,8 @@
 #include "platform/common/window.h"
 #include "editor/ui/shape_provider.h"
 #include "editor/ui/font.h"
-#include "editor/ui/theme.h" /* For UI_COLOR_GRAY_MUTED */
+#include "editor/ui/theme.h"
 
-/* Corner radius for the text field - intentionally larger than the button's
- * (a text field is wide and flat, so a larger radius gives a clearer curve) */
 #define TEXT_FIELD_CORNER_RADIUS 8
 
 void text_field_init(text_field_t *field) {
@@ -60,8 +52,6 @@ void text_field_free(text_field_t *field) {
     field->_cache_valid = 0;
 }
 
-/* Computes the pixel width of text from the start up to a given character
- * position - used to calculate cursor position and required scrolling */
 static int measure_text_width_upto(const char *text, int upto_chars, int pixel_size) {
     if (upto_chars <= 0) {
         return 0;
@@ -80,12 +70,6 @@ static int measure_text_width_upto(const char *text, int upto_chars, int pixel_s
 
 void text_field_update(text_field_t *field, int x, int y, int w, int h,
                         int field_width) {
-    /* Toggle the field's active state based on mouse click position - we only
-     * change the focused flag here, without directly calling text input
-     * activation/deactivation (window_start/stop_text_input) - the final
-     * decision is made centrally by the caller (project_dialog.c) after
-     * all fields update their state, to avoid conflicting start/stop calls
-     * in the same frame when focus moves between fields. */
     if (window_mouse_left_just_pressed()) {
         int mx = window_mouse_x();
         int my = window_mouse_y();
@@ -103,12 +87,10 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
 
     int len = (int)strlen(field->text);
 
-    /* Insert new characters */
     const char *typed = window_text_input_this_frame();
     if (typed[0] != '\0') {
         int typed_len = (int)strlen(typed);
         if (len + typed_len < TEXT_FIELD_MAX_LEN - 1) {
-            /* Insert typed text at the current cursor position */
             memmove(field->text + field->cursor_pos + typed_len,
                     field->text + field->cursor_pos,
                     (size_t)(len - field->cursor_pos + 1));
@@ -118,7 +100,6 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
         }
     }
 
-    /* Delete character before the cursor */
     if (window_key_just_pressed_backspace() && field->cursor_pos > 0) {
         memmove(field->text + field->cursor_pos - 1,
                 field->text + field->cursor_pos,
@@ -127,7 +108,6 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
         len--;
     }
 
-    /* Delete character after the cursor */
     if (window_key_just_pressed_delete() && field->cursor_pos < len) {
         memmove(field->text + field->cursor_pos,
                 field->text + field->cursor_pos + 1,
@@ -135,7 +115,6 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
         len--;
     }
 
-    /* Cursor navigation */
     if (window_key_just_pressed_left() && field->cursor_pos > 0) {
         field->cursor_pos--;
     }
@@ -149,7 +128,6 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
         field->cursor_pos = len;
     }
 
-    /* Copy/Cut/Paste - operate on the whole text (no partial mouse selection yet) */
     if (window_key_just_pressed_copy() || window_key_just_pressed_cut()) {
         window_set_clipboard_text(field->text);
         if (window_key_just_pressed_cut()) {
@@ -171,8 +149,6 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
         }
     }
 
-    /* Automatic horizontal scrolling: ensure the cursor position is always
-     * visible within the field bounds */
     int padding = 8;
     int cursor_px = measure_text_width_upto(field->text, field->cursor_pos, 14);
     int visible_w = field_width - padding * 2;
@@ -190,8 +166,6 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
 
 void text_field_draw(text_field_t *field, int x, int y, int w, int h,
                       int font_pixel_size) {
-    /* Background: re-rendered only when size changes (or first time) - the
-     * field color and corner radius are constant, no need to recompute every frame */
     if (!field->_cache_valid || field->_cache_w != w || field->_cache_h != h) {
         if (field->_cache_bg_tex != NULL) {
             window_destroy_texture((window_texture_t *)field->_cache_bg_tex);
@@ -211,8 +185,6 @@ void text_field_draw(text_field_t *field, int x, int y, int w, int h,
         window_draw_texture((window_texture_t *)field->_cache_bg_tex, x, y, w, h);
     }
 
-    /* Text: re-rendered only if its content actually changed since the last draw -
-     * this is the most performance-critical part, since it changes on every keypress, not every frame */
     if (strcmp(field->text, field->_cache_text) != 0) {
         if (field->_cache_text_tex != NULL) {
             window_destroy_texture((window_texture_t *)field->_cache_text_tex);
@@ -234,9 +206,6 @@ void text_field_draw(text_field_t *field, int x, int y, int w, int h,
         field->_cache_text[TEXT_FIELD_MAX_LEN - 1] = '\0';
     }
 
-    /* Text - clipped at the field bounds so overflow doesn't show outside.
-     * Use dimensions stored from the last actual generation - no re-measure
-     * or extra drawing here */
     if (field->_cache_text_tex != NULL) {
         int padding = 8;
         window_set_clip_rect(x, y, w, h);

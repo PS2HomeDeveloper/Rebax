@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-
 #define _POSIX_C_SOURCE 200809L
 
 #include "exporters/compiler/modern/modern_internal.h"

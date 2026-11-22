@@ -13,14 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * current_scene.c
- * ============================================================
- * See current_scene.h for full documentation.
- * ============================================================
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,13 +23,9 @@
 #include "scene/scene_data.h"
 #include "editor/panels/properties.h"
 
-/* Maximum size for exported scene text in bytes - more than sufficient for
- * realistic scenes today (tens-hundreds of nodes). If the project later
- * needs much larger scenes, the solution is to change the line below to a
- * loop that grows progressively instead of a fixed number - not needed now */
 #define SCENE_BUFFER_MAX (256 * 1024)
 
-static char g_path[1024] = "";      /* Empty = the scene has not been saved yet */
+static char g_path[1024] = "";
 static int g_dirty = 0;
 static char g_display_name_buf[128] = "empty";
 
@@ -62,9 +50,6 @@ void current_scene_mark_dirty(void) {
     g_dirty = 1;
 }
 
-/* Extracts the filename without its path or extension (example:
- * "/a/b/Player.rscene" → "Player") - to display the saved scene name on
- * the tab without excessive length */
 static void extract_basename_no_ext(const char *path, char *out, size_t out_size) {
     const char *slash = strrchr(path, '/');
     const char *name_start = (slash != NULL) ? (slash + 1) : path;
@@ -100,7 +85,7 @@ int current_scene_save_as(const char *path) {
     static char buffer[SCENE_BUFFER_MAX];
 
     int written = scene_data_serialize(buffer, sizeof(buffer));
-    if (written < 0) return 0; /* Scene is larger than SCENE_BUFFER_MAX, or format error */
+    if (written < 0) return 0;
 
     if (!rebax_fs_write_atomic(path, buffer, (size_t)written)) return 0;
 
@@ -112,7 +97,7 @@ int current_scene_save_as(const char *path) {
 }
 
 int current_scene_save(void) {
-    if (g_path[0] == '\0') return 0; /* Not named a path yet - use save_as */
+    if (g_path[0] == '\0') return 0;
     return current_scene_save_as(g_path);
 }
 

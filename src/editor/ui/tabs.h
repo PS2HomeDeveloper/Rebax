@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* tabs.h - general tabs with selection, hover and optional close button. */
 #ifndef UI_TABS_H
 #define UI_TABS_H
 
@@ -66,4 +65,4 @@ void ui_tabs_update(ui_tabs_t *tabs, int x, int y, int w);
 void ui_tabs_draw(const ui_tabs_t *tabs, int x, int y, int w);
 void ui_tabs_shutdown(ui_tabs_t *tabs);
 
-#endif /* UI_TABS_H */
+#endif

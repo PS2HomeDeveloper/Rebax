@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Internal exporter contract. Keep this header private to exporter modules. */
 #ifndef REBAX_EXPORT_INTERNAL_H
 #define REBAX_EXPORT_INTERNAL_H
 

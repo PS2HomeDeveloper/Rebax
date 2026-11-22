@@ -13,12 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * labeled_button.c
- * ============================================================
- */
-
 #include <stddef.h>
 
 #include "editor/ui/labeled_button.h"

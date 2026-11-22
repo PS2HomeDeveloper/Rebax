@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-
 #ifndef REBAX_MODERN_INTERNAL_H
 #define REBAX_MODERN_INTERNAL_H
 

@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* 2D editor camera, expandable virtual-world scrollbars, and transform gizmos. */
 #include "editor/ui/theme.h"
 #include <stdlib.h>
 #include <math.h>

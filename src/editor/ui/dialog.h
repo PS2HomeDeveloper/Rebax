@@ -28,4 +28,4 @@ void ui_dialog_draw_close_button(int x, int y, int size);
 int ui_dialog_close_button_hit(int mouse_x, int mouse_y, int x, int y, int size);
 void ui_dialog_shutdown(void);
 
-#endif /* UI_DIALOG_H */
+#endif

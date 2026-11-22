@@ -13,44 +13,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * image_loader.c (nodes_editor)
- * ============================================================
- * See image_loader.h for full design documentation.
- *
- * TIM2 runtime note: pixel data is read here in direct linear
- * (raster) order — this assumes the .tm2 files used by the project
- * were produced **without** the --swizzle option of ps2_tim2_tool.py (the
- * same assumption used in the PS2 copy src/nodes/image_loader.c, and the
- * the same assumption as the tool's official extract_tm2 function — see the
- * ps2_tim2_tool.py comment on --swizzle: "Use only if the project's loader
- * expects pre-ordered data", and our engine does not expect that).
- *
- * However, 8-bit indexed image CLUTs (unlike pixel data) are **always**
- * stored in CSM1 order regardless of --swizzle (mandatory in the tool —
- * see the official convert_8bit comment: "CLUT Swizzle required for PS2") —
- * they must be reordered here before use. This reordering is self-inverse
- * (the same function is used for encoding and decoding — verified against
- * the tool's official _unswizzle_clut8: the exact same swap table [0,2,1,3]).
- * 4-bit image CLUTs do not need reordering (the tool documents this
- * explicitly: "16 colors, no Swizzle needed").
- * ============================================================
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <strings.h> /* strcasecmp */
+#include <strings.h>
 
 #include "filesystem/path_utils.h"
 #include "formats/image_decoder.h"
 #include "formats/tim/tim_codec.h"
-#include "stb_image.h" /* No STB_IMAGE_IMPLEMENTATION here - icon_atlas.c defines it once for the whole project */
+#include "stb_image.h"
 
-/* PSM constants (same real GS_PSM_* values from ps2sdk, copied here by name
- * only - this is a normal aarch64 file, it cannot include gsKit.h at all) */
 #define PSM_32   0x00
 #define PSM_24   0x01
 #define PSM_16   0x02
@@ -73,20 +46,12 @@ static unsigned long long read_u64le(const unsigned char *p) {
     return lo | (hi << 32);
 }
 
-/* round(ps2_alpha * 255 / 128) clamped to 255 - opposite the tool's
- * official ps2_alpha function exactly (raw*128/255 in the reverse direction) */
 static unsigned char unscale_ps2_alpha(unsigned char ps2_alpha_val) {
-    int a = (int)((ps2_alpha_val * 255 + 64) / 128); /* +64 for rounding to the nearest integer */
+    int a = (int)((ps2_alpha_val * 255 + 64) / 128);
     if (a > 255) a = 255;
     return (unsigned char)a;
 }
 
-/* Unpack 5551 (A1 B5 G5 R5 order - same comment as image_loader.h
- * above). Expand 5-bit to 8-bit by bit replication (r5<<3)|(r5>>2) - the
- * same literal formula used in both ps2_tim2_tool.py and ps1_tim_tool.py
- * (verified in the source: r = (r5 << 3) | (r5 >> 2)) — not the proportional
- * round(r5*255/31); the two can differ by 1 sometimes
- * (example: r5=24 → bit-replication=198, proportional=197) */
 static void unpack_5551(unsigned short val, unsigned char *out_rgba) {
     unsigned int r5 = val & 0x1F;
     unsigned int g5 = (val >> 5) & 0x1F;
@@ -99,9 +64,6 @@ static void unpack_5551(unsigned short val, unsigned char *out_rgba) {
     out_rgba[3] = a1 ? 255 : 0;
 }
 
-/* The same official clut8_swizzle from the tool exactly - self-inverse (the
- * same function for encode and decode; verified against the official _unswizzle_clut8:
- * the swap table [0,2,1,3] matches) - used here for decoding only */
 static void unswizzle_clut8(const unsigned char *in_rgba256, unsigned char *out_rgba256) {
     static const int stripe_map[4] = { 0, 2, 1, 3 };
     for (int i = 0; i < 256; i++) {
@@ -163,7 +125,7 @@ static unsigned char *load_raw(const char *path, int width, int height, int psm)
         }
         free(raw);
     } else {
-        ok = 0; /* Indexed formats (T4/T8) are not supported for RAW - see header comment */
+        ok = 0;
     }
 
     fclose(f);
@@ -231,8 +193,6 @@ static unsigned char *load_tim2(const char *path, int *out_width, int *out_heigh
             unpack_5551(val, out + i * 4);
         }
     } else if (psm == PSM_T8) {
-        /* CLUT stored as RGBA32 (256 colors, 4 bytes per color) - alpha in PS2 scale
-         * (see unscale_ps2_alpha) - CSM1 ordering must be unswizzled first */
         unsigned char palette_raw[256 * 4];
         unsigned char palette[256 * 4];
         memcpy(palette_raw, clut_data, 256 * 4);
@@ -245,7 +205,6 @@ static unsigned char *load_tim2(const char *path, int *out_width, int *out_heigh
             memcpy(out + i * 4, palette + (size_t)idx * 4, 4);
         }
     } else if (psm == PSM_T4) {
-        /* CLUT 16-color RGBA32 - no special ordering (see header comment) */
         unsigned char palette[16 * 4];
         memcpy(palette, clut_data, 16 * 4);
         for (int i = 0; i < 16; i++) {
@@ -269,7 +228,6 @@ static unsigned char *load_tim2(const char *path, int *out_width, int *out_heigh
     return out;
 }
 
-/* PS1 format constants (same as ps1_tim_tool.py) */
 #define TIM_ID              0x00000010
 #define TIM_CF_CLUT_PRESENT 0x8
 #define TIM_PMODE_4BIT      0
@@ -347,8 +305,6 @@ static unsigned char *load_tim(const char *path, int *out_width, int *out_height
             out[i * 4 + 3] = 255;
         }
     } else if ((pmode == TIM_PMODE_8BIT || pmode == TIM_PMODE_4BIT) && has_clut) {
-        /* Raw 5551 CLUT format (no special ordering - PS1 doesn't have this
-         * concept at all, unlike 8-bit CLUTs in TIM2/PS2) */
         unsigned int palette_count = (pmode == TIM_PMODE_8BIT) ? 256u : 16u;
         if (clut_colors_count < palette_count) { ok = 0; }
         else {
@@ -404,5 +360,5 @@ unsigned char *image_loader_editor_load(const char *path, int *out_width, int *o
         return NULL;
     }
 
-    return NULL; /* Unsupported format (GIF or anything else) */
+    return NULL;
 }

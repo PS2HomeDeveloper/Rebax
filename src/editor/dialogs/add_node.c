@@ -13,12 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * add_node_dialog.c
- * ============================================================
- */
-
 #include <string.h>
 #include <stddef.h>
 
@@ -62,8 +56,6 @@ static int g_title_w = 0, g_title_h = 0;
 static window_texture_t *g_hover_tex = NULL;
 static window_texture_t *g_selected_tex = NULL;
 
-/* Node type names drawn once at startup - read from node_registry automatically,
- * no hardcoded manual list */
 static window_texture_t *g_name_tex[MAX_NODE_TYPES];
 static int g_name_w[MAX_NODE_TYPES], g_name_h[MAX_NODE_TYPES];
 
@@ -175,7 +167,6 @@ void add_node_dialog_update(int window_w, int window_h) {
             g_is_open = 0;
             window_stop_text_input();
         } else if (!inside_dialog && !g_search_field.focused) {
-            /* Nothing - leave the window open */
         }
     }
 

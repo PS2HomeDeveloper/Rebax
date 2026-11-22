@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Editor layout: resizable areas, and tabs shared across panels. */
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,7 +92,6 @@ static splitter_id_t g_hovered_splitter = SPLITTER_NONE;
 static editor_camera_mode_t g_camera_mode = EDITOR_CAMERA_MODE_3D;
 static camera_tab_t g_camera_tab = CAMERA_TAB_3D;
 
-/* Assumptions match the previous interface exactly. */
 static panel_region_t g_panel_region[PANEL_COUNT] = {
     PANEL_REGION_LEFT_TOP, PANEL_REGION_LEFT_BOTTOM, PANEL_REGION_RIGHT_TOP
 };
@@ -275,7 +273,6 @@ static void move_panel_to(editor_panel_t panel, panel_region_t target) {
 }
 
 static void panel_move_choice_rect(panel_region_t region, int dx, int dy, workspace_rect_t *out) {
-    /* Six equal cells: the upper-middle and lower-middle are the Viewport area. */
     const int cell_w = 112;
     const int cell_h = 56;
     const int gap = 8;
@@ -322,7 +319,6 @@ static void draw_move_dialog(int window_w, int window_h) {
                                 dy + (PANEL_MOVE_TITLEBAR - PANEL_MOVE_CLOSE_SIZE) / 2,
                                 PANEL_MOVE_CLOSE_SIZE);
 
-    /* Interface representation: six equal cells (3×2). The center is black because it's the Viewport. */
     const int cell_w = 112;
     const int cell_h = 56;
     const int gap = 8;
@@ -569,7 +565,6 @@ void editor_workspace_draw(int window_w, int window_h) {
     ui_layout_draw_splitter(right_x, col_top + g_right_split_y - SPLITTER_THICKNESS / 2, g_right_width, SPLITTER_THICKNESS, splitter_visual(SPLITTER_RIGHT_INNER));
     ui_layout_draw_splitter(center_x, col_top + camera_h - SPLITTER_THICKNESS / 2, center_w, SPLITTER_THICKNESS, splitter_visual(SPLITTER_CAMERA_BOTTOM));
 
-    /* Fixed status bar at the bottom of the editor showing the open project and its path. */
     const char *project_path = current_project_get_path();
     char status[800];
     if (project_path) {

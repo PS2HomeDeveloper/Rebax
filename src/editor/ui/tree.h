@@ -13,10 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * tree.h - generic UI tree: rendering, selection, hover and scrolling.
- * The panel passes only the row data; their meaning and logic remain outside the library.
- */
 #ifndef UI_TREE_H
 #define UI_TREE_H
 
@@ -31,7 +27,7 @@
 typedef struct {
     const char *name;
     int icon_id;
-    window_texture_t *thumbnail_tex; /* borrowed; owner releases it after set_items is no longer drawn */
+    window_texture_t *thumbnail_tex;
     int depth;
     int has_children;
     int expanded;
@@ -43,7 +39,7 @@ typedef struct {
     int row_pad;
     int indent_step;
     int arrow_icon_gap;
-    int highlight_indented; /* 1: starts at the arrow, 0: covers the row width. */
+    int highlight_indented;
     int highlight_radius;
     int font_pixel_size;
 } ui_tree_style_t;
@@ -84,4 +80,4 @@ void ui_tree_update(ui_tree_t *tree, int x, int y, int w, int h);
 void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h);
 void ui_tree_shutdown(ui_tree_t *tree);
 
-#endif /* UI_TREE_H */
+#endif

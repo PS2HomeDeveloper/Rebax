@@ -13,22 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * properties_panel.c
- * ============================================================
- * Values displayed and edited here are live - each edit field is directly
- * bound to the actual node instance memory in the scene tree (via
- * scene_data_get_values), with no intermediate display copy. Edits here
- * immediately affect the same data the viewport renders from.
- *
- * A STRING property marked is_asset_path=1 (like "Image Path" in Sprite2D)
- * is shown as a "Browse" button instead of a free text field - it opens
- * the file_manager scoped to the project's Assets:// and writes the
- * selected path directly into the real node memory on confirmation.
- * ============================================================
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,10 +33,9 @@
 #define ROW_HEIGHT      26
 #define HEADER_HEIGHT   32
 #define ROW_PAD          8
-#define FIELD_WIDTH     90 /* Display the value field/button, aligned to the right edge */
-#define FIELD_VPAD       3 /* Vertical margin between the field and its row bounds */
+#define FIELD_WIDTH     90
+#define FIELD_VPAD       3
 
-/* Accepted extensions for any is_asset_path property currently - the same formats that the real src/nodes/sprite2d.c can actually load (via the shared image_loader.h - see that file's comment): PNG/JPEG/BMP/TGA/TIFF via gsKit/stb_image directly, and RAW/TIM2/TIM via our own decoder - intentionally excluding GIF because it's not supported at all (naming trap, see previous discussion) */
 static const char *g_image_extensions[] = { "png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "raw", "tm2", "tim2", "tim" };
 #define IMAGE_EXTENSION_COUNT 11
 
@@ -62,14 +45,12 @@ typedef struct {
     text_field_t field;
     node_property_type_t type;
     int is_asset_path;
-    int hovered; /* For the Browse button only - hover visual feedback */
+    int hovered;
 
-    /* Text for the Browse button (short file name or "Browse...") - built once in rebuild_rows, not every draw frame (unlike creating it during rendering, which would create a new texture every frame unnecessarily) */
     window_texture_t *value_tex;
     int value_w, value_h;
 } property_row_t;
 
-/* Small context passed to file_manager_open when the Browse button is pressed - allocated on press and freed inside on_asset_picked regardless of the result (real selection or cancel) */
 typedef struct {
     int node_index;
     int property_index;
@@ -95,9 +76,6 @@ static void free_rows(void) {
     g_scroll_offset = 0;
 }
 
-/* Rebuilds all property rows (label + edit field/browse button, initialized with the actual
- * current value) - called when the selection changes, or after choosing a new file via the
- * browse button (to update the button text immediately) */
 static void rebuild_rows(void) {
     free_rows();
 
@@ -145,9 +123,6 @@ static void rebuild_rows(void) {
 
         text_field_init(&row->field);
 
-        /* The initial value = the node's exact current real value, not the type-scheme default. For an
-         * is_asset_path property we store only the short filename in the same field (for display on the button) -
-         * the real full path remains in values[i].s alone; this field is just a visual display, not the source of truth */
         switch (prop->type) {
             case NODE_PROPERTY_TYPE_FLOAT:
                 snprintf(row->field.text, TEXT_FIELD_MAX_LEN, "%.3f", values[i].f);
@@ -167,8 +142,6 @@ static void rebuild_rows(void) {
         }
         row->field.cursor_pos = (int)strlen(row->field.text);
 
-        /* Button text texture - built only once here for is_asset_path buttons
-         * (unlike regular text fields where the text_field draws itself from its live text each frame) */
         if (row->is_asset_path) {
             font_text_image_t value_txt = font_render_text(row->field.text, FONT_WEIGHT_REGULAR, 12);
             if (value_txt.pixels != NULL) {
@@ -199,7 +172,6 @@ void properties_panel_clear_selection(void) {
     }
 }
 
-/* File selection callback from file_manager - called once when the window is closed (either with an actual selection or cancel) */
 static void on_asset_picked(const char *picked_path, void *user_data) {
     asset_pick_context_t *ctx = (asset_pick_context_t *)user_data;
 
@@ -209,7 +181,7 @@ static void on_asset_picked(const char *picked_path, void *user_data) {
             free(values[ctx->property_index].s);
             values[ctx->property_index].s = strdup(picked_path);
             current_scene_mark_dirty();
-            rebuild_rows(); /* Updates the button text to immediately show the new filename */
+            rebuild_rows();
         }
     }
 
@@ -242,7 +214,6 @@ void properties_panel_update(int x, int y, int w, int h) {
         int field_y = row_y + FIELD_VPAD;
 
         if (g_rows[i].is_asset_path) {
-            /* Browse button - no free text entry, just hover/click */
             g_rows[i].hovered = (mx >= field_x && mx < field_x + field_w &&
                                  my >= field_y && my < field_y + field_h);
 
@@ -254,7 +225,7 @@ void properties_panel_update(int x, int y, int w, int h) {
                                     g_image_extensions, IMAGE_EXTENSION_COUNT,
                                     on_asset_picked, ctx);
             }
-            continue; /* No text_field_update or manual value entry - the value is written only from on_asset_picked */
+            continue;
         }
 
         char previous_text[TEXT_FIELD_MAX_LEN];

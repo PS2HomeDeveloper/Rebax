@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Direct PS2 toolchain driver. Plans and runs compiler/linker commands without make. */
 #ifndef REBAX_PS2_BUILD_H
 #define REBAX_PS2_BUILD_H
 

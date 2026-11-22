@@ -13,17 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * close_scene_dialog.c
- * ============================================================
- * See close_scene_dialog.h for full documentation. A very simple dialog -
- * title + one line message + three buttons (Save in the accent blue, Don't
- * Save and Cancel in unified gray) - same style as the existing popup in
- * file_manager.c (dimmed backdrop + centered panel).
- * ============================================================
- */
-
 #include <stddef.h>
 
 #include "editor/dialogs/close_scene.h"
@@ -87,9 +76,6 @@ void close_scene_dialog_open(int tab_index) {
 int close_scene_dialog_is_open(void) { return g_is_open; }
 int close_scene_dialog_get_tab_index(void) { return g_tab_index; }
 
-/* Three buttons laid out right-to-left (Cancel at the far right, like a
- * standard confirmation dialog) - we compute their positions here and reuse
- * them for rendering */
 static void compute_button_positions(int dx, int dy, int *cancel_x, int *dont_save_x, int *save_x, int *buttons_y) {
     *buttons_y = dy + DIALOG_HEIGHT - 16 - BUTTON_ROW_H;
     *cancel_x = dx + DIALOG_WIDTH - 16 - g_btn_cancel.width;

@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Project C/C++ source collection for native exports. */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

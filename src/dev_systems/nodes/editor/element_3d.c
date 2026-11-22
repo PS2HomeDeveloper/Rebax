@@ -13,16 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * element_3d.c (nodes_editor)
- * ============================================================
- * Visual representation of Element3D in the editor - the exact same idea as element_2d.c, but via viewport_3d_project (3 coordinates, and checking "in front of the camera" before drawing).
- *
- * The order [0]=Position X, [1]=Position Y, [2]=Position Z is fixed here for the same reason as in element_2d.c - this file itself is the source of the property order for Element3D.
- * ============================================================
- */
-
 #include "editor/ui/theme.h"
 #include "dev_systems/nodes/editor/node_editor_interface.h"
 #include "editor/viewport/3d.h"
@@ -33,12 +23,12 @@
 
 void element3d_editor_draw(const node_property_value_t *values, int property_count,
                             int cam_x, int cam_y, int cam_w, int cam_h, int selected) {
-    if (property_count < 3) return; /* Position X, Y and Z */
+    if (property_count < 3) return;
 
     int sx, sy;
     if (!viewport_3d_project(values[0].f, values[1].f, values[2].f,
                               cam_x, cam_y, cam_w, cam_h, &sx, &sy)) {
-        return; /* Behind the camera - not drawable */
+        return;
     }
 
     window_fill_rect(sx - MARKER_HALF, sy - MARKER_HALF, MARKER_HALF * 2, MARKER_HALF * 2, UI_RGB(UI_COLOR_TEXT_PRIMARY));

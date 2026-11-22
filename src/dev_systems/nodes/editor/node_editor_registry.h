@@ -33,13 +33,10 @@
 
 typedef struct {
     node_type_t type;
-    node_editor_draw_2d_fn draw_2d; /* NULL if the type is not 2D or has no visual representation yet */
-    node_editor_draw_3d_fn draw_3d; /* NULL if the type is not 3D or has no visual representation yet */
+    node_editor_draw_2d_fn draw_2d;
+    node_editor_draw_3d_fn draw_3d;
 } node_editor_registry_entry_t;
 
-/* Returns the draw functions for a given node type. NULL if the type is not registered here
- * at all (normal - i.e. no custom visual representation yet; the viewport
- * safely ignores it) */
 const node_editor_registry_entry_t *node_editor_registry_get(node_type_t type);
 
-#endif /* NODE_EDITOR_REGISTRY_H */
+#endif

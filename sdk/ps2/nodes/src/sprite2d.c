@@ -44,31 +44,21 @@
 #include "engine_context.h"
 #include "embedded_images.h"
 
-/* gsKit_texture_finish is not declared in any public gsKit header (internal
- * extern only inside gsToolkit.c) - same manual declaration used by any
- * professional PS2 project that uploads a raw texture ready for VRAM directly
- * without decoding any compressed format (instead of relying on gsKit_texture_png/jpeg/...
- * which would pull full external decoding libraries unnecessarily) */
 extern int gsKit_texture_finish(GSGLOBAL *gsGlobal, GSTEXTURE *Texture);
 
-/* The real Sprite2D data - this is the structure that instance_size bytes
- * actually allocate when the scene is loaded, and offsetof() below points to
- * its exact fields. texture/texture_loaded are internal state only - not
- * properties editable from the properties panel, so they are not included
- * in the sprite2d_properties or sprite2d_property_offsets arrays below. */
 typedef struct {
     float position_x;
     float position_y;
-    float rotation;   /* Rotation in radians around image center */
+    float rotation;
     float scale_x;
     float scale_y;
-    const char *image_path; /* Exact same text as in the properties panel - lookup key for embedded_image_find */
-    int raw_width;          /* RAW dimensions when using a file without a header */
+    const char *image_path;
+    int raw_width;
     int raw_height;
-    int raw_format;         /* GS PSM value when using RAW */
+    int raw_format;
 
     GSTEXTURE texture;
-    int texture_loaded; /* 0 = not yet loaded (or image not embedded at all) */
+    int texture_loaded;
 } sprite2d_instance_t;
 
 static void sprite2d_init(void *self) {
@@ -77,15 +67,12 @@ static void sprite2d_init(void *self) {
     inst->texture_loaded = 0;
 }
 
-/* Loads the texture from the image embedded in the executable itself - lazy
- * (on first draw only) to ensure all properties are actually written from the
- * loaded scene before any load attempt */
 static void sprite2d_load_texture(sprite2d_instance_t *inst) {
     if (inst->texture_loaded) return;
     if (inst->image_path == NULL || inst->image_path[0] == '\0') return;
 
     const embedded_image_t *img = embedded_image_find(inst->image_path);
-    if (img == NULL) return; /* Not embedded (conversion failed at export, or invalid path) */
+    if (img == NULL) return;
 
     GSGLOBAL *gsGlobal = engine_get_gs_global();
 
@@ -119,10 +106,6 @@ static void sprite2d_draw(void *self) {
     float half_w = ((float)inst->texture.Width  * inst->scale_x) / 2.0f;
     float half_h = ((float)inst->texture.Height * inst->scale_y) / 2.0f;
 
-    /* (0,0) is the image center as the editor sees it. We transform the rectangle
-     * corners around this center and then use gsKit's official textured quad API
-     * instead of approximating or ignoring rotation. Vertex order preserves UV order:
-     * top-left, top-right, bottom-left, bottom-right. */
     float c = cosf(inst->rotation);
     float s = sinf(inst->rotation);
     float local_x[4] = { -half_w, half_w, -half_w, half_w };
@@ -146,9 +129,6 @@ static void sprite2d_destroy(void *self) {
         free(inst->texture.Mem);
         inst->texture.Mem = NULL;
     }
-    /* Note: freeing VRAM itself (inst->texture.Vram) requires gsKit_vram_clear
-     * or a full engine-level VRAM manager (to reuse space for another node) -
-     * a separate next step at the scene loader level, not in this file specifically */
 }
 
 static const node_property_t sprite2d_properties[] = {
@@ -163,8 +143,6 @@ static const node_property_t sprite2d_properties[] = {
     { "Raw Format",  NODE_PROPERTY_TYPE_INT,    { .i = 0 },     0 }
 };
 
-/* Exact byte offsets of each property in sprite2d_instance_t memory - in the
- * exact same order as sprite2d_properties above */
 static const size_t sprite2d_property_offsets[] = {
     offsetof(sprite2d_instance_t, position_x),
     offsetof(sprite2d_instance_t, position_y),
@@ -189,5 +167,3 @@ const node_interface_t sprite2d_interface = {
 };
 
 /* @NODE type=NODE_TYPE_SPRITE_2D name=Sprite2D icon=sprite2d properties=sprite2d_properties */
-/* The declaration above is the sole source that defines Sprite2D to the editor -
- * it must remain the last line in the file. */

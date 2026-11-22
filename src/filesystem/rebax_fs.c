@@ -13,17 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * rebax_fs.c
- * ============================================================
- * See rebax_fs.h for full documentation. Every function here has two branches: POSIX
- * (Linux/Android/macOS in the future) and real Win32 (#ifdef _WIN32) -
- * no calls to system()/popen() to invoke an external shell command anywhere in this
- * file, only direct operating system calls.
- * ============================================================
- */
-
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
@@ -43,9 +32,6 @@
 #include <errno.h>
 #endif
 
-/* ------------------------------------------------------------
- * Path separators - Windows actually accepts both / and \\ , but we always write /
- * (same as the rest of the project) and recognize both when reading to be safe */
 static int is_path_sep(char c) {
 #ifdef _WIN32
     return c == '/' || c == '\\';
@@ -95,8 +81,6 @@ int rebax_fs_mkdir_p(const char *path) {
     buf[sizeof(buf) - 1] = '\0';
     size_t len = strlen(buf);
 
-    /* Build the path segment by segment - whenever we reach a separator, create the folder
-     * up to that point (if it doesn't exist) before continuing to the next segment */
     for (size_t i = 1; i < len; i++) {
         if (is_path_sep(buf[i])) {
             char saved = buf[i];
@@ -194,7 +178,7 @@ void rebax_fs_walk_files(const char *dir_path, rebax_fs_walk_callback_t callback
     FindClose(h);
 }
 
-#else /* POSIX */
+#else
 
 int rebax_fs_remove_recursive(const char *path) {
     struct stat link_st;
@@ -263,8 +247,8 @@ const char *rebax_fs_extension(const char *path) {
     if (slash2 != NULL && (slash1 == NULL || slash2 > slash1)) slash1 = slash2;
 #endif
     if (dot == NULL) return NULL;
-    if (slash1 != NULL && dot < slash1) return NULL; /* The dot is part of a directory name, not the extension */
-    if (dot[1] == '\0') return NULL; /* "file." nothing after the dot */
+    if (slash1 != NULL && dot < slash1) return NULL;
+    if (dot[1] == '\0') return NULL;
     return dot + 1;
 }
 
@@ -273,7 +257,6 @@ void rebax_fs_basename_no_ext(const char *path, char *out, int out_size) {
     char *dot = strrchr(out, '.');
     if (dot != NULL) *dot = '\0';
 }
-
 
 int rebax_fs_write_atomic(const char *path, const void *data, size_t size) {
     char temp[1100];

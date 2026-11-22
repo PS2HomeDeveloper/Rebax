@@ -13,15 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * node_editor_registry.c
- * ============================================================
- * No manually written data here at all - the same philosophy as
- * node_registry.c exactly, but for draw functions instead of properties.
- * ============================================================
- */
-
 #include <stddef.h>
 
 #include "dev_systems/nodes/editor/node_editor_registry.h"

@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Project asset conversion for native exports (PS2 target format: RGBA8 pixels). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

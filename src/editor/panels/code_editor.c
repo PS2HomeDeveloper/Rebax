@@ -13,14 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * code_editor.c - small, responsibility-separated embedded code editor.
- *
- * This library is responsible for the UI for editing C/C++ files only. It does
- * not reimplement the File Manager; it uses it to pick and save files, and
- * uses window to capture input. The theme is dark so the code area is calm and
- * clear inside the Viewport.
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -213,7 +205,6 @@ static void normalize_view(void) {
 static void edit_input(void) {
     const char *typed = window_text_input_this_frame();
     if (typed && typed[0]) {
-        /* SDL text input is already UTF-8. Newline is handled separately. */
         insert_bytes(typed, strlen(typed));
     }
     if (window_key_just_pressed_enter()) {

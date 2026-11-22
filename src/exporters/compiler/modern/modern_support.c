@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-
 #define _POSIX_C_SOURCE 200809L
 
 #include "exporters/compiler/modern/modern_internal.h"
@@ -191,7 +190,6 @@ int modern_copy_project_assets(const char *destination) {
     if (!rebax_fs_is_dir(source)) return 1;
     return copy_tree(source, destination, 1);
 }
-
 
 int modern_package_desktop(const char *executable, int executable_bit, char *bundle, size_t bundle_cap) {
     char destination[MODERN_PATH_CAP], assets_destination[MODERN_PATH_CAP];

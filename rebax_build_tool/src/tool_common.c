@@ -102,7 +102,6 @@ void put_be32(sb_t *b, uint32_t v) {
     sb_append(b, t, 4);
 }
 
-/* reads a whole file; result is NUL-terminated (extra byte not counted) */
 unsigned char *read_file(const char *path, size_t *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f) die("cannot open '%s'", path);

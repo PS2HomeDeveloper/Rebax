@@ -18,7 +18,7 @@
 #include <ctype.h>
 
 #include "editor/ui/file_icons.h"
-#include "editor/ui/icon_atlas.h" /* ICON_* constants */
+#include "editor/ui/icon_atlas.h"
 
 static int ext_equals(const char *a, const char *b) {
     while (*a != '\0' && *b != '\0') {

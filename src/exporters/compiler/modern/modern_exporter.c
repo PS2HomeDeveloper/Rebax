@@ -102,7 +102,6 @@ int g_modern_architecture_count;
 int g_modern_architecture_index;
 char g_modern_apk_stage[MODERN_PATH_CAP];
 
-
 static void append_quoted(char *out, size_t cap, const char *value) {
 #if defined(_WIN32)
     modern_appendf(out, cap, "\"");

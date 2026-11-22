@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Project center screen: a recent projects list stored inside Rebax/Editor. */
 #include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>

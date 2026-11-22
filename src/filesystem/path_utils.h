@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Shared name/path utilities without UI dependency. */
 #ifndef PATH_UTILS_H
 #define PATH_UTILS_H
 
@@ -23,4 +22,4 @@ const char *path_utils_basename(const char *path);
 int path_utils_has_suffix(const char *path, const char *suffix);
 int path_utils_has_suffix_ci(const char *path, const char *suffix);
 
-#endif /* PATH_UTILS_H */
+#endif

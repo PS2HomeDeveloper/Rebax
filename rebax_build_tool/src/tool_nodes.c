@@ -25,10 +25,6 @@
 #include "tool_commands.h"
 #include "tool_common.h"
 
-/* ============================================================
- * Node registry generators (port of the two awk scripts)
- * ============================================================ */
-
 static int is_ws(char c) { return c == ' ' || c == '\t'; }
 
 typedef struct {
@@ -72,7 +68,6 @@ static prop_t *begin_prop(registry_t *r, const char *name) {
     return p;
 }
 
-/* ^static[ \t]+const[ \t]+node_property_t[ \t]+NAME\[\][ \t]*=[ \t]*\{ */
 static int match_prop_begin(const char *line, char *name_out, size_t name_size) {
     const char *p = line;
     static const char *words[3] = { "static", "const", "node_property_t" };
@@ -99,8 +94,6 @@ static int match_prop_begin(const char *line, char *name_out, size_t name_size) 
     return 1;
 }
 
-/* pointer just after the LAST occurrence of tag (followed by whitespace when
- * need_ws), skipping the whitespace run. Returns line unchanged if none. */
 static char *after_last_tag(char *line, const char *tag, int need_ws) {
     size_t tl = strlen(tag);
     char *best = NULL;
@@ -121,7 +114,6 @@ static void cut_comment_end(char *s) {
     *e = '\0';
 }
 
-/* iterates the lines of a file (CR removed); fn returns nothing, state in ctx */
 typedef void (*line_fn)(char *line, int first_line, void *ctx);
 
 static void for_each_line(const char *path, line_fn fn, void *ctx) {
@@ -264,7 +256,6 @@ int cmd_node_registry(int argc, char **argv) {
     sb_puts(&out, "\n");
     sb_puts(&out, "#endif /* NODE_REGISTRY_GENERATED_H */\n");
 
-    /* node_types.h: unique node types in first-seen order */
     sb_t types = { 0, 0, 0 };
     sb_puts(&types,
             "/* ============================================================\n"

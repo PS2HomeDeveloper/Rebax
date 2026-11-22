@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Node selection and dependency discovery for native exports. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -176,13 +175,8 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         for (int t = 0; t < g_used_types_count; t++) {
             if (strcmp(g_used_types[t], type_name) == 0) { is_used = 1; break; }
         }
-        /* The SDK exposes the complete current node catalog, so its native
-         * implementations are copied once even when a scene does not use
-         * them. Scene-only exports still validate against g_used_types. */
         if (!is_used && !sdk_known && g_sdk_types_count == 0) continue;
 
-        /* Copy the .c file itself plus the matching .h if present (no failure if absent -
-         * some nodes lack a dedicated header and use the shared node_interface.h) */
         char base_name[64];
         strncpy(base_name, entry_name, sizeof(base_name) - 1);
         base_name[sizeof(base_name) - 1] = '\0';
@@ -199,14 +193,13 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         node_source_copy(name_h, dst_h);
 
         scan_node_source_for_export_flags(name_c);
-        scan_node_source_for_export_flags(name_h); /* No harm if the .h is missing - read_whole_file quietly returns NULL */
+        scan_node_source_for_export_flags(name_h);
 
         log_pushf("[exporter] included node type: %s (%s.c)", type_name, base_name);
         if (is_used) matched_count++;
     }
     free(node_names.names);
 
-    /* node_interface.h is always shared - all node files include it */
     { char dst[1600]; snprintf(dst,sizeof(dst),"%s/node_interface.h",dest_src_dir); if(!node_source_copy("node_interface.h",dst)) return 0; }
     scan_node_source_for_export_flags("node_interface.h");
 
@@ -241,17 +234,9 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         }
     }
 
-    /* engine_context.h - completely independent of g_needs_image_loader (it was
-     * mistakenly tied to it before via IMAGE_LOADER_FILES below, from an older design
-     * where Sprite2D went through image_loader.h - when that was removed, this copy
-     * became silently dead even though g_needs_engine_context_stub still activates
-     * correctly and independently. A separate condition here prevents repeating this
-     * mistake with any future dependency.) */
     if (g_needs_engine_context_stub) {
         { char dst[1600]; snprintf(dst,sizeof(dst),"%s/engine_context.h",dest_src_dir); node_source_copy("engine_context.h",dst); }
 
-        /* Actual verification (no assumptions) - clearly prints whether the copy succeeded,
-         * so we don't have to guess again if a similar error occurs later */
         char ectx_dst[1600];
         struct stat st;
         snprintf(ectx_dst, sizeof(ectx_dst), "%s/engine_context.h", dest_src_dir);
@@ -264,16 +249,6 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         }
     }
 
-    /* Any matching node that actually included "image_loader.h" (detected
-     * during the scan above - with no special knowledge of the Sprite2D name here) -
-     * copy the entire image loader unit: the shared parts + the public wrapper
-     * function image_loader_load itself (called directly by sprite2d.c) + *all*
-     * seven formats - because the public function references all seven with its code
-     * (see the design comment in image_loader.h: the optimization "call the specific
-     * format directly instead of the public function" is a separate future step, not
-     * yet applied - this initial structure accepts temporary code bloat instead of
-     * breaking linkage). Does not include engine_context.h - that was copied above
-     * independently */
     if (g_needs_image_loader) {
         int need_png = 0, need_jpeg = 0, need_bmp = 0, need_tga = 0, need_tiff = 0;
         int need_raw = 0, need_tim2 = 0, need_tim = 0;

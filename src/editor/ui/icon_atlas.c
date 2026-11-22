@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Runtime loader and renderer for the generated multi-page icon atlas. */
 #include <stddef.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"

@@ -13,29 +13,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Native runtime/code-generation (currently the PS2 gsKit target) templates. */
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
 #include "exporters/common/export_internal.h"
 #include "exporters/common/node_source.h"
 
-/* ------------------------------------------------------------
- * Static templates (do not change per project) - written as-is for each export:
- *
- * scene_runtime.h - defines node_property_value_t/scene_node_entry_t/
- * scene_table_entry_t (used by the generated scene_data.c above) +
- * the node_instantiate signature.
- *
- * scene_runtime.c - the only general bridge: applies node_property_value_t
- * values to an actual in-memory node via property_offsets (with no knowledge
- * of the specifics of any individual node type), then calls iface->init on it.
- *
- * scene_loader_main.c - the real entry point: initializes GS (via
- * engine_get_gs_global), creates each node for real (malloc + real init),
- * then the real game loop: update then draw each frame for each node, using
- * the official gsKit sequence (gsKit_clear → draw → gsKit_sync_flip → gsKit_queue_exec)
- * ------------------------------------------------------------ */
 static const char *SCENE_RUNTIME_HEADER =
     "#ifndef SCENE_RUNTIME_H\n"
     "#define SCENE_RUNTIME_H\n"
@@ -90,12 +73,6 @@ static const char *SCENE_RUNTIME_SOURCE =
     "    return instance;\n"
     "}\n";
 
-/* A real implementation of engine_get_gs_global - initializes gsKit once (the
- * exact official init sequence — see the included examples/textures/textures.c:
- * gsKit_init_global → setup PSM/PSMZ → dmaKit_init + dmaKit_chan_init →
- * gsKit_init_screen → gsKit_mode_switch) and returns the same pointer for every
- * subsequent call. Should be written only if a node needs real GS
- * (includes engine_context.h) - unrelated to the general scene_runtime.c */
 static const char *ENGINE_CONTEXT_IMPL_SOURCE =
     "/* مولَّد تلقائياً وقت التصدير - تهيئة GS حقيقية، مرة وحدة */\n"
     "#include <stddef.h>\n"
@@ -124,12 +101,6 @@ static const char *ENGINE_CONTEXT_IMPL_SOURCE =
     "    return g_gs_global;\n"
     "}\n";
 
-/* The real entry point - initializes every node of all scenes once (the general
- * bridge node_instantiate), then enters the actual game loop: update then draw
- * each node every frame, using the official textures.c sequence (gsKit_clear →
- * draw → gsKit_sync_flip → gsKit_queue_exec). The time delta is temporarily
- * fixed (1/60) until we add real time measurement — a separate upcoming step
- * that won't break existing logic when added */
 static const char *SCENE_LOADER_TEMPLATE =
     "#include <gsKit.h>\n"
     "#include \"scene_runtime.h\"\n"
@@ -206,7 +177,6 @@ static const char *PS1_SCENE_LOADER_TEMPLATE =
     "        ps1_engine_end(context);\n"
     "    }\n"
     "}\n";
-
 
 void export_codegen_write_runtime_files(const char *src_dir) {
     if (node_source_is_modern()) return;

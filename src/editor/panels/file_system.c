@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* File system: path data construction, while display and interaction are in ui_tree. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,7 +58,7 @@ typedef struct {
     int depth;
     int is_dir;
     int has_children;
-    window_texture_t *thumbnail_tex; /* owned by this row; NULL means atlas icon */
+    window_texture_t *thumbnail_tex;
 } fs_row_t;
 
 static fs_row_t g_rows[MAX_ROWS];
@@ -391,7 +390,7 @@ void file_system_panel_update(int x, int y, int w, int h) {
     int search_field_w = more_x - UI_TREE_ROW_PAD - search_field_x;
     int search_field_y = y + (TOOLBAR_HEIGHT - SEARCH_HEIGHT) / 2;
     text_field_update(&g_search_field, search_field_x, search_field_y, search_field_w, SEARCH_HEIGHT, search_field_w);
-    (void)toolbar_icon_y; /* The tool buttons are still only a placeholder as before. */
+    (void)toolbar_icon_y;
 
     int list_y = y + TOOLBAR_HEIGHT + 4;
     ui_tree_update(&g_tree, x, list_y, w, h - TOOLBAR_HEIGHT - 4);

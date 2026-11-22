@@ -35,35 +35,26 @@
 #define NODE_REGISTRY_H
 
 #include "node_types.h"
-#include "node_interface.h" /* Shared node property types (sdk/include/nodes) */
+#include "node_interface.h"
 
 typedef struct {
     node_type_t type;
     const char *name;
-    int icon_id; /* One of the ICON_* constants from icon_names.h */
+    int icon_id;
     const node_property_t *properties;
     int property_count;
 } node_registry_entry_t;
 
-/* The actual live property value for a specific node instance in the scene - exactly the same
- * format as node_property_t's default_value, but deliberately separate: default_value is read-only
- * (the type schema), while this one actually changes when edited from the properties panel. An array
- * of these (length property_count) is stored for each node in the scene - completely generic, so
- * having more or fewer properties for a node type works with the same code without any changes here */
 typedef union {
     float f;
     int i;
-    char *s; /* Not const (unlike default_value.s) - fully owned by each node instance,
-              * allocated and freed independently */
+    char *s;
 } node_property_value_t;
 
-/* Returns the display data for a given node type. NULL if the type is not registered */
 const node_registry_entry_t *node_registry_get(node_type_t type);
 
-/* Number of all registered node types - for any UI that needs to list them all (e.g. Add Node window) */
 int node_registry_count(void);
 
-/* Returns display data by index (0 to count-1) - instead of requiring knowledge of node_type_t beforehand */
 const node_registry_entry_t *node_registry_get_by_index(int index);
 
-#endif /* NODE_REGISTRY_H */
+#endif

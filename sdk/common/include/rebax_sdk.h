@@ -12,12 +12,6 @@
  * See the LICENSE file for details.
  */
 
-/*
- * rebax_sdk.h - public Native Rebax SDK for exported applications.
- *
- * This header is intentionally independent from the editor. Include it from
- * project-owned C/C++ files to create and control native Rebax nodes.
- */
 #ifndef REBAX_SDK_H
 #define REBAX_SDK_H
 
@@ -45,18 +39,15 @@ typedef enum {
 
 typedef struct rebax_node rebax_node_t;
 
-/* Type discovery and creation. Names are the same names shown in the editor. */
 const char *rebax_node_type_name(rebax_node_type_t type);
 rebax_result_t rebax_node_create(rebax_node_type_t type, rebax_node_t **out_node);
 rebax_result_t rebax_node_create_by_name(const char *name, rebax_node_t **out_node);
 
-/* Property discovery. Indices are stable within one node's public property list. */
 int rebax_node_property_count(const rebax_node_t *node);
 const char *rebax_node_property_name(const rebax_node_t *node, int index);
 node_property_type_t rebax_node_property_type(const rebax_node_t *node, int index);
 int rebax_node_find_property(const rebax_node_t *node, const char *name);
 
-/* Typed property access by name. Strings are copied into SDK-owned memory. */
 rebax_result_t rebax_node_set_float(rebax_node_t *node, const char *name, float value);
 rebax_result_t rebax_node_get_float(const rebax_node_t *node, const char *name, float *out_value);
 rebax_result_t rebax_node_set_int(rebax_node_t *node, const char *name, int value);
@@ -64,7 +55,6 @@ rebax_result_t rebax_node_get_int(const rebax_node_t *node, const char *name, in
 rebax_result_t rebax_node_set_string(rebax_node_t *node, const char *name, const char *value);
 const char *rebax_node_get_string(const rebax_node_t *node, const char *name);
 
-/* Native node lifecycle. update/draw are safe when their callback is absent. */
 void rebax_node_update(rebax_node_t *node, float delta_time);
 void rebax_node_draw(rebax_node_t *node);
 void rebax_node_destroy(rebax_node_t *node);
@@ -74,4 +64,4 @@ void rebax_node_free(rebax_node_t *node);
 }
 #endif
 
-#endif /* REBAX_SDK_H */
+#endif

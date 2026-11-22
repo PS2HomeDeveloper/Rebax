@@ -13,16 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * window.h
- * ============================================================
- * Window library: wraps SDL2 details and provides simple functions to open a window,
- * draw into it, and capture close events. Any other library that needs to render
- * to the screen uses these functions without dealing with SDL2 directly.
- * ============================================================
- */
-
 #ifndef WINDOW_H
 #define WINDOW_H
 
@@ -102,4 +92,4 @@ void window_set_clip_rect(int x, int y, int w, int h);
 void window_clear_clip_rect(void);
 void window_shutdown(void);
 
-#endif /* WINDOW_H */
+#endif

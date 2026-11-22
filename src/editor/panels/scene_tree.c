@@ -13,7 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/* Scene tree display panel. Data and saving are in scene_data, general rendering in ui_tree. */
 #include "editor/panels/scene_tree.h"
 #include "scene/scene_data.h"
 #include "editor/ui/tree.h"

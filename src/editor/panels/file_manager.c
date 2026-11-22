@@ -13,33 +13,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * file_manager.c
- * ============================================================
- * Browse a single folder at a time (not a recursive search through all subfolders)
- * - exactly like any normal file manager: enter a folder, see only its contents,
- * and navigate by entering subfolders or going back via the path bar. This is
- * intentional: it matches the desired breadcrumb behavior and is much cheaper
- * than scanning an entire tree every time the window opens.
- *
- * Thumbnails: actually decoded via stb_image for each image file present in the
- * current folder when entering it (not all icons at once, only the displayed folder contents)
- * - any file whose decode fails (corrupt despite correct extension) keeps the default
- * image icon instead of its thumbnail, exactly as desired. Files larger than THUMB_MAX_FILE_SIZE
- * are excluded from thumbnailing entirely (to avoid freezing the UI on a huge file)
- * and are shown with their default icon directly.
- *
- * Note: STB_IMAGE_IMPLEMENTATION is not defined here - icon_atlas.c is the sole
- * definition in the project (see that file's comment). Here we only include the header
- * and use the ready-made functions from that compiled implementation.
- * ============================================================
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h> /* strcasecmp */
+#include <strings.h>
 #include <stddef.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -52,7 +29,7 @@
 #define REBAX_MKDIR(path, mode) mkdir(path, mode)
 #endif
 
-#include "formats/image_decoder.h" /* Supports all image formats our engine supports - stb_image internally for PNG/JPEG/BMP/TGA/TIFF, and our own decoders for RAW/TIM2/TIM */
+#include "formats/image_decoder.h"
 
 #include "editor/panels/file_manager.h"
 #include "platform/common/window.h"
@@ -73,9 +50,6 @@
 #include "filesystem/storage_volumes.h"
 #include "filesystem/rebax_fs.h"
 
-/* ------------------------------------------------------------
- * Layout constants
- * ------------------------------------------------------------ */
 #define DIALOG_WIDTH        640
 #define DIALOG_HEIGHT        500
 #define DIALOG_PADDING         16
@@ -85,13 +59,13 @@
 #define TOOLBAR_HEIGHT          34
 #define GRID_TOP_GAP             8
 #define FOOTER_HEIGHT           48
-#define FILENAME_ROW_HEIGHT     36 /* One extra row only in SAVE_FILE mode - the filename field + its label */
+#define FILENAME_ROW_HEIGHT     36
 
 #define CELL_W                  84
 #define CELL_H                  96
 #define GRID_ICON_SIZE          48
 #define CELL_CORNER_RADIUS       8
-#define LABEL_FONT_SIZE         14 /* Matches the item name size in file_system_panel.c exactly - it was 12 by mistake, inconsistent with other file managers in the engine */
+#define LABEL_FONT_SIZE         14
 
 #define SCROLL_STEP_PX           40
 
@@ -100,27 +74,20 @@
 #define AB_MAX_EXTS               16
 #define AB_MAX_CRUMBS             24
 
-#define THUMB_MAX_FILE_SIZE (8 * 1024 * 1024) /* 8 megabytes - larger than this is excluded from thumbnailing */
+#define THUMB_MAX_FILE_SIZE (8 * 1024 * 1024)
 
-/* ------------------------------------------------------------
- * Internal data types
- * ------------------------------------------------------------ */
 typedef struct {
     char full_path[AB_MAX_PATH];
     char display_name[160];
     int  is_dir;
 
-    window_texture_t *thumb_tex;   /* NULL if there is no real thumbnail (the extension icon is used instead) */
-    int  thumb_w, thumb_h;         /* Actual thumbnail dimensions (aspect ratio preserved, no stretching) */
+    window_texture_t *thumb_tex;
+    int  thumb_w, thumb_h;
 
     window_texture_t *label_tex;
     int  label_w, label_h;
 } ab_entry_t;
 
-/* ------------------------------------------------------------
- * Global state (single instance across the program - same pattern as other
- * pop-up windows in the project: add_node_dialog, project_dialog)
- * ------------------------------------------------------------ */
 static int g_ready = 0;
 static int g_is_open = 0;
 
@@ -144,15 +111,13 @@ static char g_crumb_label[AB_MAX_CRUMBS][64];
 static char g_crumb_path[AB_MAX_CRUMBS][AB_MAX_PATH];
 static window_texture_t *g_crumb_tex[AB_MAX_CRUMBS];
 static int  g_crumb_w[AB_MAX_CRUMBS], g_crumb_h[AB_MAX_CRUMBS];
-static int  g_crumb_x[AB_MAX_CRUMBS], g_crumb_w_click[AB_MAX_CRUMBS]; /* Click rectangles calculated each frame */
+static int  g_crumb_x[AB_MAX_CRUMBS], g_crumb_w_click[AB_MAX_CRUMBS];
 static int  g_crumb_count = 0;
 static window_texture_t *g_crumb_sep_tex = NULL;
 static int  g_crumb_sep_w = 0, g_crumb_sep_h = 0;
 
 static text_field_t g_search_field;
 
-/* Only in SAVE_FILE mode - the filename field and its fixed label "File name:"
- * (built once in ensure_ready, doesn't change between window openings) */
 static text_field_t g_filename_field;
 static window_texture_t *g_filename_label_tex = NULL;
 static int g_filename_label_w = 0, g_filename_label_h = 0;
@@ -165,29 +130,24 @@ static char g_prompt_error[120];
 static int g_manage = 0;
 static int g_in_devices = 0;
 
-static int g_selected_index = -1; /* In file-pick mode only - index into g_entries */
+static int g_selected_index = -1;
 static int g_scroll_offset = 0;
 
 static window_texture_t *g_title_tex = NULL;
 static int g_title_w = 0, g_title_h = 0;
 
-static window_texture_t *g_filter_label_tex = NULL; /* "*.png, *.jpg" next to the search - NULL if no filter */
+static window_texture_t *g_filter_label_tex = NULL;
 static int g_filter_label_w = 0, g_filter_label_h = 0;
 
 static labeled_button_t  g_cancel_btn, g_select_btn;
 static window_texture_t *g_cancel_btn_tex = NULL, *g_cancel_txt_tex = NULL;
 static window_texture_t *g_select_btn_tex = NULL, *g_select_txt_tex = NULL;
 
-static window_texture_t *g_hover_tex = NULL;   /* Grid cell highlight on hover */
-static window_texture_t *g_selected_tex = NULL; /* Highlight for the currently selected grid cell */
-
-
-/* ------------------------------------------------------------
- * Small helper utilities
- * ------------------------------------------------------------ */
+static window_texture_t *g_hover_tex = NULL;
+static window_texture_t *g_selected_tex = NULL;
 
 static int extension_matches_filter(const char *name) {
-    if (g_extension_count <= 0) return 1; /* No filter = all files accepted */
+    if (g_extension_count <= 0) return 1;
     const char *dot = strrchr(name, '.');
     if (dot == NULL) return 0;
     const char *ext = dot + 1;
@@ -197,9 +157,6 @@ static int extension_matches_filter(const char *name) {
     return 0;
 }
 
-/* Downscale raw image data (RGBA) to fit a dst_size×dst_size box without
- * distortion (letterbox - preserves aspect ratio), using nearest neighbor
- * sampling - perfectly adequate for such a small thumbnail size */
 static window_texture_t *make_thumbnail_texture(const unsigned char *src, int sw, int sh,
                                                   int dst_size, int *out_w, int *out_h) {
     if (sw <= 0 || sh <= 0) return NULL;
@@ -235,10 +192,6 @@ static window_texture_t *make_thumbnail_texture(const unsigned char *src, int sw
     return tex;
 }
 
-/* ------------------------------------------------------------
- * Load folder contents
- * ------------------------------------------------------------ */
-
 static void free_entries(void) {
     for (int i = 0; i < g_entry_count; i++) {
         if (g_entries[i].thumb_tex != NULL) window_destroy_texture(g_entries[i].thumb_tex);
@@ -270,25 +223,15 @@ static void add_entry(const char *full_path, const char *display_name, int is_di
             struct stat st;
             if (stat(full_path, &st) == 0 && st.st_size > 0 && st.st_size <= THUMB_MAX_FILE_SIZE) {
                 int w, h;
-                /* raw_width/height intentionally 0 here - the browser displays general files
-                 * without knowledge of their intended dimensions (unlike the Sprite2D node
-                 * which has specific Raw Width/Height properties) - safely returns
-                 * NULL for .raw files (they are shown with the default icon instead,
-                 * the only possible behavior without external size information) */
                 unsigned char *pixels = image_loader_editor_load(full_path, &w, &h, 0, 0, 0);
                 if (pixels != NULL) {
                     e->thumb_tex = make_thumbnail_texture(pixels, w, h, GRID_ICON_SIZE, &e->thumb_w, &e->thumb_h);
                     free(pixels);
                 }
-                /* pixels == NULL means the image file is corrupt despite having the correct extension -
-                 * thumb_tex remains NULL, so the default image icon is drawn instead
-                 * during rendering (exactly the desired behavior) */
             }
         }
     }
 }
-
-
 
 static void free_crumb_textures(void) {
     for (int i = 0; i < g_crumb_count; i++) {
@@ -359,7 +302,7 @@ static void load_directory(const char *path) {
 
     struct dirent *entry;
     while ((entry = readdir(d)) != NULL) {
-        if (entry->d_name[0] == '.') continue; /* hides hidden files and . and .. */
+        if (entry->d_name[0] == '.') continue;
 
         char full[AB_MAX_PATH];
         snprintf(full, sizeof(full), "%s/%s", path, entry->d_name);
@@ -382,7 +325,6 @@ static void load_directory(const char *path) {
     qsort(dir_names, dir_count, sizeof(char *), path_utils_compare_names_ci);
     qsort(file_names, file_count, sizeof(char *), path_utils_compare_names_ci);
 
-    /* Directories always first, then files - each group alphabetically, case-insensitive */
     for (int i = 0; i < dir_count; i++) {
         char full[AB_MAX_PATH];
         snprintf(full, sizeof(full), "%s/%s", path, dir_names[i]);
@@ -484,9 +426,6 @@ static void tool_rects(int dx, int toolbar_y, fm_rect_t out[5]) {
     }
 }
 
-/* ------------------------------------------------------------
- * Lazy initialization (only once, on first actual call)
- * ------------------------------------------------------------ */
 static void ensure_ready(void) {
     if (g_ready) return;
     g_ready = 1;
@@ -508,14 +447,6 @@ static void ensure_ready(void) {
 
 }
 
-/* ------------------------------------------------------------
- * Open the window (public interface)
- * ------------------------------------------------------------ */
-/* Shared part between file_manager_open and file_manager_open_save -
- * set up the root (Assets:// or the device), load the first folder and clear
- * the search bar. Returns 0 if setup failed (no open project for Assets - the callback
- * is already called with NULL inside; the caller should stop immediately then with no
- * further action), and 1 if it succeeded (the window is actually open) */
 static int open_common(file_manager_root_t root, file_manager_callback_t callback, void *user_data) {
     ensure_ready();
 
@@ -526,8 +457,6 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
     if (root == FILE_MANAGER_ROOT_ASSETS) {
         const char *project_path = current_project_get_path();
         if (project_path == NULL) {
-            /* No project open - no Assets:// to browse at all,
-             * notify the caller immediately instead of opening a window on a fake folder */
             if (callback != NULL) callback(NULL, user_data);
             return 0;
         }
@@ -537,14 +466,6 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
         strncpy(g_root_label, "Assets://", sizeof(g_root_label) - 1);
         g_root_label[sizeof(g_root_label) - 1] = '\0';
     } else {
-        /* The real root (the upper browsing limit) is always "/" with no restrictions -
-         * but the actual starting point is chosen smartly depending on the device, instead of
-         * opening the user directly at the practically empty system root: if
-         * the device is Android (running inside Termux:X11 as the engine currently is) the
-         * storage actually available to the user is at /storage/emulated/0 rather than "/" - we
-         * check if it exists and start from it if present, otherwise $HOME, otherwise fall back to the root itself. The user
-         * can browse to any other location on the device afterwards normally via the path bar
-         * (the path start button "/" is always available, with no real lock) */
         strncpy(g_root_path, "/", sizeof(g_root_path) - 1);
         g_root_path[sizeof(g_root_path) - 1] = '\0';
         strncpy(g_root_label, "/", sizeof(g_root_label) - 1);
@@ -622,7 +543,7 @@ void file_manager_open_save(file_manager_root_t root, const char *default_filena
                               file_manager_callback_t callback, void *user_data) {
     android_storage_request_if_needed();
     g_pick_mode = FILE_MANAGER_MODE_SAVE_FILE;
-    g_extension_count = 0; /* No filtering - all files are shown to the context only, exactly like PICK_FOLDER */
+    g_extension_count = 0;
 
     if (!open_common(root, callback, user_data)) return;
 
@@ -646,9 +567,6 @@ void file_manager_open_save(file_manager_root_t root, const char *default_filena
 
 int file_manager_is_open(void) { return g_is_open; }
 
-/* ------------------------------------------------------------
- * Update (logic + interaction)
- * ------------------------------------------------------------ */
 static void finish(const char *picked_path) {
     file_manager_callback_t cb = g_callback;
     void *ud = g_user_data;
@@ -668,7 +586,6 @@ void file_manager_update(int window_w, int window_h) {
 
     int mx = window_mouse_x(), my = window_mouse_y();
 
-    /* --- Title bar + close button --- */
     int close_x = dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
     int close_y = dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2;
     if (window_mouse_left_just_pressed()
@@ -707,7 +624,6 @@ void file_manager_update(int window_w, int window_h) {
         if (g_manage && sel_ok && ui_kit_clicked(tr[4].x, tr[4].y, tr[4].w, tr[4].h)) { open_prompt(PROMPT_DELETE); return; }
     }
 
-    /* --- Breadcrumb bar - counted here, reused during drawing --- */
     int crumb_y = dy + TITLEBAR_HEIGHT;
     int crumb_x = dx + DIALOG_PADDING;
     for (int i = 0; i < g_crumb_count; i++) {
@@ -717,7 +633,7 @@ void file_manager_update(int window_w, int window_h) {
         if (i < g_crumb_count - 1) crumb_x += g_crumb_sep_w + 10;
     }
     if (window_mouse_left_just_pressed() && my >= crumb_y && my < crumb_y + CRUMB_BAR_HEIGHT) {
-        for (int i = 0; i < g_crumb_count - 1; i++) { /* The last item is the current folder itself - no need to compress it */
+        for (int i = 0; i < g_crumb_count - 1; i++) {
             if (mx >= g_crumb_x[i] && mx < g_crumb_x[i] + g_crumb_w_click[i]) {
                 load_directory(g_crumb_path[i]);
                 break;
@@ -725,7 +641,6 @@ void file_manager_update(int window_w, int window_h) {
         }
     }
 
-    /* --- Search bar --- */
     int toolbar_y = crumb_y + CRUMB_BAR_HEIGHT;
     int search_x = dx + DIALOG_PADDING;
     int search_w = 220;
@@ -733,7 +648,6 @@ void file_manager_update(int window_w, int window_h) {
 
     if (g_search_field.focused) window_start_text_input(); else window_stop_text_input();
 
-    /* --- Grid area --- */
     int grid_x = dx + DIALOG_PADDING;
     int grid_y = toolbar_y + TOOLBAR_HEIGHT + GRID_TOP_GAP;
     int grid_w = DIALOG_WIDTH - DIALOG_PADDING * 2;
@@ -770,7 +684,7 @@ void file_manager_update(int window_w, int window_h) {
         int cell_y = grid_y + row * CELL_H - g_scroll_offset;
         visible_index++;
 
-        if (cell_y + CELL_H < grid_y || cell_y > grid_y + grid_h) continue; /* Outside the view area - no need to check for clicks */
+        if (cell_y + CELL_H < grid_y || cell_y > grid_y + grid_h) continue;
 
         int inside = (mx >= cell_x && mx < cell_x + CELL_W && my >= cell_y && my < cell_y + CELL_H
                       && my >= grid_y && my < grid_y + grid_h);
@@ -779,8 +693,6 @@ void file_manager_update(int window_w, int window_h) {
                 g_selected_index = i;
                 clicked_grid = 1;
             } else if (e->is_dir) {
-                /* e points into g_entries; load_directory() clears and rebuilds
-                 * that array, so copy the path before calling it. */
                 char next_path[AB_MAX_PATH];
                 strncpy(next_path, e->full_path, sizeof(next_path) - 1);
                 next_path[sizeof(next_path) - 1] = '\0';
@@ -793,22 +705,18 @@ void file_manager_update(int window_w, int window_h) {
                 g_selected_index = i;
                 clicked_grid = 1;
             }
-            /* In PICK_FOLDER mode: clicking a file does nothing - files
-             * are shown for context only, not selectable in this mode */
         }
     }
 
-    /* --- Current final selection (to enable/disable the Select/Save button) --- */
     int can_select = 0;
     char final_path[AB_MAX_PATH];
     final_path[0] = '\0';
     if (g_in_devices) {
         can_select = 0;
     } else if (g_pick_mode == FILE_MANAGER_MODE_SAVE_FILE) {
-        /* File name row - directly below the grid, above the button row */
         int buttons_y_early = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
         int filename_row_y = buttons_y_early - FILENAME_ROW_HEIGHT;
-        int field_label_w = 70; /* Approximate width sufficient for the "File name:" label in font 13 */
+        int field_label_w = 70;
         int field_x = grid_x + field_label_w;
         int field_y = filename_row_y + (FILENAME_ROW_HEIGHT - 22) / 2;
         int field_w = grid_w - field_label_w;
@@ -823,7 +731,7 @@ void file_manager_update(int window_w, int window_h) {
             can_select = 1;
             int written = snprintf(final_path, sizeof(final_path), "%s/%s", g_current_path, g_filename_field.text);
             if (written < 0 || written >= (int)sizeof(final_path)) {
-                final_path[sizeof(final_path) - 1] = '\0'; /* Safe truncation - snprintf already guarantees this; documents awareness of the case to silence GCC's defensive warning */
+                final_path[sizeof(final_path) - 1] = '\0';
             }
         }
     } else if (g_pick_mode == FILE_MANAGER_MODE_PICK_FOLDER) {
@@ -835,7 +743,6 @@ void file_manager_update(int window_w, int window_h) {
         strncpy(final_path, g_entries[g_selected_index].full_path, sizeof(final_path) - 1);
     }
 
-    /* --- Cancel / Select buttons --- */
     int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
     int select_x = dx + DIALOG_WIDTH - DIALOG_PADDING - g_select_btn.width;
     int cancel_x = select_x - 8 - g_cancel_btn.width;
@@ -854,9 +761,6 @@ void file_manager_update(int window_w, int window_h) {
     }
 }
 
-/* ------------------------------------------------------------
- * Drawing
- * ------------------------------------------------------------ */
 void file_manager_draw(int window_w, int window_h) {
     if (!g_is_open) return;
 
@@ -867,14 +771,12 @@ void file_manager_draw(int window_w, int window_h) {
 
     ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
 
-    /* --- Title bar --- */
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLEBAR_HEIGHT, DIALOG_PADDING);
     ui_dialog_draw_close_button(dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE,
                                 dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2, CLOSE_BTN_SIZE);
 
     window_fill_rect(dx + DIALOG_PADDING, dy + TITLEBAR_HEIGHT, DIALOG_WIDTH - DIALOG_PADDING * 2, 1, UI_RGB(UI_COLOR_SURFACE_BORDER));
 
-    /* --- Path bar --- */
     int crumb_y = dy + TITLEBAR_HEIGHT;
     for (int i = 0; i < g_crumb_count; i++) {
         int is_last = (i == g_crumb_count - 1);
@@ -889,7 +791,6 @@ void file_manager_draw(int window_w, int window_h) {
         }
     }
 
-    /* --- Search bar + results/filter counter --- */
     int toolbar_y = crumb_y + CRUMB_BAR_HEIGHT;
     int search_x = dx + DIALOG_PADDING;
     int search_w = 220;
@@ -917,7 +818,6 @@ void file_manager_draw(int window_w, int window_h) {
         }
     }
 
-    /* --- Grid area (clipped at its edges so no content overflows) --- */
     int grid_x = dx + DIALOG_PADDING;
     int grid_y = toolbar_y + TOOLBAR_HEIGHT + GRID_TOP_GAP;
     int grid_w = DIALOG_WIDTH - DIALOG_PADDING * 2;
@@ -961,7 +861,6 @@ void file_manager_draw(int window_w, int window_h) {
         if (e->is_dir) {
             icon_atlas_draw_tinted(ICON_Folder, icon_area_x, icon_area_y, GRID_ICON_SIZE, UI_RGB(UI_COLOR_WARNING));
         } else if (e->thumb_tex != NULL) {
-            /* Real thumbnail image - drawn centered in the icon square preserving its aspect ratio */
             int tw = e->thumb_w, th = e->thumb_h;
             int tx = icon_area_x + (GRID_ICON_SIZE - tw) / 2;
             int ty = icon_area_y + (GRID_ICON_SIZE - th) / 2;
@@ -988,13 +887,12 @@ void file_manager_draw(int window_w, int window_h) {
             } else {
                 window_draw_texture(e->label_tex, label_x, label_y, e->label_w, e->label_h);
             }
-            window_set_clip_rect(grid_x, grid_y, grid_w, grid_h); /* Restore full grid clipping after clipping the subname */
+            window_set_clip_rect(grid_x, grid_y, grid_w, grid_h);
         }
     }
 
     window_clear_clip_rect();
 
-    /* --- Footer: Cancel / Select / Save buttons --- */
     int can_select = 0;
     if (g_in_devices) {
         can_select = 0;
@@ -1035,9 +933,6 @@ void file_manager_draw(int window_w, int window_h) {
         window_draw_texture(g_select_txt_tex, select_x + g_select_btn.text_offset_x, buttons_y + g_select_btn.text_offset_y,
                              g_select_btn.text_img.width, g_select_btn.text_img.height);
     } else {
-        /* Currently disabled - the same button but tinted light gray instead of generating
-         * a second custom texture for the disabled state (window_draw_texture_tinted
-         * is perfectly sufficient for this purpose) */
         window_draw_texture_tinted(g_select_btn_tex, select_x, buttons_y, g_select_btn.width, g_select_btn.height,
                                     UI_RGB(UI_COLOR_TEXT_DISABLED));
         window_draw_texture_tinted(g_select_txt_tex, select_x + g_select_btn.text_offset_x, buttons_y + g_select_btn.text_offset_y,

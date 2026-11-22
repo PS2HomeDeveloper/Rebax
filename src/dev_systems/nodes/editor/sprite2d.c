@@ -13,32 +13,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-/*
- * ============================================================
- * sprite2d.c (nodes_editor)
- * ============================================================
- * Visual representation of Sprite2D in the editor - loads the real
- * image via the unified image_loader.h (editor variant) which
- * supports exactly the same formats as the real exported build
- * (PNG/JPEG/BMP/TGA/TIFF via stb_image internally, and RAW/TIM2/TIM
- * via our own decoder) - and draws it at its actual position and size,
- * with a selection marker (a faint white dot + green plus when selected)
- * in the same style as the other nodes_editor nodes.
- *
- * Order: [0]=Position X, [1]=Position Y, [2]=Rotation, [3]=Scale X,
- * [4]=Scale Y, [5]=Image Path, [6]=Raw Width, [7]=Raw Height,
- * [8]=Raw Format - fixed here because this file itself is the source of
- * Sprite2D's property ordering (src/nodes/sprite2d.c).
- *
- * On-path cache: the first time an image is requested by a given path
- * it is loaded and stored, so any later request for the same path
- * (even from another node) reuses the same texture directly - without
- * rereading the disk each frame. A maximum of 32 different images may be
- * open simultaneously (a reasonable fixed capacity, no automatic
- * eviction yet - known first simplification, sufficient for now).
- * ============================================================
- */
-
 #include "editor/ui/theme.h"
 #include <string.h>
 #include <stdlib.h>
@@ -48,7 +22,7 @@
 #include "editor/viewport/2d.h"
 #include "dev_systems/nodes/editor/sprite2d.h"
 #include "platform/common/window.h"
-#include "formats/image_decoder.h" /* Unified loader for the editor build - supports PNG/JPEG/BMP/TGA/TIFF (via stb_image internally) + RAW/TIM2/TIM (our own decoder) */
+#include "formats/image_decoder.h"
 
 #define MARKER_HALF        3
 #define SELECT_CROSS_HALF  6
@@ -59,7 +33,7 @@ typedef struct {
     window_texture_t *tex;
     int width, height;
     int valid;
-    int load_failed; /* 1 if we tried loading and failed - avoid retrying every frame */
+    int load_failed;
 } sprite_cache_entry_t;
 
 static sprite_cache_entry_t g_cache[SPRITE_CACHE_MAX];
@@ -72,9 +46,6 @@ static sprite_cache_entry_t *sprite_cache_find(const char *path) {
     return NULL;
 }
 
-/* Loads a new image into the cache (or returns an entry with a previous failure state) - NULL
- * if the cache is completely full and there's no room for a new image. raw_width/height/psm
- * are passed only to the RAW loader (ignored for any other format - see image_loader.h comment) */
 static sprite_cache_entry_t *sprite_cache_load(const char *path, int raw_width, int raw_height, int raw_psm) {
     if (g_cache_count >= SPRITE_CACHE_MAX) return NULL;
 
@@ -98,7 +69,7 @@ static sprite_cache_entry_t *sprite_cache_load(const char *path, int raw_width, 
     entry->height = h;
     entry->valid = 1;
     entry->load_failed = 0;
-    free(pixels); /* Allocated with malloc by image_loader_editor_load - free with normal free, not stbi_image_free */
+    free(pixels);
 
     g_cache_count++;
     return entry;
@@ -106,7 +77,7 @@ static sprite_cache_entry_t *sprite_cache_load(const char *path, int raw_width, 
 
 void sprite2d_editor_draw(const node_property_value_t *values, int property_count,
                            int cam_x, int cam_y, int cam_w, int cam_h, int selected) {
-    if (property_count < 9) return; /* Minimum: all nine Sprite2D properties (see src/nodes/sprite2d.c) */
+    if (property_count < 9) return;
 
     float pos_x = values[0].f;
     float pos_y = values[1].f;
@@ -130,9 +101,6 @@ void sprite2d_editor_draw(const node_property_value_t *values, int property_coun
             int draw_h = (int)((float)entry->height * scale_y * zoom);
             if (draw_w < 1) draw_w = 1;
             if (draw_h < 1) draw_h = 1;
-            /* (0,0) is the image center, and rotation is in radians like the exported build.
-             * Using the same transform here prevents the preview from differing from the
-             * Native output at export time. */
             window_draw_texture_region_rotated(entry->tex, 0, 0,
                                                entry->width, entry->height,
                                                sx - draw_w / 2, sy - draw_h / 2, draw_w, draw_h,
@@ -140,8 +108,6 @@ void sprite2d_editor_draw(const node_property_value_t *values, int property_coun
         }
     }
 
-    /* A faint white dot always indicates the node's position (its origin) - even
-     * if the image hasn't loaded or failed yet - exactly like Element2D */
     window_fill_rect(sx - MARKER_HALF, sy - MARKER_HALF, MARKER_HALF * 2, MARKER_HALF * 2, UI_RGB(UI_COLOR_TEXT_PRIMARY));
 
     if (selected) {
