@@ -39,6 +39,7 @@ static int g_refresh_frames = 0;
 
 #if defined(__ANDROID__)
 #include <stdarg.h>
+#include <jni.h>
 #include "filesystem/rebax_fs.h"
 static int g_log_lines = 0;
 static void resume_log(const char *fmt, ...) {
@@ -57,8 +58,21 @@ static void resume_log(const char *fmt, ...) {
     fputc('\n', f);
     fclose(f);
 }
+
+static void reapply_immersive(void) {
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+    jobject activity = (jobject)SDL_AndroidGetActivity();
+    if (env == NULL || activity == NULL) return;
+    jclass cls = (*env)->GetObjectClass(env, activity);
+    jmethodID method = cls != NULL ? (*env)->GetStaticMethodID(env, cls, "setWindowStyle", "(Z)V") : NULL;
+    if (method != NULL) (*env)->CallStaticVoidMethod(env, cls, method, JNI_TRUE);
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (cls != NULL) (*env)->DeleteLocalRef(env, cls);
+    (*env)->DeleteLocalRef(env, activity);
+}
 #else
 #define resume_log(...) ((void)0)
+#define reapply_immersive() ((void)0)
 #endif
 
 static void apply_window_size(int raw_width, int raw_height);
@@ -242,7 +256,10 @@ void window_poll_events(void) {
 
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_WINDOWEVENT) resume_log("win-event %d", (int)event.window.event);
+        if (event.type == SDL_WINDOWEVENT) {
+            resume_log("win-event %d", (int)event.window.event);
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || event.window.event == SDL_WINDOWEVENT_RESTORED) reapply_immersive();
+        }
         else if (event.type == SDL_APP_WILLENTERFOREGROUND) resume_log("will-enter-foreground");
         else if (event.type == SDL_APP_DIDENTERBACKGROUND) resume_log("did-enter-background");
         if (event.type == SDL_QUIT) {
@@ -261,6 +278,7 @@ void window_poll_events(void) {
             resume_log("render-reset %d", (int)event.type);
         } else if (event.type == SDL_APP_DIDENTERFOREGROUND) {
             g_refresh_frames = 150;
+            reapply_immersive();
             resume_log("did-enter-foreground");
             int raw_w = 0, raw_h = 0;
             g_background = 0;
