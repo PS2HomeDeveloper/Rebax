@@ -251,16 +251,16 @@ void window_poll_events(void) {
                    && (event.window.event == SDL_WINDOWEVENT_RESIZED
                        || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)) {
             apply_window_size(event.window.data1, event.window.data2);
-            g_refresh_frames = 30;
+            g_refresh_frames = 150;
             resume_log("window-size %d %d", event.window.data1, event.window.data2);
         } else if (event.type == SDL_APP_WILLENTERBACKGROUND) {
             g_background = 1;
             resume_log("will-enter-background");
         } else if (event.type == SDL_RENDER_DEVICE_RESET || event.type == SDL_RENDER_TARGETS_RESET) {
-            g_refresh_frames = 30;
+            g_refresh_frames = 150;
             resume_log("render-reset %d", (int)event.type);
         } else if (event.type == SDL_APP_DIDENTERFOREGROUND) {
-            g_refresh_frames = 30;
+            g_refresh_frames = 150;
             resume_log("did-enter-foreground");
             int raw_w = 0, raw_h = 0;
             g_background = 0;
@@ -440,9 +440,23 @@ void window_destroy_texture(window_texture_t *tex) {
 
 void window_present(void) {
     if (g_background) return;
+#if defined(__ANDROID__)
+    if (g_refresh_frames > 0 && g_refresh_frames % 10 == 0) {
+        int ow = 0, oh = 0;
+        SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
+        const int px[3] = { ow / 2, ow / 4, ow * 3 / 4 };
+        const int py[3] = { oh / 2, oh / 4, oh * 3 / 4 };
+        Uint32 val[3] = { 0, 0, 0 };
+        for (int i = 0; i < 3; i++) {
+            SDL_Rect r = { px[i], py[i], 1, 1 };
+            SDL_RenderReadPixels(g_renderer, &r, SDL_PIXELFORMAT_ARGB8888, &val[i], 4);
+        }
+        resume_log("pixels left %d: %06x %06x %06x", g_refresh_frames, val[0] & 0xffffff, val[1] & 0xffffff, val[2] & 0xffffff);
+    }
+#endif
     SDL_RenderPresent(g_renderer);
     if (g_refresh_frames > 0) {
-        if (g_refresh_frames == 30) {
+        if (g_refresh_frames == 150) {
             int ow = 0, oh = 0, ww = 0, wh = 0;
             SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
             SDL_GetWindowSize(g_window, &ww, &wh);
