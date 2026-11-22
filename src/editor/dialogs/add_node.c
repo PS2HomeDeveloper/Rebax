@@ -33,6 +33,7 @@
 #define DIALOG_WIDTH     320
 #define DIALOG_HEIGHT    320
 #define DIALOG_PADDING    16
+static ui_dialog_drag_t g_drag;
 #define TITLE_HEIGHT       32
 #define CLOSE_BTN_SIZE     22
 #define SEARCH_HEIGHT      26
@@ -111,7 +112,7 @@ void add_node_dialog_update(int window_w, int window_h) {
     if (!g_is_open) return;
 
     int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 1, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLE_HEIGHT, &dx, &dy);
     int close_x = dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
     int close_y = dy + (TITLE_HEIGHT - CLOSE_BTN_SIZE) / 2;
     if (window_mouse_left_just_pressed() &&
@@ -182,7 +183,7 @@ void add_node_dialog_draw(int window_w, int window_h) {
 
     ui_dialog_draw_backdrop(window_w, window_h);
     int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 0, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLE_HEIGHT, &dx, &dy);
 
     ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLE_HEIGHT, DIALOG_PADDING);

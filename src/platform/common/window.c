@@ -34,12 +34,15 @@ static int g_inset_bottom = 0;
 static float g_scale = 1.0f;
 static int g_background = 0;
 
+static int g_user_scale_percent = 0;
+static void apply_window_size(int raw_width, int raw_height);
+
 static float compute_scale(int raw_height) {
     float ddpi = 0.0f;
     if (g_window == NULL || SDL_GetDisplayDPI(0, &ddpi, NULL, NULL) != 0 || ddpi <= 0.0f) return 1.0f;
 #if defined(__ANDROID__) || (defined(__APPLE__) && defined(__arm__)) || (defined(__APPLE__) && defined(__aarch64__) && !defined(__MACH__))
-    float s = ddpi / 220.0f;
-    if (s > 2.0f) s = 2.0f;
+    float s = ddpi / 320.0f;
+    if (s > 1.6f) s = 1.6f;
 #else
     float s = ddpi / 144.0f;
     if (s > 3.0f) s = 3.0f;
@@ -47,7 +50,23 @@ static float compute_scale(int raw_height) {
     float limit = (float)raw_height / 480.0f;
     if (s > limit) s = limit;
     if (s < 1.0f) s = 1.0f;
+    if (g_user_scale_percent > 0) {
+        s = s * (float)g_user_scale_percent / 100.0f;
+        if (s < 0.75f) s = 0.75f;
+        if (s > 4.0f) s = 4.0f;
+    }
     return s;
+}
+
+void window_set_ui_scale_percent(int percent) {
+    g_user_scale_percent = percent;
+    int w = 0, h = 0;
+    if (g_window != NULL) SDL_GetWindowSize(g_window, &w, &h);
+    if (w > 0 && h > 0) apply_window_size(w, h);
+}
+
+int window_get_scale_percent(void) {
+    return (int)(g_scale * 100.0f + 0.5f);
 }
 
 static void apply_window_size(int raw_width, int raw_height) {
@@ -191,6 +210,8 @@ void window_poll_events(void) {
         g_text_input_suppressed = 1;
         g_text_input_wanted = 0;
     }
+
+    if (g_background) SDL_Delay(50);
 
     SDL_Event event;
     while (SDL_PollEvent(&event)) {

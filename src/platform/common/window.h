@@ -42,6 +42,8 @@ void window_draw_texture_region_rotated(window_texture_t *tex,
                                          double angle_degrees);
 void window_destroy_texture(window_texture_t *tex);
 void window_present(void);
+void window_set_ui_scale_percent(int percent);
+int window_get_scale_percent(void);
 int window_get_width(void);
 int window_get_height(void);
 

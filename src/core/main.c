@@ -26,6 +26,9 @@
 #include "filesystem/storage_paths.h"
 #include "editor/panels/file_manager.h"
 #include "editor/ui/dialog.h"
+#include "core/engine_settings.h"
+#include "core/i18n.h"
+#include "editor/panels/settings_page.h"
 #include "platform/android/storage.h"
 
 int main(int argc, char **argv) {
@@ -36,6 +39,9 @@ int main(int argc, char **argv) {
     }
 
     printf("Rebax_Engine started successfully.\n");
+
+    window_set_ui_scale_percent(engine_settings_get()->ui_scale_percent);
+    i18n_init();
 
     android_storage_request_if_needed();
 
@@ -80,6 +86,9 @@ int main(int argc, char **argv) {
                 packages_dialog_update(window_get_width(), window_get_height());
                 packages_dialog_draw(window_get_width(), window_get_height());
             }
+        } else if (app_state_get_screen() == APP_SCREEN_SETTINGS) {
+            settings_page_update_and_draw(window_get_width(), window_get_height());
+            if (settings_page_wants_close()) app_state_set_screen(APP_SCREEN_PROJECT_CENTER);
         } else {
             window_clear(UI_COLOR_BLACK_MUTED.r, UI_COLOR_BLACK_MUTED.g, UI_COLOR_BLACK_MUTED.b);
             ui_project_center_draw(window_get_width(), window_get_height());
@@ -112,6 +121,7 @@ int main(int argc, char **argv) {
     file_manager_shutdown();
     ui_kit_shutdown();
     ui_dialog_shutdown();
+    i18n_shutdown();
     window_shutdown();
     return 0;
 }

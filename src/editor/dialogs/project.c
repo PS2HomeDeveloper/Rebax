@@ -38,7 +38,7 @@
 #include "editor/ui/dialog.h"
 
 #define DIALOG_WIDTH   520
-#define DIALOG_HEIGHT  428
+#define DIALOG_HEIGHT  458
 #define DIALOG_PADDING 24
 #define FIELD_HEIGHT   32
 #define LABEL_FONT_SIZE 15
@@ -52,6 +52,7 @@ static const unsigned char COLOR_INVALID_R = 0xD9, COLOR_INVALID_G = 0x5C, COLOR
 
 static int g_is_open = 0;
 static int g_ready = 0;
+static ui_dialog_drag_t g_drag;
 
 static text_field_t g_name_field;
 static text_field_t g_path_field;
@@ -79,7 +80,7 @@ static int g_label_type_w = 0, g_label_type_h = 0;
 static window_texture_t *g_label_dev_tex = NULL;
 static int g_label_dev_w = 0, g_label_dev_h = 0;
 #define TYPE_ROW_Y 248
-#define DEV_ROW_Y 320
+#define DEV_ROW_Y 350
 static const char *g_path_message = "";
 
 static window_texture_t *g_path_msg_tex = NULL;
@@ -242,7 +243,7 @@ void project_dialog_update(int window_w, int window_h) {
     }
 
     int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 1, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, &dx, &dy);
     int close_x = dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
     int close_y = dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2;
     if (window_mouse_left_just_pressed() &&
@@ -358,7 +359,7 @@ void project_dialog_draw(int window_w, int window_h) {
 
     ui_dialog_draw_backdrop(window_w, window_h);
     int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 0, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, &dx, &dy);
 
     ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLEBAR_HEIGHT, DIALOG_PADDING);

@@ -18,7 +18,8 @@
 
 typedef enum {
     APP_SCREEN_PROJECT_CENTER,
-    APP_SCREEN_EDITOR
+    APP_SCREEN_EDITOR,
+    APP_SCREEN_SETTINGS
 } app_screen_t;
 
 void app_state_set_screen(app_screen_t screen);

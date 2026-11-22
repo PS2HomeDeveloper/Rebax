@@ -28,6 +28,7 @@
 #include "project/project_types.h"
 
 #define PAGE_W 760
+static ui_dialog_drag_t g_drag;
 #define PAGE_H 520
 #define PAD 28
 #define SIDEBAR_W 180
@@ -129,7 +130,7 @@ static void save_settings(void) {
 void project_settings_dialog_update(int window_w, int window_h) {
     (void)window_w; (void)window_h;
     if (!g_open) return;
-    int dx, dy; ui_center_rect(window_w, window_h, PAGE_W, PAGE_H, &dx, &dy);
+    int dx, dy; ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_W, PAGE_H, 44, &dx, &dy);
     int content_x = dx + SIDEBAR_W + PAD + 16, content_w = PAGE_W - SIDEBAR_W - PAD * 2 - 16;
     if (window_mouse_left_just_pressed()) {
         int mx = window_mouse_x(), my = window_mouse_y();
@@ -158,7 +159,7 @@ static void draw_text(window_texture_t *t, int x, int y, int w, int h, unsigned 
 static void draw_label(const char *s, int x, int y) { int w, h; window_texture_t *t = make(s, 13, &w, &h); draw_text(t, x, y, w, h, 190); if (t) window_destroy_texture(t); }
 void project_settings_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); ui_center_rect(window_w, window_h, PAGE_W, PAGE_H, &dx, &dy);
+    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_W, PAGE_H, 44, &dx, &dy);
     ui_dialog_draw_frame(dx, dy, PAGE_W, PAGE_H); ui_dialog_draw_title_left(g_title, g_tw, g_th, dx + PAD, dy, 44, PAD);
     window_fill_rect(dx, dy + 44, SIDEBAR_W, PAGE_H - 44, UI_COLOR_BLACK_MUTED.r, UI_COLOR_BLACK_MUTED.g, UI_COLOR_BLACK_MUTED.b);
     for (int i = 0; i < g_section_count; i++) {

@@ -128,12 +128,14 @@ static void cache_free(cached_text_t *c) {
     memset(c, 0, sizeof(*c));
 }
 
-static void compute_layout(int window_w, int window_h, layout_t *l) {
+static ui_dialog_drag_t g_drag;
+
+static void compute_layout(int window_w, int window_h, layout_t *l, int interactive) {
     l->w = window_w - 40 < DIALOG_MAX_W ? window_w - 40 : DIALOG_MAX_W;
     l->h = window_h - 40 < DIALOG_MAX_H ? window_h - 40 : DIALOG_MAX_H;
     if (l->w < 320) l->w = 320;
     if (l->h < 360) l->h = 360;
-    ui_center_rect(window_w, window_h, l->w, l->h, &l->x, &l->y);
+    ui_dialog_place(&g_drag, interactive, window_w, window_h, l->w, l->h, TITLEBAR_H, &l->x, &l->y);
     l->list_x = l->x + PAD;
     l->list_w = l->w - PAD * 2;
     l->list_y = l->y + TITLEBAR_H + HEADER_H;
@@ -190,7 +192,7 @@ int packages_dialog_is_open(void) { return g_open; }
 void packages_dialog_update(int window_w, int window_h) {
     if (!g_open) return;
     layout_t l;
-    compute_layout(window_w, window_h, &l);
+    compute_layout(window_w, window_h, &l, 1);
     int mx = window_mouse_x(), my = window_mouse_y();
     int busy = package_is_busy();
     if (g_was_busy && !busy) package_refresh_states();
@@ -293,7 +295,7 @@ static void draw_state(pkg_state_t s, int right_x, int cy) {
 void packages_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
     layout_t l;
-    compute_layout(window_w, window_h, &l);
+    compute_layout(window_w, window_h, &l, 0);
     ui_dialog_draw_backdrop(window_w, window_h);
     ui_dialog_draw_frame(l.x, l.y, l.w, l.h);
     window_fill_rect(l.x, l.y, l.w, TITLEBAR_H, UI_RGB(UI_COLOR_SURFACE_PANEL));

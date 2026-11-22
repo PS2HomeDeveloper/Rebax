@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include <string.h>
 #include <stddef.h>
 
 #include "editor/ui/dialog.h"
@@ -26,11 +27,48 @@ static window_texture_t *g_close_x_tex = NULL;
 static int g_close_size = 0;
 static int g_close_x_w = 0, g_close_x_h = 0;
 
+#define DRAG_CLOSE_ZONE 52
+
+void ui_dialog_drag_reset(ui_dialog_drag_t *drag) {
+    memset(drag, 0, sizeof(*drag));
+}
+
+void ui_dialog_place(ui_dialog_drag_t *drag, int interactive, int window_w, int window_h,
+                     int w, int h, int title_h, int *out_x, int *out_y) {
+    int cx = (window_w - w) / 2;
+    int cy = (window_h - h) / 2;
+    int x = cx + drag->off_x;
+    int y = cy + drag->off_y;
+    if (interactive) {
+        int mx = window_mouse_x(), my = window_mouse_y();
+        if (!drag->active && window_mouse_left_just_pressed() &&
+            mx >= x && mx < x + w - DRAG_CLOSE_ZONE && my >= y && my < y + title_h) {
+            drag->active = 1;
+            drag->grab_x = mx - x;
+            drag->grab_y = my - y;
+        }
+        if (drag->active) {
+            if (window_mouse_left_down()) {
+                x = mx - drag->grab_x;
+                y = my - drag->grab_y;
+            } else {
+                drag->active = 0;
+            }
+        }
+    }
+    if (w <= window_w) { if (x < 0) x = 0; if (x + w > window_w) x = window_w - w; } else x = cx;
+    if (h <= window_h) { if (y < 0) y = 0; if (y + h > window_h) y = window_h - h; } else y = cy;
+    drag->off_x = x - cx;
+    drag->off_y = y - cy;
+    *out_x = x;
+    *out_y = y;
+}
+
 void ui_dialog_draw_backdrop(int window_w, int window_h) {
     if (g_backdrop_tex == NULL) {
         unsigned char pixels[4 * 4 * 4];
         for (int i = 0; i < 16; i++) {
-            pixels[i * 4] = 8; pixels[i * 4 + 1] = 8; pixels[i * 4 + 2] = 8; pixels[i * 4 + 3] = 140;
+            pixels[i * 4] = 8; pixels[i * 4 + 1] = 8; pixels[i * 4 + 2] = 8; pixels[i * 4 + 3] = 70;
         }
         g_backdrop_tex = window_create_texture(pixels, 4, 4);
     }

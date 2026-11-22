@@ -14,6 +14,7 @@
  */
 
 #include "editor/ui/theme.h"
+#include "editor/panels/settings_page.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -37,7 +38,7 @@
 #define ROW_HEIGHT 64
 #define LIST_PADDING 18
 #define BUTTON_MARGIN 12
-#define BUTTON_COUNT 5
+#define BUTTON_COUNT 6
 
 typedef struct {
     labeled_button_t button;
@@ -56,7 +57,7 @@ typedef struct {
 } project_visual_t;
 
 static const char *g_button_labels[BUTTON_COUNT] = {
-    "Create Project", "Import Project", "Open Selected", "Remove from List", "Export Packages"
+    "Create Project", "Import Project", "Open Selected", "Remove from List", "Export Packages", "Settings"
 };
 static center_button_t g_buttons[BUTTON_COUNT];
 static project_visual_t g_visuals[PROJECT_CATALOG_MAX];
@@ -304,6 +305,7 @@ void ui_project_center_draw(int window_w, int window_h) {
                                                NULL, 0, on_import_project, NULL);
             else if (i == 2) open_selected_project();
             else if (i == 4) packages_dialog_open();
+            else if (i == 5) { settings_page_open(); app_state_set_screen(APP_SCREEN_SETTINGS); }
             else if (g_selected >= 0 && project_catalog_remove(g_selected)) {
                 g_selected = -1; g_selected_path[0] = '\0';
                 set_notice("Removed from this list. Project files were not deleted.");
