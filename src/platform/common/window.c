@@ -40,13 +40,12 @@ static int g_refresh_frames = 0;
 #if defined(__ANDROID__)
 #include <stdarg.h>
 #include "filesystem/rebax_fs.h"
-#include "filesystem/storage_paths.h"
 static int g_log_lines = 0;
 static void resume_log(const char *fmt, ...) {
     if (g_log_lines >= 300) return;
     char path[1024];
-    rebax_fs_mkdir_p(rebax_root_dir());
-    snprintf(path, sizeof(path), "%s/resume.log", rebax_root_dir());
+    rebax_fs_mkdir_p("/storage/emulated/0/Rebax_logs");
+    snprintf(path, sizeof(path), "%s", "/storage/emulated/0/Rebax_logs/resume.log");
     FILE *f = fopen(path, g_log_lines == 0 ? "wb" : "ab");
     if (f == NULL) return;
     g_log_lines++;
