@@ -213,6 +213,7 @@ void window_poll_events(void) {
     Uint32 now_ticks = SDL_GetTicks();
     g_delta_time = (float)(now_ticks - g_last_frame_ticks) / 1000.0f;
     g_last_frame_ticks = now_ticks;
+    if (g_delta_time > 0.15f) resume_log("frame-gap %d ms", (int)(g_delta_time * 1000.0f));
 
     g_mouse_left_just_pressed = 0;
     g_mouse_right_just_pressed = 0;
@@ -241,6 +242,9 @@ void window_poll_events(void) {
 
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_WINDOWEVENT) resume_log("win-event %d", (int)event.window.event);
+        else if (event.type == SDL_APP_WILLENTERFOREGROUND) resume_log("will-enter-foreground");
+        else if (event.type == SDL_APP_DIDENTERBACKGROUND) resume_log("did-enter-background");
         if (event.type == SDL_QUIT) {
             g_should_close = 1;
         } else if (event.type == SDL_WINDOWEVENT
@@ -327,10 +331,13 @@ void window_poll_events(void) {
 
 void window_clear(unsigned char r, unsigned char g, unsigned char b) {
     if (g_refresh_frames > 0) {
-        SDL_RenderSetViewport(g_renderer, NULL);
+        SDL_Rect probe = { 0, 0, 1, 1 };
+        SDL_RenderSetViewport(g_renderer, &probe);
         SDL_RenderSetClipRect(g_renderer, NULL);
-        SDL_RenderSetScale(g_renderer, g_scale, g_scale);
         SDL_SetRenderDrawColor(g_renderer, r, g, b, 255);
+        SDL_RenderDrawPoint(g_renderer, 0, 0);
+        SDL_RenderSetViewport(g_renderer, NULL);
+        SDL_RenderSetScale(g_renderer, g_scale, g_scale);
         SDL_RenderClear(g_renderer);
     }
     if (g_inset_left != 0 || g_inset_top != 0 || g_inset_right != 0 || g_inset_bottom != 0) {
