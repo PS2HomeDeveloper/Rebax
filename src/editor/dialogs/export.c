@@ -176,6 +176,7 @@ static void ensure_ready(void) {
     package_manager_init(); package_refresh_states();
 }
 void export_dialog_open(void) {
+    ui_dialog_drag_reset(&g_drag);
     android_storage_request_if_needed(); ensure_ready();
     const project_settings_t *s = current_project_get_settings();
     if (!s) return;
@@ -204,7 +205,7 @@ static void start_export(void) {
 }
 void export_dialog_update(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_W, PAGE_H, 44, &dx, &dy);
+    int dx, dy; { int pw, ph; ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_W, PAGE_H, PAGE_W, PAGE_H, 44, 0, &dx, &dy, &pw, &ph); }
     int status = current_status();
     if (status) { if (g_platforms[g_selected].modern) modern_export_update(); else if (g_selected == 5) ps2_export_update(); else ps1_export_update(); pump_logs(); status = current_status(); }
     if (status == 1 && g_platforms[g_selected].modern) snprintf(g_status_text, sizeof(g_status_text), "Building %s (%d/%d) %s...", modern_export_current_architecture(), modern_export_architecture_index() + 1, modern_export_architecture_count(), g_platforms[g_selected].label);
@@ -254,7 +255,7 @@ static void draw_card(int x, int y, int index) {
 }
 void export_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_W, PAGE_H, 44, &dx, &dy);
+    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); { int pw, ph; ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_W, PAGE_H, PAGE_W, PAGE_H, 44, 0, &dx, &dy, &pw, &ph); }
     ui_dialog_draw_frame(dx, dy, PAGE_W, PAGE_H); ui_dialog_draw_title_left(g_title, g_title_w, g_title_h, dx, dy, 44, PAD);
     ui_dialog_draw_close_button(dx + PAGE_W - PAD - 22, dy + 11, 22);
     int modern = project_modern();

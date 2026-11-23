@@ -135,7 +135,7 @@ static void compute_layout(int window_w, int window_h, layout_t *l, int interact
     l->h = window_h - 40 < DIALOG_MAX_H ? window_h - 40 : DIALOG_MAX_H;
     if (l->w < 320) l->w = 320;
     if (l->h < 360) l->h = 360;
-    ui_dialog_place(&g_drag, interactive, window_w, window_h, l->w, l->h, TITLEBAR_H, &l->x, &l->y);
+    ui_dialog_place(&g_drag, interactive, window_w, window_h, l->w, l->h, 320, 360, TITLEBAR_H, 1, &l->x, &l->y, &l->w, &l->h);
     l->list_x = l->x + PAD;
     l->list_w = l->w - PAD * 2;
     l->list_y = l->y + TITLEBAR_H + HEADER_H;
@@ -177,6 +177,7 @@ static pkg_state_t row_state(const row_t *r) {
 }
 
 void packages_dialog_open(void) {
+    ui_dialog_drag_reset(&g_drag);
     ensure_ready();
     icon_atlas_init();
     g_press_active = 0;

@@ -30,8 +30,11 @@
 #include "editor/ui/selection.h"
 #include "editor/ui/dialog.h"
 
-#define DIALOG_WIDTH     320
-#define DIALOG_HEIGHT    320
+#define DEFAULT_W        320
+#define DEFAULT_H        320
+#define DIALOG_WIDTH     g_dw
+#define DIALOG_HEIGHT    g_dh
+static int g_dw = DEFAULT_W, g_dh = DEFAULT_H;
 #define DIALOG_PADDING    16
 static ui_dialog_drag_t g_drag;
 #define TITLE_HEIGHT       32
@@ -100,6 +103,7 @@ static void ensure_ready(void) {
 void add_node_dialog_open(void) {
     ensure_ready();
     g_is_open = 1;
+    ui_dialog_drag_reset(&g_drag);
     g_selected_index = 0;
     g_search_field.text[0] = '\0';
     g_search_field.cursor_pos = 0;
@@ -112,7 +116,7 @@ void add_node_dialog_update(int window_w, int window_h) {
     if (!g_is_open) return;
 
     int dx, dy;
-    ui_dialog_place(&g_drag, 1, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLE_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 1, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLE_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh);
     int close_x = dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
     int close_y = dy + (TITLE_HEIGHT - CLOSE_BTN_SIZE) / 2;
     if (window_mouse_left_just_pressed() &&
@@ -183,7 +187,7 @@ void add_node_dialog_draw(int window_w, int window_h) {
 
     ui_dialog_draw_backdrop(window_w, window_h);
     int dx, dy;
-    ui_dialog_place(&g_drag, 0, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLE_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 0, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLE_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh);
 
     ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLE_HEIGHT, DIALOG_PADDING);

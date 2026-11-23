@@ -143,6 +143,7 @@ static void ensure_ready(void) {
 }
 
 void project_dialog_open(void) {
+    ui_dialog_drag_reset(&g_drag);
     ensure_ready();
     g_scene_switch_blocked = 0;
     g_create_error = NULL;
@@ -243,7 +244,7 @@ void project_dialog_update(int window_w, int window_h) {
     }
 
     int dx, dy;
-    ui_dialog_place(&g_drag, 1, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, &dx, &dy);
+    { int pw, ph; ui_dialog_place(&g_drag, 1, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, 0, &dx, &dy, &pw, &ph); }
     int close_x = dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
     int close_y = dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2;
     if (window_mouse_left_just_pressed() &&
@@ -359,7 +360,7 @@ void project_dialog_draw(int window_w, int window_h) {
 
     ui_dialog_draw_backdrop(window_w, window_h);
     int dx, dy;
-    ui_dialog_place(&g_drag, 0, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, &dx, &dy);
+    { int pw, ph; ui_dialog_place(&g_drag, 0, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, 0, &dx, &dy, &pw, &ph); }
 
     ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLEBAR_HEIGHT, DIALOG_PADDING);

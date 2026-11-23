@@ -19,13 +19,17 @@
 #include "platform/common/window.h"
 
 typedef struct {
-    int off_x, off_y;
-    int active;
+    int x, y, w, h;
+    int placed;
+    int mode;
+    int edges;
     int grab_x, grab_y;
+    int start_x, start_y, start_w, start_h;
 } ui_dialog_drag_t;
 
 void ui_dialog_place(ui_dialog_drag_t *drag, int interactive, int window_w, int window_h,
-                     int w, int h, int title_h, int *out_x, int *out_y);
+                     int def_w, int def_h, int min_w, int min_h, int title_h, int resizable,
+                     int *out_x, int *out_y, int *out_w, int *out_h);
 void ui_dialog_drag_reset(ui_dialog_drag_t *drag);
 void ui_dialog_draw_backdrop(int window_w, int window_h);
 void ui_dialog_draw_frame(int x, int y, int w, int h);

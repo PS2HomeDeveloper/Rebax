@@ -28,40 +28,93 @@ static int g_close_size = 0;
 static int g_close_x_w = 0, g_close_x_h = 0;
 
 #define DRAG_CLOSE_ZONE 52
+#define EDGE_ZONE 12
+#define EDGE_L 1
+#define EDGE_R 2
+#define EDGE_T 4
+#define EDGE_B 8
+#define SCREEN_MARGIN 8
 
 void ui_dialog_drag_reset(ui_dialog_drag_t *drag) {
     memset(drag, 0, sizeof(*drag));
 }
 
-void ui_dialog_place(ui_dialog_drag_t *drag, int interactive, int window_w, int window_h,
-                     int w, int h, int title_h, int *out_x, int *out_y) {
-    int cx = (window_w - w) / 2;
-    int cy = (window_h - h) / 2;
-    int x = cx + drag->off_x;
-    int y = cy + drag->off_y;
+static int edges_at(const ui_dialog_drag_t *d, int mx, int my) {
+    int e = 0;
+    if (mx < d->x - 6 || mx >= d->x + d->w + 6 || my < d->y - 6 || my >= d->y + d->h + 6) return 0;
+    if (mx < d->x + EDGE_ZONE) e |= EDGE_L;
+    if (mx >= d->x + d->w - EDGE_ZONE) e |= EDGE_R;
+    if (my < d->y + EDGE_ZONE) e |= EDGE_T;
+    if (my >= d->y + d->h - EDGE_ZONE) e |= EDGE_B;
+    return e;
+}
+
+void ui_dialog_place(ui_dialog_drag_t *d, int interactive, int window_w, int window_h,
+                     int def_w, int def_h, int min_w, int min_h, int title_h, int resizable,
+                     int *out_x, int *out_y, int *out_w, int *out_h) {
+    int max_w = window_w - SCREEN_MARGIN * 2;
+    int max_h = window_h - SCREEN_MARGIN * 2;
+    if (!d->placed) {
+        d->w = def_w;
+        d->h = def_h;
+        d->x = (window_w - def_w) / 2;
+        d->y = (window_h - def_h) / 2;
+        d->placed = 1;
+    }
+    if (!resizable) {
+        d->w = def_w;
+        d->h = def_h;
+    }
     if (interactive) {
         int mx = window_mouse_x(), my = window_mouse_y();
-        if (!drag->active && window_mouse_left_just_pressed() &&
-            mx >= x && mx < x + w - DRAG_CLOSE_ZONE && my >= y && my < y + title_h) {
-            drag->active = 1;
-            drag->grab_x = mx - x;
-            drag->grab_y = my - y;
-        }
-        if (drag->active) {
-            if (window_mouse_left_down()) {
-                x = mx - drag->grab_x;
-                y = my - drag->grab_y;
-            } else {
-                drag->active = 0;
+        int down = window_mouse_left_down();
+        if (d->mode == 0 && window_mouse_left_just_pressed()) {
+            int e = resizable ? edges_at(d, mx, my) : 0;
+            if (e != 0) {
+                d->mode = 2;
+                d->edges = e;
+            } else if (mx >= d->x && mx < d->x + d->w - DRAG_CLOSE_ZONE && my >= d->y && my < d->y + title_h) {
+                d->mode = 1;
+            }
+            if (d->mode != 0) {
+                d->grab_x = mx;
+                d->grab_y = my;
+                d->start_x = d->x;
+                d->start_y = d->y;
+                d->start_w = d->w;
+                d->start_h = d->h;
             }
         }
+        if (d->mode != 0 && !down) d->mode = 0;
+        if (d->mode == 1) {
+            d->x = d->start_x + (mx - d->grab_x);
+            d->y = d->start_y + (my - d->grab_y);
+        } else if (d->mode == 2) {
+            int ddx = mx - d->grab_x, ddy = my - d->grab_y;
+            int nx = d->start_x, ny = d->start_y, nw = d->start_w, nh = d->start_h;
+            if (d->edges & EDGE_R) nw = d->start_w + ddx;
+            if (d->edges & EDGE_L) { nw = d->start_w - ddx; }
+            if (d->edges & EDGE_B) nh = d->start_h + ddy;
+            if (d->edges & EDGE_T) { nh = d->start_h - ddy; }
+            if (nw < min_w) nw = min_w;
+            if (nh < min_h) nh = min_h;
+            if (nw > max_w) nw = max_w;
+            if (nh > max_h) nh = max_h;
+            if (d->edges & EDGE_L) nx = d->start_x + d->start_w - nw;
+            if (d->edges & EDGE_T) ny = d->start_y + d->start_h - nh;
+            d->x = nx; d->y = ny; d->w = nw; d->h = nh;
+        }
     }
-    if (w <= window_w) { if (x < 0) x = 0; if (x + w > window_w) x = window_w - w; } else x = cx;
-    if (h <= window_h) { if (y < 0) y = 0; if (y + h > window_h) y = window_h - h; } else y = cy;
-    drag->off_x = x - cx;
-    drag->off_y = y - cy;
-    *out_x = x;
-    *out_y = y;
+    if (d->w > max_w && max_w >= min_w) d->w = max_w;
+    if (d->h > max_h && max_h >= min_h) d->h = max_h;
+    if (d->w <= window_w) { if (d->x < 0) d->x = 0; if (d->x + d->w > window_w) d->x = window_w - d->w; }
+    else d->x = (window_w - d->w) / 2;
+    if (d->h <= window_h) { if (d->y < 0) d->y = 0; if (d->y + d->h > window_h) d->y = window_h - d->h; }
+    else d->y = (window_h - d->h) / 2;
+    *out_x = d->x;
+    *out_y = d->y;
+    *out_w = d->w;
+    *out_h = d->h;
 }
 
 void ui_dialog_draw_backdrop(int window_w, int window_h) {
