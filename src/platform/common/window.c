@@ -36,6 +36,7 @@ static int g_background = 0;
 
 static int g_user_scale_percent = 0;
 static int g_refresh_frames = 0;
+static unsigned g_hold_until = 0;
 
 #if defined(__ANDROID__)
 #include <stdarg.h>
@@ -259,7 +260,9 @@ void window_poll_events(void) {
         if (event.type == SDL_WINDOWEVENT) {
             resume_log("win-event %d", (int)event.window.event);
             if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || event.window.event == SDL_WINDOWEVENT_RESTORED) reapply_immersive();
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) g_hold_until = 0;
         }
+        else if (event.type == SDL_DISPLAYEVENT) resume_log("display-event %d data %d", (int)event.display.event, (int)event.display.data1);
         else if (event.type == SDL_APP_WILLENTERFOREGROUND) resume_log("will-enter-foreground");
         else if (event.type == SDL_APP_DIDENTERBACKGROUND) resume_log("did-enter-background");
         if (event.type == SDL_QUIT) {
@@ -279,7 +282,8 @@ void window_poll_events(void) {
         } else if (event.type == SDL_APP_DIDENTERFOREGROUND) {
             g_refresh_frames = 150;
             reapply_immersive();
-            resume_log("did-enter-foreground");
+            g_hold_until = SDL_GetTicks() + 400;
+            resume_log("did-enter-foreground orient %d", (int)SDL_GetDisplayOrientation(0));
             int raw_w = 0, raw_h = 0;
             g_background = 0;
             SDL_GetWindowSize(g_window, &raw_w, &raw_h);
@@ -458,6 +462,10 @@ void window_destroy_texture(window_texture_t *tex) {
 
 void window_present(void) {
     if (g_background) return;
+    if (g_hold_until != 0) {
+        if (SDL_GetTicks() < g_hold_until) return;
+        g_hold_until = 0;
+    }
 #if defined(__ANDROID__)
     if (g_refresh_frames > 0 && g_refresh_frames % 10 == 0) {
         int ow = 0, oh = 0;
@@ -478,7 +486,7 @@ void window_present(void) {
             int ow = 0, oh = 0, ww = 0, wh = 0;
             SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
             SDL_GetWindowSize(g_window, &ww, &wh);
-            resume_log("first-present output %dx%d window %dx%d scale %.2f", ow, oh, ww, wh, g_scale);
+            resume_log("first-present output %dx%d window %dx%d scale %.2f orient %d", ow, oh, ww, wh, g_scale, (int)SDL_GetDisplayOrientation(0));
         }
         g_refresh_frames--;
     }
