@@ -274,11 +274,11 @@ static void sync_tree_items(void) {
     int selected = -1;
     for (int i = 0; i < g_row_count; i++) {
         g_tree_items[i].name = g_rows[i].display_name;
-        g_tree_items[i].icon_id = g_rows[i].is_dir ? ICON_Folder : file_icons_for_name(g_rows[i].display_name);
+        g_tree_items[i].icon_id = g_rows[i].is_dir ? ICON_folder : file_icons_for_name(g_rows[i].display_name);
         if (!g_rows[i].is_dir && file_icons_is_raster_image_ext(strrchr(g_rows[i].display_name, '.') != NULL
                                                                 ? strrchr(g_rows[i].display_name, '.') + 1 : "")
             && g_rows[i].thumbnail_tex == NULL) {
-            g_tree_items[i].icon_id = ICON_Broken_Image;
+            g_tree_items[i].icon_id = ICON_broken_image;
         }
         g_tree_items[i].thumbnail_tex = g_rows[i].thumbnail_tex;
         g_tree_items[i].depth = g_rows[i].depth;

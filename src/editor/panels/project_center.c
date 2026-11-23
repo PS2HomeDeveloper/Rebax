@@ -119,8 +119,8 @@ static void create_button(center_button_t *button, const char *label) {
                                             UI_COLOR_BUTTON_BLUE.b);
     if (button->button.width > 0) {
         button->shape = window_create_texture(button->button.shape_img.pixels,
-                                               button->button.shape_img.width,
-                                               button->button.shape_img.height);
+                                               button->button.shape_img.px_w,
+                                               button->button.shape_img.px_h);
         button->text = window_create_texture(button->button.text_img.pixels,
                                               button->button.text_img.px_w,
                                               button->button.text_img.px_h);

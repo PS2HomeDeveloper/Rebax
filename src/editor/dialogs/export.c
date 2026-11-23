@@ -87,7 +87,7 @@ static void btn_make(btn_t *btn, const char *label, int blue) {
     const ui_color_t *c = blue ? &UI_COLOR_BUTTON_BLUE : &UI_COLOR_GRAY_MUTED;
     btn->b = labeled_button_create(label, FONT_WEIGHT_REGULAR, BTN_FONT, UI_BUTTON_PADDING_X, UI_BUTTON_PADDING_Y, UI_BUTTON_RADIUS, c->r, c->g, c->b);
     if (btn->b.width > 0) {
-        btn->bg = window_create_texture(btn->b.shape_img.pixels, btn->b.shape_img.width, btn->b.shape_img.height);
+        btn->bg = window_create_texture(btn->b.shape_img.pixels, btn->b.shape_img.px_w, btn->b.shape_img.px_h);
         btn->tx = window_create_texture(btn->b.text_img.pixels, btn->b.text_img.px_w, btn->b.text_img.px_h);
     }
 }

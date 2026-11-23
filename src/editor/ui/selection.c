@@ -26,7 +26,7 @@ static window_texture_t *make_tinted(int w, int h, int corner_radius, double alp
         UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g, UI_COLOR_BUTTON_BLUE.b);
     if (img.pixels == NULL) return NULL;
     ui_dim_alpha(&img, alpha);
-    window_texture_t *tex = window_create_texture(img.pixels, img.width, img.height);
+    window_texture_t *tex = window_create_texture(img.pixels, img.px_w, img.px_h);
     shape_provider_free_image(&img);
     return tex;
 }

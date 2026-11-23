@@ -201,7 +201,7 @@ void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h) {
 
         int icon_x = base_x + tree->style.icon_size + tree->style.arrow_icon_gap;
         if (item->has_children) {
-            icon_atlas_draw_rotated(ICON_tree_expand_collapse, base_x,
+            icon_atlas_draw_rotated(ICON_arrow_right, base_x,
                                     row_y + (tree->style.row_height - tree->style.icon_size) / 2,
                                     tree->style.icon_size, item->expanded ? 90.0 : 0.0);
         }
@@ -209,7 +209,7 @@ void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h) {
         if (item->thumbnail_tex != NULL) {
             window_draw_texture(item->thumbnail_tex, icon_x, icon_y,
                                 tree->style.icon_size, tree->style.icon_size);
-        } else if (item->icon_id == ICON_Folder) {
+        } else if (item->icon_id == ICON_folder) {
             icon_atlas_draw_tinted(item->icon_id, icon_x, icon_y,
                                    tree->style.icon_size, UI_RGB(UI_COLOR_WARNING));
         } else {

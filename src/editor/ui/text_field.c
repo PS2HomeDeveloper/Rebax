@@ -174,7 +174,7 @@ void text_field_draw(text_field_t *field, int x, int y, int w, int h,
         shape_image_t bg = shape_provider_render_rect(w, h, TEXT_FIELD_CORNER_RADIUS,
             UI_COLOR_GRAY_MUTED.r, UI_COLOR_GRAY_MUTED.g, UI_COLOR_GRAY_MUTED.b);
         if (bg.pixels != NULL) {
-            field->_cache_bg_tex = window_create_texture(bg.pixels, bg.width, bg.height);
+            field->_cache_bg_tex = window_create_texture(bg.pixels, bg.px_w, bg.px_h);
             shape_provider_free_image(&bg);
         }
         field->_cache_w = w;

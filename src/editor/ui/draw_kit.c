@@ -88,18 +88,20 @@ static window_texture_t *shape_texture(int w, int h, int radius, int r, int g, i
     shape_image_t outer = shape_provider_render_rect(w, h, radius, (unsigned char)r, (unsigned char)g, (unsigned char)b);
     if (!outer.pixels) return NULL;
     if (ring && w > 4 && h > 4) {
-        shape_image_t inner = shape_provider_render_rect(w - 2, h - 2, radius > 1 ? radius - 1 : 0, UI_RGB(UI_COLOR_BACKDROP));
+        int bp = shape_provider_to_px(1);
+        shape_image_t inner = shape_provider_render_rect_px(outer.px_w - bp * 2, outer.px_h - bp * 2,
+                                (double)(radius > 1 ? radius - 1 : 0) * shape_provider_get_scale(), UI_RGB(UI_COLOR_BACKDROP));
         if (inner.pixels) {
-            for (int y = 0; y < inner.height; y++)
-                for (int x = 0; x < inner.width; x++) {
-                    unsigned char *dst = outer.pixels + ((y + 1) * outer.width + (x + 1)) * 4;
-                    unsigned char a = inner.pixels[(y * inner.width + x) * 4 + 3];
+            for (int y = 0; y < inner.px_h; y++)
+                for (int x = 0; x < inner.px_w; x++) {
+                    unsigned char *dst = outer.pixels + ((y + bp) * outer.px_w + (x + bp)) * 4;
+                    unsigned char a = inner.pixels[(y * inner.px_w + x) * 4 + 3];
                     dst[3] = (unsigned char)(dst[3] > a ? dst[3] - a : 0);
                 }
             shape_provider_free_image(&inner);
         }
     }
-    s->tex = window_create_texture(outer.pixels, outer.width, outer.height);
+    s->tex = window_create_texture(outer.pixels, outer.px_w, outer.px_h);
     shape_provider_free_image(&outer);
     return s->tex;
 }

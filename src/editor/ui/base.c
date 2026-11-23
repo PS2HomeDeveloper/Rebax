@@ -43,7 +43,7 @@ void ui_make_blue_button(const char *text, int font_pixel_size,
                                       UI_COLOR_BUTTON_BLUE.b);
     if (out_btn->width > 0) {
         *out_btn_tex = window_create_texture(out_btn->shape_img.pixels,
-                                              out_btn->shape_img.width, out_btn->shape_img.height);
+                                              out_btn->shape_img.px_w, out_btn->shape_img.px_h);
         *out_txt_tex = window_create_texture(out_btn->text_img.pixels,
                                               out_btn->text_img.px_w, out_btn->text_img.px_h);
     }
@@ -51,7 +51,7 @@ void ui_make_blue_button(const char *text, int font_pixel_size,
 
 void ui_dim_alpha(shape_image_t *img, double factor) {
     if (img->pixels == NULL) return;
-    int count = img->width * img->height;
+    int count = img->px_w * img->px_h;
     for (int i = 0; i < count; i++) {
         unsigned char *a = &img->pixels[i * 4 + 3];
         *a = (unsigned char)((double)(*a) * factor);

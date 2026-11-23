@@ -859,7 +859,7 @@ void file_manager_draw(int window_w, int window_h) {
         unsigned char tint = is_dim ? 100 : 255;
 
         if (e->is_dir) {
-            icon_atlas_draw_tinted(ICON_Folder, icon_area_x, icon_area_y, GRID_ICON_SIZE, UI_RGB(UI_COLOR_WARNING));
+            icon_atlas_draw_tinted(ICON_folder, icon_area_x, icon_area_y, GRID_ICON_SIZE, UI_RGB(UI_COLOR_WARNING));
         } else if (e->thumb_tex != NULL) {
             int tw = e->thumb_w, th = e->thumb_h;
             int tx = icon_area_x + (GRID_ICON_SIZE - tw) / 2;

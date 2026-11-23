@@ -139,13 +139,17 @@ void ui_dialog_draw_frame(int x, int y, int w, int h) {
         g_frame_tex = NULL;
         g_frame_w = w;
         g_frame_h = h;
-        shape_image_t outer = shape_provider_render_rect(w + FRAME_BORDER * 2, h + FRAME_BORDER * 2, FRAME_RADIUS + FRAME_BORDER, UI_RGB(UI_COLOR_BACKDROP));
-        shape_image_t inner = shape_provider_render_rect(w, h, FRAME_RADIUS, UI_COLOR_PANEL_BG.r, UI_COLOR_PANEL_BG.g, UI_COLOR_PANEL_BG.b);
+        float sc = shape_provider_get_scale();
+        int bp = shape_provider_to_px(FRAME_BORDER);
+        int ow = shape_provider_to_px(w + FRAME_BORDER * 2), oh = shape_provider_to_px(h + FRAME_BORDER * 2);
+        shape_image_t outer = shape_provider_render_rect_px(ow, oh, (double)(FRAME_RADIUS + FRAME_BORDER) * sc, UI_RGB(UI_COLOR_BACKDROP));
+        shape_image_t inner = shape_provider_render_rect_px(ow - bp * 2, oh - bp * 2, (double)FRAME_RADIUS * sc,
+                                                             UI_COLOR_PANEL_BG.r, UI_COLOR_PANEL_BG.g, UI_COLOR_PANEL_BG.b);
         if (outer.pixels != NULL && inner.pixels != NULL) {
-            for (int row = 0; row < inner.height; row++) {
-                for (int col = 0; col < inner.width; col++) {
-                    unsigned char *src = &inner.pixels[(row * inner.width + col) * 4];
-                    unsigned char *dst = &outer.pixels[((row + FRAME_BORDER) * outer.width + col + FRAME_BORDER) * 4];
+            for (int row = 0; row < inner.px_h; row++) {
+                for (int col = 0; col < inner.px_w; col++) {
+                    unsigned char *src = &inner.pixels[(row * inner.px_w + col) * 4];
+                    unsigned char *dst = &outer.pixels[((row + bp) * outer.px_w + col + bp) * 4];
                     if (src[3] == 255) { dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = 255; }
                     else if (src[3] > 0 && dst[3] > 0) {
                         int a = src[3];
@@ -155,7 +159,7 @@ void ui_dialog_draw_frame(int x, int y, int w, int h) {
                     }
                 }
             }
-            g_frame_tex = window_create_texture(outer.pixels, outer.width, outer.height);
+            g_frame_tex = window_create_texture(outer.pixels, outer.px_w, outer.px_h);
         }
         shape_provider_free_image(&outer);
         shape_provider_free_image(&inner);
@@ -187,7 +191,7 @@ static void ensure_close_button(int size) {
     g_close_size = size;
     shape_image_t shape = shape_provider_render_rect(size, size, 5, UI_RGB(UI_COLOR_DANGER_BG));
     if (shape.pixels != NULL) {
-        g_close_bg_tex = window_create_texture(shape.pixels, shape.width, shape.height);
+        g_close_bg_tex = window_create_texture(shape.pixels, shape.px_w, shape.px_h);
         shape_provider_free_image(&shape);
     }
     g_close_x_tex = ui_make_text_texture("X", FONT_WEIGHT_BOLD, 14, &g_close_x_w, &g_close_x_h);

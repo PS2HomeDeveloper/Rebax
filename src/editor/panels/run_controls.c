@@ -133,7 +133,7 @@ void run_controls_draw(int window_w) {
     if (ui_kit_hover(l.play_x, l.group_y, PLAY_W, GROUP_H)) ui_kit_rect(l.play_x, l.group_y + 2, PLAY_W, GROUP_H - 4, 7, 66, 69, 77);
     if (!running && (g_menu_open || ui_kit_hover(l.more_x, l.group_y, MORE_W, GROUP_H))) ui_kit_rect(l.more_x, l.group_y + 2, MORE_W, GROUP_H - 4, 7, 66, 69, 77);
     window_fill_rect(l.more_x - 1, l.group_y + 7, 1, GROUP_H - 14, UI_RGB(UI_COLOR_SCROLL_TRACK));
-    icon_atlas_draw(running ? ICON_stop : ICON_tree_expand_collapse, l.play_x + (PLAY_W - ICON_PX) / 2, l.group_y + (GROUP_H - ICON_PX) / 2, ICON_PX);
+    icon_atlas_draw(running ? ICON_stop : ICON_arrow_right, l.play_x + (PLAY_W - ICON_PX) / 2, l.group_y + (GROUP_H - ICON_PX) / 2, ICON_PX);
     if (!running) icon_atlas_draw(ICON_more, l.more_x + (MORE_W - ICON_PX) / 2, l.group_y + (GROUP_H - ICON_PX) / 2, ICON_PX);
     const char *msg = run_session_message()[0] ? run_session_message() : g_notice;
     if (msg[0]) ui_kit_text(msg, 12, l.group_x + l.group_w + 12, (RUN_CONTROLS_HEIGHT - ui_kit_text_height(msg, 12)) / 2, 165, 170, 178);

@@ -106,11 +106,11 @@ static void ensure_ready(void) {
                                           UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g, UI_COLOR_BUTTON_BLUE.b);
     g_remove_btn = labeled_button_create("Uninstall", FONT_WEIGHT_REGULAR, 13, 14, 6, 4, UI_RGB(UI_COLOR_DANGER_BG));
     if (g_install_btn.width > 0) {
-        g_install_shape = window_create_texture(g_install_btn.shape_img.pixels, g_install_btn.shape_img.width, g_install_btn.shape_img.height);
+        g_install_shape = window_create_texture(g_install_btn.shape_img.pixels, g_install_btn.shape_img.px_w, g_install_btn.shape_img.px_h);
         g_install_text = window_create_texture(g_install_btn.text_img.pixels, g_install_btn.text_img.px_w, g_install_btn.text_img.px_h);
     }
     if (g_remove_btn.width > 0) {
-        g_remove_shape = window_create_texture(g_remove_btn.shape_img.pixels, g_remove_btn.shape_img.width, g_remove_btn.shape_img.height);
+        g_remove_shape = window_create_texture(g_remove_btn.shape_img.pixels, g_remove_btn.shape_img.px_w, g_remove_btn.shape_img.px_h);
         g_remove_text = window_create_texture(g_remove_btn.text_img.pixels, g_remove_btn.text_img.px_w, g_remove_btn.text_img.px_h);
     }
 }
@@ -340,7 +340,7 @@ void packages_dialog_draw(int window_w, int window_h) {
         int cy = ry + (ROW_H - 2) / 2;
         int tx = l.list_x + 12 + (is_arch ? INDENT : 0);
         if (!is_arch && package_platform_has_archs(r->platform)) {
-            icon_atlas_draw_rotated(ICON_tree_expand_collapse, tx, cy - ARROW_SIZE / 2, ARROW_SIZE, g_expanded[r->platform] ? 90.0 : 0.0);
+            icon_atlas_draw_rotated(ICON_arrow_right, tx, cy - ARROW_SIZE / 2, ARROW_SIZE, g_expanded[r->platform] ? 90.0 : 0.0);
             tx += ARROW_SIZE + 8;
         } else if (!is_arch) {
             tx += ARROW_SIZE + 8;

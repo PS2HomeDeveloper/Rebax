@@ -19,6 +19,7 @@
 #include <SDL.h>
 
 #include "editor/ui/font.h"
+#include "editor/ui/shape_provider.h"
 #include "platform/common/window.h"
 
 static SDL_Window   *g_window   = NULL;
@@ -39,27 +40,7 @@ static int g_refresh_frames = 0;
 static unsigned g_hold_until = 0;
 
 #if defined(__ANDROID__)
-#include <stdarg.h>
 #include <jni.h>
-#include "filesystem/rebax_fs.h"
-static int g_log_lines = 0;
-static void resume_log(const char *fmt, ...) {
-    if (g_log_lines >= 300) return;
-    char path[1024];
-    rebax_fs_mkdir_p("/storage/emulated/0/Rebax_logs");
-    snprintf(path, sizeof(path), "%s", "/storage/emulated/0/Rebax_logs/resume.log");
-    FILE *f = fopen(path, g_log_lines == 0 ? "wb" : "ab");
-    if (f == NULL) return;
-    g_log_lines++;
-    fprintf(f, "%u ", (unsigned)SDL_GetTicks());
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(f, fmt, ap);
-    va_end(ap);
-    fputc('\n', f);
-    fclose(f);
-}
-
 static void reapply_immersive(void) {
     JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
     jobject activity = (jobject)SDL_AndroidGetActivity();
@@ -72,7 +53,6 @@ static void reapply_immersive(void) {
     (*env)->DeleteLocalRef(env, activity);
 }
 #else
-#define resume_log(...) ((void)0)
 #define reapply_immersive() ((void)0)
 #endif
 
@@ -113,6 +93,7 @@ int window_get_scale_percent(void) {
 static void apply_window_size(int raw_width, int raw_height) {
     g_scale = compute_scale(raw_height);
     font_set_scale(g_scale);
+    shape_provider_set_scale(g_scale);
     if (g_renderer != NULL) SDL_RenderSetScale(g_renderer, g_scale, g_scale);
     int logical_width = (int)(raw_width / g_scale);
     int logical_height = (int)(raw_height / g_scale);
@@ -228,7 +209,6 @@ void window_poll_events(void) {
     Uint32 now_ticks = SDL_GetTicks();
     g_delta_time = (float)(now_ticks - g_last_frame_ticks) / 1000.0f;
     g_last_frame_ticks = now_ticks;
-    if (g_delta_time > 0.15f) resume_log("frame-gap %d ms", (int)(g_delta_time * 1000.0f));
 
     g_mouse_left_just_pressed = 0;
     g_mouse_right_just_pressed = 0;
@@ -258,32 +238,24 @@ void window_poll_events(void) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_WINDOWEVENT) {
-            resume_log("win-event %d", (int)event.window.event);
             if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || event.window.event == SDL_WINDOWEVENT_RESTORED) reapply_immersive();
             if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) g_hold_until = 0;
         }
-        else if (event.type == SDL_DISPLAYEVENT) resume_log("display-event %d data %d", (int)event.display.event, (int)event.display.data1);
-        else if (event.type == SDL_APP_WILLENTERFOREGROUND) resume_log("will-enter-foreground");
-        else if (event.type == SDL_APP_DIDENTERBACKGROUND) resume_log("did-enter-background");
         if (event.type == SDL_QUIT) {
             g_should_close = 1;
         } else if (event.type == SDL_WINDOWEVENT
                    && (event.window.event == SDL_WINDOWEVENT_RESIZED
                        || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)) {
             apply_window_size(event.window.data1, event.window.data2);
-            g_refresh_frames = 150;
-            resume_log("window-size %d %d", event.window.data1, event.window.data2);
+            g_refresh_frames = 30;
         } else if (event.type == SDL_APP_WILLENTERBACKGROUND) {
             g_background = 1;
-            resume_log("will-enter-background");
         } else if (event.type == SDL_RENDER_DEVICE_RESET || event.type == SDL_RENDER_TARGETS_RESET) {
-            g_refresh_frames = 150;
-            resume_log("render-reset %d", (int)event.type);
+            g_refresh_frames = 30;
         } else if (event.type == SDL_APP_DIDENTERFOREGROUND) {
-            g_refresh_frames = 150;
+            g_refresh_frames = 30;
             reapply_immersive();
             g_hold_until = SDL_GetTicks() + 400;
-            resume_log("did-enter-foreground orient %d", (int)SDL_GetDisplayOrientation(0));
             int raw_w = 0, raw_h = 0;
             g_background = 0;
             SDL_GetWindowSize(g_window, &raw_w, &raw_h);
@@ -466,30 +438,8 @@ void window_present(void) {
         if (SDL_GetTicks() < g_hold_until) return;
         g_hold_until = 0;
     }
-#if defined(__ANDROID__)
-    if (g_refresh_frames > 0 && g_refresh_frames % 10 == 0) {
-        int ow = 0, oh = 0;
-        SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
-        const int px[3] = { ow / 2, ow / 4, ow * 3 / 4 };
-        const int py[3] = { oh / 2, oh / 4, oh * 3 / 4 };
-        Uint32 val[3] = { 0, 0, 0 };
-        for (int i = 0; i < 3; i++) {
-            SDL_Rect r = { px[i], py[i], 1, 1 };
-            SDL_RenderReadPixels(g_renderer, &r, SDL_PIXELFORMAT_ARGB8888, &val[i], 4);
-        }
-        resume_log("pixels left %d: %06x %06x %06x", g_refresh_frames, val[0] & 0xffffff, val[1] & 0xffffff, val[2] & 0xffffff);
-    }
-#endif
     SDL_RenderPresent(g_renderer);
-    if (g_refresh_frames > 0) {
-        if (g_refresh_frames == 150) {
-            int ow = 0, oh = 0, ww = 0, wh = 0;
-            SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
-            SDL_GetWindowSize(g_window, &ww, &wh);
-            resume_log("first-present output %dx%d window %dx%d scale %.2f orient %d", ow, oh, ww, wh, g_scale, (int)SDL_GetDisplayOrientation(0));
-        }
-        g_refresh_frames--;
-    }
+    if (g_refresh_frames > 0) g_refresh_frames--;
 }
 
 int window_get_width(void)  { return g_width; }

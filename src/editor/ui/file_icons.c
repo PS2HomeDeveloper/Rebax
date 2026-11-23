@@ -46,8 +46,8 @@ int file_icons_for_name(const char *file_name) {
     if (ext_equals(ext, "cpp")) return ICON_file_cpp;
     if (ext_equals(ext, "chh")) return ICON_file_chh;
     if (ext_equals(ext, "rscene")) return ICON_scene;
-    if (file_icons_is_raster_image_ext(ext)) return ICON_Broken_Image;
+    if (file_icons_is_raster_image_ext(ext)) return ICON_broken_image;
     if (ext_equals(ext, "wav") || ext_equals(ext, "mp3") || ext_equals(ext, "ogg"))
-        return ICON_Audio_file;
+        return ICON_audio_file;
     return ICON_file;
 }

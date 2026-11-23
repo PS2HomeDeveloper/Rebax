@@ -20,7 +20,15 @@ typedef struct {
     unsigned char *pixels;
     int width;
     int height;
+    int px_w;
+    int px_h;
 } shape_image_t;
+
+void shape_provider_set_scale(float scale);
+float shape_provider_get_scale(void);
+int shape_provider_to_px(int logical);
+shape_image_t shape_provider_render_rect_px(int px_w, int px_h, double radius_px,
+                                             unsigned char r, unsigned char g, unsigned char b);
 
 shape_image_t shape_provider_render_rect(int width, int height, int corner_radius,
                                           unsigned char r, unsigned char g, unsigned char b);
