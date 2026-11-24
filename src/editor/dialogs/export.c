@@ -36,9 +36,9 @@
 
 #define PAGE_DEF_W 1040
 #define PAGE_DEF_H 650
-#define PAGE_W g_pw
-#define PAGE_H g_ph
-static int g_pw = PAGE_DEF_W, g_ph = PAGE_DEF_H;
+#define PAGE_W g_page_w
+#define PAGE_H g_page_h
+static int g_page_w = PAGE_DEF_W, g_page_h = PAGE_DEF_H;
 static ui_dialog_drag_t g_drag;
 static ui_window_t g_win = UI_WINDOW_INIT(export_dialog_is_open, export_dialog_update, export_dialog_draw);
 #define PAD 24
@@ -211,7 +211,7 @@ static void start_export(void) {
 }
 void export_dialog_update(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; { ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_pw, &g_ph); }
+    int dx, dy; { ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_page_w, &g_page_h); }
     int status = current_status();
     if (status) { if (g_platforms[g_selected].modern) modern_export_update(); else if (g_selected == 5) ps2_export_update(); else ps1_export_update(); pump_logs(); status = current_status(); }
     if (status == 1 && g_platforms[g_selected].modern) snprintf(g_status_text, sizeof(g_status_text), "Building %s (%d/%d) %s...", modern_export_current_architecture(), modern_export_architecture_index() + 1, modern_export_architecture_count(), g_platforms[g_selected].label);
@@ -261,7 +261,7 @@ static void draw_card(int x, int y, int index) {
 }
 void export_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); { ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_pw, &g_ph); }
+    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); { ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_page_w, &g_page_h); }
     ui_dialog_draw_frame(dx, dy, PAGE_W, PAGE_H); ui_dialog_draw_title_left(g_title, g_title_w, g_title_h, dx, dy, 44, PAD);
     ui_dialog_draw_close_button(dx + PAGE_W - PAD - 22, dy + 11, 22);
     int modern = project_modern();

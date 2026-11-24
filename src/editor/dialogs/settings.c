@@ -30,9 +30,9 @@
 
 #define PAGE_DEF_W 760
 #define PAGE_DEF_H 520
-#define PAGE_W g_pw
-#define PAGE_H g_ph
-static int g_pw = PAGE_DEF_W, g_ph = PAGE_DEF_H;
+#define PAGE_W g_page_w
+#define PAGE_H g_page_h
+static int g_page_w = PAGE_DEF_W, g_page_h = PAGE_DEF_H;
 static ui_dialog_drag_t g_drag;
 static ui_window_t g_win = UI_WINDOW_INIT(project_settings_dialog_is_open, project_settings_dialog_update, project_settings_dialog_draw);
 #define PAD 28
@@ -135,7 +135,7 @@ static void save_settings(void) {
 void project_settings_dialog_update(int window_w, int window_h) {
     (void)window_w; (void)window_h;
     if (!g_open) return;
-    int dx, dy; { ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_pw, &g_ph); }
+    int dx, dy; { ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_page_w, &g_page_h); }
     int content_x = dx + SIDEBAR_W + PAD + 16, content_w = PAGE_W - SIDEBAR_W - PAD * 2 - 16;
     if (window_mouse_left_just_pressed()) {
         int mx = window_mouse_x(), my = window_mouse_y();
@@ -164,7 +164,7 @@ static void draw_text(window_texture_t *t, int x, int y, int w, int h, unsigned 
 static void draw_label(const char *s, int x, int y) { int w, h; window_texture_t *t = make(s, 13, &w, &h); draw_text(t, x, y, w, h, 190); if (t) window_destroy_texture(t); }
 void project_settings_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); { ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_pw, &g_ph); }
+    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); { ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_page_w, &g_page_h); }
     ui_dialog_draw_frame(dx, dy, PAGE_W, PAGE_H); ui_dialog_draw_title_left(g_title, g_tw, g_th, dx + PAD, dy, 44, PAD);
     window_fill_rect(dx, dy + 44, SIDEBAR_W, PAGE_H - 44, UI_COLOR_BLACK_MUTED.r, UI_COLOR_BLACK_MUTED.g, UI_COLOR_BLACK_MUTED.b);
     for (int i = 0; i < g_section_count; i++) {
