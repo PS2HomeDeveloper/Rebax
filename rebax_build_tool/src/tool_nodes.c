@@ -205,6 +205,7 @@ static void node_line(char *line, int first_line, void *vctx) {
         e->type = xstrdup(type);
         e->name = xstrdup(name);
         e->icon = xstrdup(icon);
+        for (char *q = e->icon; *q; q++) if (*q >= 'A' && *q <= 'Z') *q = (char)(*q + 32);
         e->props = xstrdup(props);
     }
 }
