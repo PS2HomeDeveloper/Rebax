@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "core/i18n.h"
 #include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +47,7 @@ static shape_entry_t g_shape[SHAPE_CACHE];
 static int g_shape_next = 0;
 
 static text_entry_t *text_entry(const char *text, int size) {
+    text = tr(text);
     for (int i = 0; i < TEXT_CACHE; i++)
         if (g_text[i].used && g_text[i].size == size && strcmp(g_text[i].text, text) == 0) return &g_text[i];
     text_entry_t *e = &g_text[g_text_next];

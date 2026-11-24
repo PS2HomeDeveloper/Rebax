@@ -21,18 +21,23 @@
 
 #include "core/engine_settings.h"
 #include "filesystem/rebax_fs.h"
+#include "filesystem/resources.h"
 #include "filesystem/storage_paths.h"
 
 #define MAX_LANGUAGES 64
 #define MAX_ENTRIES 4096
+#define HASH_SIZE 16384
 
-typedef struct { char code[16]; char name[48]; } language_t;
+typedef struct { char code[16]; char name[48]; int builtin; } language_t;
 typedef struct { char *key; char *value; } entry_t;
+
+static const char *const g_builtin_codes[] = { "ar" };
 
 static language_t g_languages[MAX_LANGUAGES];
 static int g_language_count;
 static entry_t g_entries[MAX_ENTRIES];
 static int g_entry_count;
+static short g_hash[HASH_SIZE];
 static char g_current[16] = "en";
 
 static void unescape(char *s) {
@@ -45,55 +50,63 @@ static void unescape(char *s) {
     *w = '\0';
 }
 
+static unsigned hash_text(const char *s) {
+    unsigned h = 2166136261u;
+    for (; *s; s++) { h ^= (unsigned char)*s; h *= 16777619u; }
+    return h;
+}
+
+static void hash_insert(int index) {
+    unsigned slot = hash_text(g_entries[index].key) & (HASH_SIZE - 1);
+    while (g_hash[slot] != 0) {
+        if (strcmp(g_entries[g_hash[slot] - 1].key, g_entries[index].key) == 0) {
+            g_hash[slot] = (short)(index + 1);
+            return;
+        }
+        slot = (slot + 1) & (HASH_SIZE - 1);
+    }
+    g_hash[slot] = (short)(index + 1);
+}
+
 static void clear_entries(void) {
     for (int i = 0; i < g_entry_count; i++) { free(g_entries[i].key); free(g_entries[i].value); }
     g_entry_count = 0;
+    memset(g_hash, 0, sizeof(g_hash));
 }
 
 static void language_dir(char *out, size_t size) {
     snprintf(out, size, "%s/languages", rebax_root_dir());
 }
 
-static int read_name(const char *path, char *name, size_t size) {
+static unsigned char *read_file(const char *path) {
     FILE *f = fopen(path, "rb");
-    if (f == NULL) return 0;
-    char line[512];
-    int found = 0;
-    while (fgets(line, sizeof(line), f) != NULL) {
-        if (strncmp(line, "@name=", 6) == 0) {
-            line[strcspn(line, "\r\n")] = '\0';
-            snprintf(name, size, "%s", line + 6);
-            found = 1;
-            break;
-        }
-    }
+    if (f == NULL) return NULL;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size < 0) { fclose(f); return NULL; }
+    unsigned char *data = (unsigned char *)malloc((size_t)size + 1);
+    if (data == NULL) { fclose(f); return NULL; }
+    size_t got = fread(data, 1, (size_t)size, f);
     fclose(f);
-    return found;
+    data[got] = '\0';
+    return data;
 }
 
-static void scan_callback(const char *file_path, void *user) {
-    (void)user;
-    const char *ext = rebax_fs_extension(file_path);
-    if (ext == NULL || strcmp(ext, "lang") != 0 || g_language_count >= MAX_LANGUAGES) return;
-    language_t *lang = &g_languages[g_language_count];
-    rebax_fs_basename_no_ext(file_path, lang->code, sizeof(lang->code));
-    if (strcmp(lang->code, "en") == 0) return;
-    if (!read_name(file_path, lang->name, sizeof(lang->name))) snprintf(lang->name, sizeof(lang->name), "%s", lang->code);
-    g_language_count++;
-}
-
-static void load_catalog(const char *code) {
-    clear_entries();
-    if (strcmp(code, "en") == 0) return;
-    char dir[1024], path[1100];
-    language_dir(dir, sizeof(dir));
-    snprintf(path, sizeof(path), "%s/%s.lang", dir, code);
-    FILE *f = fopen(path, "rb");
-    if (f == NULL) return;
-    char line[2048];
-    while (fgets(line, sizeof(line), f) != NULL && g_entry_count < MAX_ENTRIES) {
-        line[strcspn(line, "\r\n")] = '\0';
-        if (line[0] == '@' || line[0] == '\0') continue;
+static void parse_text(char *text, char *name, size_t name_size, int load_entries) {
+    char *p = text;
+    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF) p += 3;
+    while (*p != '\0') {
+        char *line = p;
+        char *end = strchr(p, '\n');
+        if (end != NULL) { *end = '\0'; p = end + 1; } else p += strlen(p);
+        line[strcspn(line, "\r")] = '\0';
+        if (line[0] == '\0') continue;
+        if (line[0] == '@') {
+            if (name != NULL && strncmp(line, "@name=", 6) == 0) snprintf(name, name_size, "%s", line + 6);
+            continue;
+        }
+        if (!load_entries || g_entry_count >= MAX_ENTRIES) continue;
         char *eq = strstr(line, "=>");
         if (eq == NULL) continue;
         *eq = '\0';
@@ -102,9 +115,67 @@ static void load_catalog(const char *code) {
         unescape(value);
         g_entries[g_entry_count].key = strdup(line);
         g_entries[g_entry_count].value = strdup(value);
+        hash_insert(g_entry_count);
         g_entry_count++;
     }
-    fclose(f);
+}
+
+static unsigned char *read_language(const language_t *lang, int user_first) {
+    char dir[1024], path[1100];
+    unsigned char *data = NULL;
+    language_dir(dir, sizeof(dir));
+    snprintf(path, sizeof(path), "%s/%s.lang", dir, lang->code);
+    if (user_first) data = read_file(path);
+    if (data == NULL && lang->builtin) {
+        char rel[64];
+        snprintf(rel, sizeof(rel), "languages/%s.lang", lang->code);
+        data = resource_file_read(rel, NULL);
+    }
+    return data;
+}
+
+static int find_language(const char *code) {
+    for (int i = 0; i < g_language_count; i++) if (strcmp(g_languages[i].code, code) == 0) return i;
+    return -1;
+}
+
+static void add_language(const char *code, int builtin, const char *fallback_name) {
+    if (strcmp(code, "en") == 0 || g_language_count >= MAX_LANGUAGES) return;
+    int index = find_language(code);
+    if (index < 0) {
+        index = g_language_count++;
+        snprintf(g_languages[index].code, sizeof(g_languages[index].code), "%s", code);
+        snprintf(g_languages[index].name, sizeof(g_languages[index].name), "%s", fallback_name != NULL ? fallback_name : code);
+        g_languages[index].builtin = 0;
+    }
+    if (builtin) g_languages[index].builtin = 1;
+    unsigned char *data = read_language(&g_languages[index], 1);
+    if (data != NULL) {
+        char name[48] = "";
+        parse_text((char *)data, name, sizeof(name), 0);
+        if (name[0] != '\0') snprintf(g_languages[index].name, sizeof(g_languages[index].name), "%s", name);
+        free(data);
+    }
+}
+
+static void scan_callback(const char *file_path, void *user) {
+    (void)user;
+    const char *ext = rebax_fs_extension(file_path);
+    if (ext == NULL || strcmp(ext, "lang") != 0) return;
+    char code[16];
+    rebax_fs_basename_no_ext(file_path, code, sizeof(code));
+    add_language(code, 0, NULL);
+}
+
+static void load_catalog(const char *code) {
+    clear_entries();
+    if (strcmp(code, "en") == 0) return;
+    int index = find_language(code);
+    if (index < 0) return;
+    unsigned char *data = read_language(&g_languages[index], 1);
+    if (data == NULL) return;
+    parse_text((char *)data, NULL, 0, 1);
+    free(data);
 }
 
 void i18n_init(void) {
@@ -112,7 +183,9 @@ void i18n_init(void) {
     g_language_count = 0;
     snprintf(g_languages[0].code, sizeof(g_languages[0].code), "en");
     snprintf(g_languages[0].name, sizeof(g_languages[0].name), "English");
+    g_languages[0].builtin = 1;
     g_language_count = 1;
+    for (size_t i = 0; i < sizeof(g_builtin_codes) / sizeof(g_builtin_codes[0]); i++) add_language(g_builtin_codes[i], 1, NULL);
     language_dir(dir, sizeof(dir));
     rebax_fs_mkdir_p(dir);
     rebax_fs_walk_files(dir, scan_callback, NULL);
@@ -125,8 +198,12 @@ void i18n_shutdown(void) {
 }
 
 const char *tr(const char *text) {
-    for (int i = 0; i < g_entry_count; i++) {
-        if (strcmp(g_entries[i].key, text) == 0) return g_entries[i].value;
+    if (g_entry_count == 0 || text == NULL || text[0] == '\0') return text;
+    unsigned slot = hash_text(text) & (HASH_SIZE - 1);
+    while (g_hash[slot] != 0) {
+        const entry_t *e = &g_entries[g_hash[slot] - 1];
+        if (strcmp(e->key, text) == 0) return e->value;
+        slot = (slot + 1) & (HASH_SIZE - 1);
     }
     return text;
 }
@@ -137,12 +214,8 @@ const char *i18n_language_name(int index) { return (index >= 0 && index < g_lang
 const char *i18n_current_language(void) { return g_current; }
 
 int i18n_set_language(const char *code) {
-    for (int i = 0; i < g_language_count; i++) {
-        if (strcmp(g_languages[i].code, code) == 0) {
-            snprintf(g_current, sizeof(g_current), "%s", code);
-            load_catalog(code);
-            return 1;
-        }
-    }
-    return 0;
+    if (find_language(code) < 0) return 0;
+    snprintf(g_current, sizeof(g_current), "%s", code);
+    load_catalog(code);
+    return 1;
 }

@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "core/i18n.h"
 #include "editor/core/workspace.h"
 #include "platform/common/window.h"
 #include "editor/ui/theme.h"
@@ -571,7 +572,7 @@ void editor_workspace_draw(int window_w, int window_h) {
         const char *win_name = strrchr(project_path, '\\');
         if (win_name && (!name || win_name > name)) name = win_name;
         name = name ? name + 1 : project_path;
-        snprintf(status, sizeof(status), "Project: %s    |    Path: %s", name, project_path);
+        snprintf(status, sizeof(status), tr("Project: %s    |    Path: %s"), name, project_path);
     } else snprintf(status, sizeof(status), "No project");
     if (strcmp(status, g_status_cache) != 0) {
         if (g_status_tex) window_destroy_texture(g_status_tex);

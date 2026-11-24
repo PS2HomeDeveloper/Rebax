@@ -72,6 +72,8 @@ static int choice_button(const char *label, int x, int y, int w, int selected) {
     return ui_kit_clicked(x, y, w, h);
 }
 
+static int g_language_changed = 0;
+
 static int draw_general(int x, int y, int w) {
     ui_color_t muted = UI_COLOR_TEXT_MUTED;
     y = draw_section_title("Language", x, y);
@@ -86,11 +88,16 @@ static int draw_general(int x, int y, int w) {
         if (choice_button(name, cx, y, bw, strcmp(i18n_current_language(), i18n_language_code(i)) == 0)) {
             i18n_set_language(i18n_language_code(i));
             engine_settings_set_language(i18n_language_code(i));
+            g_language_changed = 1;
         }
         cx += bw + 10;
     }
     y += 52;
     text_c("More languages can be added from the languages folder.", 13, x, y, &muted);
+    if (g_language_changed) {
+        y += 28;
+        text_c("Restart the engine to apply the language everywhere.", 13, x, y, &muted);
+    }
     return y + 40;
 }
 

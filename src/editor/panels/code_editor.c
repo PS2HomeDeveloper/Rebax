@@ -18,6 +18,7 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "core/i18n.h"
 #include "editor/panels/code_editor.h"
 #include "platform/common/window.h"
 #include "editor/ui/font.h"
@@ -76,7 +77,7 @@ static int g_cached_line_count = 0;
 static int g_cache_dirty = 1;
 
 static void set_status(const char *text) {
-    snprintf(g_status, sizeof(g_status), "%s", text ? text : "Ready");
+    snprintf(g_status, sizeof(g_status), "%s", tr(text ? text : "Ready"));
     g_status_ticks = 180;
 }
 
@@ -183,7 +184,7 @@ static int prefix_width(size_t start, size_t count) {
     if (count >= sizeof(buffer)) count = sizeof(buffer) - 1;
     memcpy(buffer, g_text + start, count);
     buffer[count] = '\0';
-    return font_measure_text(buffer, FONT_WEIGHT_REGULAR, CODE_FONT);
+    return font_measure_text(buffer, FONT_WEIGHT_MONO, CODE_FONT);
 }
 
 static void normalize_view(void) {
@@ -451,14 +452,14 @@ static void rebuild_line_cache(void) {
         snprintf(g_cached_number[line], sizeof(g_cached_number[line]), "%4d", line + 1);
         unsigned char rgb[sizeof(g_cached_line[line]) * 3];
         colorize_line(g_cached_line[line], (int)n, rgb, &in_block_comment);
-        font_text_image_t image = font_render_text_colored(g_cached_line[line], FONT_WEIGHT_REGULAR, CODE_FONT, rgb);
+        font_text_image_t image = font_render_text_colored(g_cached_line[line], FONT_WEIGHT_MONO, CODE_FONT, rgb);
         if (image.pixels != NULL) {
             g_line_text[line] = window_create_texture(image.pixels, image.px_w, image.px_h);
             g_line_width[line] = image.width;
             g_line_height[line] = image.height;
             font_free_text_image(&image);
         }
-        g_line_number_text[line] = ui_make_text_texture(g_cached_number[line], FONT_WEIGHT_REGULAR, 11, &g_line_number_w[line], &g_line_number_h[line]);
+        g_line_number_text[line] = ui_make_text_texture(g_cached_number[line], FONT_WEIGHT_MONO, 11, &g_line_number_w[line], &g_line_number_h[line]);
         line++;
         if (end >= g_length) break;
         p = end + 1;
@@ -601,8 +602,8 @@ void code_editor_draw(int x, int y, int w, int h) {
     if (g_has_focus && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH) window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
     window_fill_rect(x, bottom, w, CODE_EDITOR_STATUS_HEIGHT, toolbar.r, toolbar.g, toolbar.b);
     char status[256];
-    snprintf(status, sizeof(status), "%s  |  Ln %d, Col %d  |  %s", g_status, current + 1, cursor_column() + 1,
-             g_dirty ? "Modified" : "Saved");
+    snprintf(status, sizeof(status), tr("%s  |  Ln %d, Col %d  |  %s"), g_status, current + 1, cursor_column() + 1,
+             g_dirty ? tr("Modified") : tr("Saved"));
     int sw = 0, sh = 0;
     window_texture_t *st = ui_make_text_texture(status, FONT_WEIGHT_REGULAR, 11, &sw, &sh);
     if (st) { window_draw_texture(st, x + 8, bottom + (CODE_EDITOR_STATUS_HEIGHT - sh) / 2, sw, sh); window_destroy_texture(st); }

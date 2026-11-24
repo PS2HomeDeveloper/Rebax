@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "core/i18n.h"
 #include "editor/ui/theme.h"
 #include "editor/panels/settings_page.h"
 #include <stdio.h>
@@ -163,11 +164,12 @@ static void build_visuals(void) {
         snprintf(v->name, sizeof(v->name), "%s", entry->name);
         v->name_tex = ui_make_text_texture(v->name, FONT_WEIGHT_BOLD, 14, &v->name_w, &v->name_h);
         v->path_tex = ui_make_text_texture(v->path, FONT_WEIGHT_REGULAR, 11, &v->path_w, &v->path_h);
-        char date[64] = "Last opened: unknown";
+        char date[64];
+        snprintf(date, sizeof(date), "%s", tr("Last opened: unknown"));
         if (entry->last_opened > 0) {
             time_t t = (time_t)entry->last_opened;
             struct tm *tmv = localtime(&t);
-            if (tmv) strftime(date, sizeof(date), "Last opened: %Y-%m-%d %H:%M", tmv);
+            if (tmv) strftime(date, sizeof(date), tr("Last opened: %Y-%m-%d %H:%M"), tmv);
         }
         v->date_tex = ui_make_text_texture(date, FONT_WEIGHT_REGULAR, 10, &v->date_w, &v->date_h);
     }

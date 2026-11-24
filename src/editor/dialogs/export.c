@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "core/i18n.h"
 #include "editor/dialogs/export.h"
 #include "platform/common/window.h"
 #include "editor/ui/font.h"
@@ -202,7 +203,7 @@ static void start_export(void) {
         for (int i = 0; i < arch_count(); i++) if (g_arch_mask & (1u << i)) architectures[count++] = arch_name(i);
         if (count == 0) { snprintf(g_error_text, sizeof(g_error_text), "Select at least one installed architecture."); return; }
         g_started = modern_export_start_multi(g_name.text, g_release, g_path.text, g_platforms[g_selected].id, architectures, count);
-        snprintf(g_status_text, sizeof(g_status_text), "Preparing %s (%d architectures)", g_platforms[g_selected].label, count);
+        snprintf(g_status_text, sizeof(g_status_text), tr("Preparing %s (%d architectures)"), tr(g_platforms[g_selected].label), count);
     } else if (g_selected == 5) {
         g_started = ps2_export_start(g_name.text, g_release, g_path.text); snprintf(g_status_text, sizeof(g_status_text), "Preparing PlayStation 2 export");
     } else {
@@ -214,8 +215,8 @@ void export_dialog_update(int window_w, int window_h) {
     int dx, dy; { ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_page_w, &g_page_h); }
     int status = current_status();
     if (status) { if (g_platforms[g_selected].modern) modern_export_update(); else if (g_selected == 5) ps2_export_update(); else ps1_export_update(); pump_logs(); status = current_status(); }
-    if (status == 1 && g_platforms[g_selected].modern) snprintf(g_status_text, sizeof(g_status_text), "Building %s (%d/%d) %s...", modern_export_current_architecture(), modern_export_architecture_index() + 1, modern_export_architecture_count(), g_platforms[g_selected].label);
-    else if (status == 1) snprintf(g_status_text, sizeof(g_status_text), "Exporting %s...", g_platforms[g_selected].label);
+    if (status == 1 && g_platforms[g_selected].modern) snprintf(g_status_text, sizeof(g_status_text), tr("Building %s (%d/%d) %s..."), modern_export_current_architecture(), modern_export_architecture_index() + 1, modern_export_architecture_count(), tr(g_platforms[g_selected].label));
+    else if (status == 1) snprintf(g_status_text, sizeof(g_status_text), tr("Exporting %s..."), tr(g_platforms[g_selected].label));
     else if (status == 2) snprintf(g_status_text, sizeof(g_status_text), "Export completed successfully");
     else if (status == 3) snprintf(g_status_text, sizeof(g_status_text), "Export failed");
     int dxx = dx + detail_x();

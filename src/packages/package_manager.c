@@ -15,6 +15,7 @@
 
 #define _POSIX_C_SOURCE 200809L
 
+#include "core/i18n.h"
 #include "packages/package_manager.h"
 
 #include <stdio.h>
@@ -281,12 +282,12 @@ static int run_install(const job_t *j, char *err, size_t cap) {
     if (!normalise_into(tmp, dest)) {
         rebax_fs_remove_recursive(tmp);
         rebax_fs_remove_recursive(dest);
-        snprintf(err, cap, "the package %s is empty or damaged", j->file);
+        snprintf(err, cap, tr("the package %s is empty or damaged"), j->file);
         return 0;
     }
     if (!component_ok(j->kind, dest)) {
         rebax_fs_remove_recursive(dest);
-        snprintf(err, cap, "the package %s does not have the expected folders", j->file);
+        snprintf(err, cap, tr("the package %s does not have the expected folders"), j->file);
         return 0;
     }
     return 1;
@@ -300,7 +301,7 @@ static int worker(void *unused) {
         job_t *j = &g_jobs[i];
         char title[200];
         if (j->install) {
-            snprintf(title, sizeof(title), "Installing %s (%d of %d)", j->label, i + 1, g_job_count);
+            snprintf(title, sizeof(title), tr("Installing %s (%d of %d)"), j->label, i + 1, g_job_count);
             set_status(title, 0, 0);
             if (!run_install(j, err, sizeof(err))) {
                 set_message(PKG_MSG_ERROR, err);
@@ -308,7 +309,7 @@ static int worker(void *unused) {
             }
         } else {
             char dest[PATH_CAP];
-            snprintf(title, sizeof(title), "Removing %s", j->label);
+            snprintf(title, sizeof(title), tr("Removing %s"), j->label);
             set_status(title, 100, 0);
             snprintf(dest, sizeof(dest), "%s/%s", j->dest_parent, j->dest_name);
             if (!rebax_fs_remove_recursive(dest)) {

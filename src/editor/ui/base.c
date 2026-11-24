@@ -18,10 +18,11 @@
 #include <ctype.h>
 
 #include "editor/ui/base.h"
+#include "core/i18n.h"
 
 window_texture_t *ui_make_text_texture(const char *text, font_weight_t weight,
                                         int pixel_size, int *out_w, int *out_h) {
-    font_text_image_t img = font_render_text(text, weight, pixel_size);
+    font_text_image_t img = font_render_text(tr(text), weight, pixel_size);
     window_texture_t *tex = NULL;
     if (img.pixels != NULL) {
         tex = window_create_texture(img.pixels, img.px_w, img.px_h);

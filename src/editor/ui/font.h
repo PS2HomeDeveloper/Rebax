@@ -18,7 +18,8 @@
 
 typedef enum {
     FONT_WEIGHT_REGULAR,
-    FONT_WEIGHT_BOLD
+    FONT_WEIGHT_BOLD,
+    FONT_WEIGHT_MONO
 } font_weight_t;
 
 typedef struct {

@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "core/i18n.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,7 +96,7 @@ static void rebuild_rows(void) {
     snprintf(header_text, sizeof(header_text), "%s (%s)",
              node_name ? node_name : "?", entry ? entry->name : "?");
 
-    font_text_image_t header = font_render_text(header_text, FONT_WEIGHT_BOLD, 15);
+    font_text_image_t header = font_render_text(tr(header_text), FONT_WEIGHT_BOLD, 15);
     if (header.pixels != NULL) {
         g_header_tex = window_create_texture(header.pixels, header.px_w, header.px_h);
         g_header_w = header.width;
@@ -109,7 +110,7 @@ static void rebuild_rows(void) {
         const node_property_t *prop = &entry->properties[i];
         property_row_t *row = &g_rows[g_row_count];
 
-        font_text_image_t name_txt = font_render_text(prop->name, FONT_WEIGHT_REGULAR, 13);
+        font_text_image_t name_txt = font_render_text(tr(prop->name), FONT_WEIGHT_REGULAR, 13);
         row->name_tex = (name_txt.pixels != NULL) ? window_create_texture(name_txt.pixels, name_txt.px_w, name_txt.px_h) : NULL;
         row->name_w = name_txt.width;
         row->name_h = name_txt.height;

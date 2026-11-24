@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "core/i18n.h"
 #include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
@@ -311,7 +312,7 @@ void packages_dialog_draw(int window_w, int window_h) {
     int hy = l.y + TITLEBAR_H + 14;
     if (g_section_tex) window_draw_texture(g_section_tex, hx, hy, g_section_w, g_section_h);
     static char host_line[96];
-    snprintf(host_line, sizeof(host_line), "This device: %s", package_host_text());
+    snprintf(host_line, sizeof(host_line), tr("This device: %s"), package_host_text());
     cache_set(&g_host_cache, host_line, 12);
     if (g_host_cache.tex) window_draw_texture_tinted(g_host_cache.tex, hx, hy + g_section_h + 6, g_host_cache.w, g_host_cache.h, UI_RGB(UI_COLOR_TEXT_MUTED));
 

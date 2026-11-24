@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "core/i18n.h"
 #include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
@@ -88,7 +89,7 @@ static void on_folder(const char *path, void *user) {
     int ok;
     if (g_pending == EXPORT_ELF) ok = ps2_link_export_elf(path, error, sizeof(error));
     else ok = ps2_link_export_ipconfig(path, g_address.text, error, sizeof(error));
-    if (ok) snprintf(g_message, sizeof(g_message), "%s exported successfully", g_pending == EXPORT_ELF ? "ps2link.elf" : "IPCONFIG.DAT");
+    if (ok) snprintf(g_message, sizeof(g_message), tr("%s exported successfully"), g_pending == EXPORT_ELF ? "ps2link.elf" : "IPCONFIG.DAT");
     else snprintf(g_message, sizeof(g_message), "%s", error);
     g_message_ok = ok;
     g_pending = EXPORT_NONE;
@@ -177,8 +178,8 @@ void ps2_network_dialog_draw(int window_w, int window_h) {
     const char *line = "Not tested yet";
     char buf[160];
     if (st == PS2LINK_PROBE_CHECKING) { r = 224; g = 178; b = 60; line = "Checking..."; }
-    else if (st == PS2LINK_PROBE_REACHABLE) { r = 80; g = 200; b = 110; snprintf(buf, sizeof(buf), "Connected - PlayStation 2 found at %s", g_tested_address); line = buf; }
-    else if (st == PS2LINK_PROBE_UNREACHABLE) { r = 220; g = 80; b = 80; snprintf(buf, sizeof(buf), "Not connected - no answer from %s", g_tested_address); line = buf; }
+    else if (st == PS2LINK_PROBE_REACHABLE) { r = 80; g = 200; b = 110; snprintf(buf, sizeof(buf), tr("Connected - PlayStation 2 found at %s"), g_tested_address); line = buf; }
+    else if (st == PS2LINK_PROBE_UNREACHABLE) { r = 220; g = 80; b = 80; snprintf(buf, sizeof(buf), tr("Not connected - no answer from %s"), g_tested_address); line = buf; }
     ui_kit_rect(card_x + 16, sy + 15, 14, 14, 7, r, g, b);
     ui_kit_text(line, 14, card_x + 40, sy + (44 - ui_kit_text_height(line, 14)) / 2, 225, 228, 232);
     ui_kit_button("Test connection", l.test.x, l.test.y, l.test.w, l.test.h, run_settings_valid_address(g_address.text) && st != PS2LINK_PROBE_CHECKING, 0);

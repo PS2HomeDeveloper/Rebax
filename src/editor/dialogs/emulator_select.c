@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "core/i18n.h"
 #include "editor/ui/theme.h"
 #include <stdio.h>
 #include <string.h>
@@ -74,7 +75,7 @@ static void on_located(const char *path, void *user) {
     g_locating = NULL;
     if (!path || !emu) return;
     if (!emulator_path_matches(emu, path)) {
-        snprintf(g_notice, sizeof(g_notice), "That file is not %s. Pick the %s program file", emu->name, emu->name);
+        snprintf(g_notice, sizeof(g_notice), tr("That file is not %s. Pick the %s program file"), emu->name, emu->name);
         return;
     }
     emulator_set_executable(emu, path);

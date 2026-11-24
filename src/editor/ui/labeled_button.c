@@ -13,6 +13,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "core/i18n.h"
 #include <stddef.h>
 
 #include "editor/ui/labeled_button.h"
@@ -28,7 +29,7 @@ labeled_button_t labeled_button_create(const char *text, font_weight_t weight,
         return out;
     }
 
-    font_text_image_t txt = font_render_text(text, weight, font_pixel_size);
+    font_text_image_t txt = font_render_text(tr(text), weight, font_pixel_size);
     if (txt.pixels == NULL) {
         return out;
     }
