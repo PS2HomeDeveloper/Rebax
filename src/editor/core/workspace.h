@@ -28,6 +28,8 @@ void editor_workspace_update(int window_w, int window_h);
 
 void editor_workspace_draw(int window_w, int window_h);
 
+void editor_workspace_poll(void);
+
 void editor_workspace_shutdown(void);
 
 #endif

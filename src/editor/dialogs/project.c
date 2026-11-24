@@ -36,9 +36,14 @@
 #include "editor/ui/theme.h"
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 
-#define DIALOG_WIDTH   520
-#define DIALOG_HEIGHT  458
+#define DEFAULT_W      520
+#define DEFAULT_H      458
+#define DIALOG_WIDTH   g_dw
+#define DIALOG_HEIGHT  g_dh
+static int g_dw = DEFAULT_W, g_dh = DEFAULT_H;
+static ui_window_t g_win = UI_WINDOW_INIT(project_dialog_is_open, project_dialog_update, project_dialog_draw);
 #define DIALOG_PADDING 24
 #define FIELD_HEIGHT   32
 #define LABEL_FONT_SIZE 15
@@ -151,6 +156,7 @@ void project_dialog_open(void) {
     g_type = PROJECT_TYPE_MODERN;
     g_dev = DEV_SYSTEM_NODES;
     g_is_open = 1;
+    ui_windows_show(&g_win);
 }
 
 int project_dialog_is_open(void) {
@@ -244,7 +250,7 @@ void project_dialog_update(int window_w, int window_h) {
     }
 
     int dx, dy;
-    { int pw, ph; ui_dialog_place(&g_drag, 1, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, 0, &dx, &dy, &pw, &ph); }
+    { ui_dialog_place(&g_drag, 1, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLEBAR_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh); }
     int close_x = dx + DIALOG_WIDTH - DIALOG_PADDING - CLOSE_BTN_SIZE;
     int close_y = dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2;
     if (window_mouse_left_just_pressed() &&
@@ -360,7 +366,7 @@ void project_dialog_draw(int window_w, int window_h) {
 
     ui_dialog_draw_backdrop(window_w, window_h);
     int dx, dy;
-    { int pw, ph; ui_dialog_place(&g_drag, 0, window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, DIALOG_WIDTH, DIALOG_HEIGHT, TITLEBAR_HEIGHT, 0, &dx, &dy, &pw, &ph); }
+    { ui_dialog_place(&g_drag, 0, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLEBAR_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh); }
 
     ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLEBAR_HEIGHT, DIALOG_PADDING);

@@ -22,9 +22,15 @@
 #include "editor/ui/theme.h"
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 
-#define DIALOG_WIDTH   360
-#define DIALOG_HEIGHT  156
+#define DEFAULT_W      360
+#define DEFAULT_H      156
+#define DIALOG_WIDTH   g_dw
+#define DIALOG_HEIGHT  g_dh
+static int g_dw = DEFAULT_W, g_dh = DEFAULT_H;
+static ui_dialog_drag_t g_drag;
+static ui_window_t g_win = UI_WINDOW_INIT(close_scene_dialog_is_open, close_scene_dialog_update, close_scene_dialog_draw);
 #define BUTTON_GAP       10
 #define BUTTON_ROW_H     40
 #define TITLEBAR_HEIGHT   40
@@ -71,6 +77,8 @@ void close_scene_dialog_open(int tab_index) {
     g_tab_index = tab_index;
     g_pending_result = CLOSE_SCENE_RESULT_NONE;
     g_is_open = 1;
+    ui_dialog_drag_reset(&g_drag);
+    ui_windows_show(&g_win);
 }
 
 int close_scene_dialog_is_open(void) { return g_is_open; }
@@ -87,7 +95,7 @@ void close_scene_dialog_update(int window_w, int window_h) {
     if (!g_is_open) return;
 
     int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 1, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLEBAR_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh);
 
     int cancel_x, dont_save_x, save_x, buttons_y;
     compute_button_positions(dx, dy, &cancel_x, &dont_save_x, &save_x, &buttons_y);
@@ -120,7 +128,7 @@ void close_scene_dialog_draw(int window_w, int window_h) {
     ui_dialog_draw_backdrop(window_w, window_h);
 
     int dx, dy;
-    ui_center_rect(window_w, window_h, DIALOG_WIDTH, DIALOG_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_drag, 0, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLEBAR_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh);
 
     ui_dialog_draw_frame(dx, dy, DIALOG_WIDTH, DIALOG_HEIGHT);
     ui_dialog_draw_title_left(g_title_tex, g_title_w, g_title_h, dx, dy, TITLEBAR_HEIGHT, 16);

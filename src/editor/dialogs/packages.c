@@ -22,6 +22,7 @@
 #include "editor/ui/icon_atlas.h"
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 #include "editor/ui/scrollbar.h"
 #include "platform/common/window.h"
 
@@ -129,6 +130,7 @@ static void cache_free(cached_text_t *c) {
 }
 
 static ui_dialog_drag_t g_drag;
+static ui_window_t g_win = UI_WINDOW_INIT(packages_dialog_is_open, packages_dialog_update, packages_dialog_draw);
 
 static void compute_layout(int window_w, int window_h, layout_t *l, int interactive) {
     l->w = window_w - 40 < DIALOG_MAX_W ? window_w - 40 : DIALOG_MAX_W;
@@ -186,6 +188,7 @@ void packages_dialog_open(void) {
     g_was_busy = package_is_busy();
     g_scroll = 0;
     g_open = 1;
+    ui_windows_show(&g_win);
 }
 
 int packages_dialog_is_open(void) { return g_open; }

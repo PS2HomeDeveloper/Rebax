@@ -29,6 +29,7 @@
 #include "editor/ui/base.h"
 #include "editor/ui/selection.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 
 #define DEFAULT_W        320
 #define DEFAULT_H        320
@@ -37,6 +38,7 @@
 static int g_dw = DEFAULT_W, g_dh = DEFAULT_H;
 #define DIALOG_PADDING    16
 static ui_dialog_drag_t g_drag;
+static ui_window_t g_win = UI_WINDOW_INIT(add_node_dialog_is_open, add_node_dialog_update, add_node_dialog_draw);
 #define TITLE_HEIGHT       32
 #define CLOSE_BTN_SIZE     22
 #define SEARCH_HEIGHT      26
@@ -103,6 +105,7 @@ static void ensure_ready(void) {
 void add_node_dialog_open(void) {
     ensure_ready();
     g_is_open = 1;
+    ui_windows_show(&g_win);
     ui_dialog_drag_reset(&g_drag);
     g_selected_index = 0;
     g_search_field.text[0] = '\0';

@@ -25,6 +25,7 @@
 #include "editor/ui/tabs.h"
 #include "editor/ui/layout.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 #include "editor/panels/scene_tree.h"
 #include "scene/scene_data.h"
 #include "scene/current_scene.h"
@@ -56,8 +57,10 @@
 #define CAMERA_MIN_H 150
 #define SCENE_TAB_PLUS_SIZE 14
 #define SCENE_TAB_PLUS_MARGIN 8
-#define PANEL_MOVE_WIDTH 440
-#define PANEL_MOVE_HEIGHT 270
+#define PANEL_MOVE_DEFAULT_W 440
+#define PANEL_MOVE_DEFAULT_H 270
+#define PANEL_MOVE_WIDTH g_move_w
+#define PANEL_MOVE_HEIGHT g_move_h
 #define PANEL_MOVE_TITLEBAR 38
 #define PANEL_MOVE_CLOSE_SIZE 22
 
@@ -99,6 +102,12 @@ static int g_region_active[PANEL_REGION_COUNT] = {
     PANEL_SCENE, PANEL_PROPERTIES, PANEL_FILES, -1
 };
 static int g_move_panel = -1;
+static int g_move_w = PANEL_MOVE_DEFAULT_W, g_move_h = PANEL_MOVE_DEFAULT_H;
+static ui_dialog_drag_t g_move_drag;
+static int move_dialog_is_open(void) { return g_move_panel >= 0; }
+static void update_move_dialog(int window_w, int window_h);
+static void draw_move_dialog(int window_w, int window_h);
+static ui_window_t g_move_win = UI_WINDOW_INIT(move_dialog_is_open, update_move_dialog, draw_move_dialog);
 
 static ui_tabs_t g_scene_tabs;
 static ui_tabs_t g_camera_tabs;
@@ -247,6 +256,8 @@ static int update_host_region(panel_region_t region, int window_w, int window_h)
         int panel = g_region_tab_panels[region][clicked];
         if (panel == g_region_active[region]) {
             g_move_panel = panel;
+            ui_dialog_drag_reset(&g_move_drag);
+            ui_windows_show(&g_move_win);
             return 1;
         }
         g_region_active[region] = panel;
@@ -276,7 +287,7 @@ static void panel_move_choice_rect(panel_region_t region, int dx, int dy, worksp
     const int cell_w = 112;
     const int cell_h = 56;
     const int gap = 8;
-    const int grid_x = dx + 48;
+    const int grid_x = dx + (PANEL_MOVE_WIDTH - 352) / 2;
     const int grid_y = dy + 82;
     int column = (region == PANEL_REGION_RIGHT_TOP || region == PANEL_REGION_RIGHT_BOTTOM) ? 2 : 0;
     int row = (region == PANEL_REGION_LEFT_BOTTOM || region == PANEL_REGION_RIGHT_BOTTOM) ? 1 : 0;
@@ -286,7 +297,7 @@ static void panel_move_choice_rect(panel_region_t region, int dx, int dy, worksp
 
 static void update_move_dialog(int window_w, int window_h) {
     int dx, dy;
-    ui_center_rect(window_w, window_h, PANEL_MOVE_WIDTH, PANEL_MOVE_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_move_drag, 1, window_w, window_h, PANEL_MOVE_DEFAULT_W, PANEL_MOVE_DEFAULT_H, PANEL_MOVE_DEFAULT_W, PANEL_MOVE_DEFAULT_H, PANEL_MOVE_TITLEBAR, 1, &dx, &dy, &g_move_w, &g_move_h);
     int mx = window_mouse_x(), my = window_mouse_y();
     int close_x = dx + PANEL_MOVE_WIDTH - 16 - PANEL_MOVE_CLOSE_SIZE;
     int close_y = dy + (PANEL_MOVE_TITLEBAR - PANEL_MOVE_CLOSE_SIZE) / 2;
@@ -310,7 +321,7 @@ static void update_move_dialog(int window_w, int window_h) {
 static void draw_move_dialog(int window_w, int window_h) {
     if (g_move_panel < 0) return;
     int dx, dy;
-    ui_center_rect(window_w, window_h, PANEL_MOVE_WIDTH, PANEL_MOVE_HEIGHT, &dx, &dy);
+    ui_dialog_place(&g_move_drag, 0, window_w, window_h, PANEL_MOVE_DEFAULT_W, PANEL_MOVE_DEFAULT_H, PANEL_MOVE_DEFAULT_W, PANEL_MOVE_DEFAULT_H, PANEL_MOVE_TITLEBAR, 1, &dx, &dy, &g_move_w, &g_move_h);
     ui_dialog_draw_backdrop(window_w, window_h);
     ui_dialog_draw_frame(dx, dy, PANEL_MOVE_WIDTH, PANEL_MOVE_HEIGHT);
     ui_dialog_draw_title_left(g_move_title_tex, g_move_title_w, g_move_title_h,
@@ -322,7 +333,7 @@ static void draw_move_dialog(int window_w, int window_h) {
     const int cell_w = 112;
     const int cell_h = 56;
     const int gap = 8;
-    const int grid_x = dx + 48;
+    const int grid_x = dx + (PANEL_MOVE_WIDTH - 352) / 2;
     const int grid_y = dy + 82;
     for (int row = 0; row < 2; row++) {
         for (int column = 0; column < 3; column++) {
@@ -440,19 +451,6 @@ void editor_workspace_update(int window_w, int window_h) {
     static int scene_system_initialized = 0;
     ensure_ui_ready();
     if (!scene_system_initialized) { scene_system_initialized = 1; scene_tabs_init(); }
-
-    if (close_scene_dialog_is_open()) {
-        close_scene_dialog_update(window_w, window_h);
-        int index = close_scene_dialog_get_tab_index();
-        apply_close_scene_result(close_scene_dialog_consume_result(), index);
-        return;
-    }
-    if (ps2_network_dialog_is_open()) { ps2_network_dialog_update(window_w, window_h); return; }
-    if (emulator_select_dialog_is_open()) { emulator_select_dialog_update(window_w, window_h); return; }
-    if (export_dialog_is_open()) { export_dialog_update(window_w, window_h); return; }
-    if (project_settings_dialog_is_open()) { project_settings_dialog_update(window_w, window_h); return; }
-    if (g_move_panel >= 0) { update_move_dialog(window_w, window_h); return; }
-    if (add_node_dialog_is_open()) { add_node_dialog_update(window_w, window_h); return; }
 
     int run_menu_was_open = run_controls_menu_is_open();
     run_controls_update(window_w);
@@ -584,13 +582,11 @@ void editor_workspace_draw(int window_w, int window_h) {
     if (g_status_tex) window_draw_texture_tinted(g_status_tex, 10, window_h - 15, g_status_w, g_status_h, UI_RGB(UI_COLOR_TEXT_MUTED));
 
     run_controls_draw_menu(window_w);
-    add_node_dialog_draw(window_w, window_h);
-    close_scene_dialog_draw(window_w, window_h);
-    export_dialog_draw(window_w, window_h);
-    ps2_network_dialog_draw(window_w, window_h);
-    emulator_select_dialog_draw(window_w, window_h);
-    project_settings_dialog_draw(window_w, window_h);
-    draw_move_dialog(window_w, window_h);
+}
+
+void editor_workspace_poll(void) {
+    close_scene_result_t result = close_scene_dialog_consume_result();
+    if (result != CLOSE_SCENE_RESULT_NONE) apply_close_scene_result(result, close_scene_dialog_get_tab_index());
 }
 
 void editor_workspace_shutdown(void) {

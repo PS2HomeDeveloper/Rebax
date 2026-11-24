@@ -20,6 +20,7 @@
 #include <time.h>
 
 #include "editor/panels/project_center.h"
+#include "editor/ui/windows.h"
 #include "platform/common/window.h"
 #include "editor/ui/font.h"
 #include "editor/ui/base.h"
@@ -237,7 +238,7 @@ void ui_project_center_draw(int window_w, int window_h) {
     int visible = (projects.h - 92) / ROW_HEIGHT;
     if (visible < 1) visible = 1;
     int count = project_catalog_count();
-    int interactive = !project_dialog_is_open() && !packages_dialog_is_open() && !file_manager_is_open();
+    int interactive = !ui_windows_any_open();
     int max_first = count > visible ? count - visible : 0;
     int mx = window_mouse_x(), my = window_mouse_y();
     if (interactive && ui_point_in_rect(mx, my, projects.x + LIST_PADDING, list_top,

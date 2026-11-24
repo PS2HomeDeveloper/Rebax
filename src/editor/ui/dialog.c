@@ -20,6 +20,7 @@
 #include "editor/ui/shape_provider.h"
 #include "editor/ui/base.h"
 #include "editor/ui/theme.h"
+#include "editor/ui/windows.h"
 
 static window_texture_t *g_backdrop_tex = NULL;
 static window_texture_t *g_close_bg_tex = NULL;
@@ -65,7 +66,7 @@ void ui_dialog_place(ui_dialog_drag_t *d, int interactive, int window_w, int win
         d->w = def_w;
         d->h = def_h;
     }
-    if (interactive) {
+    if (interactive && ui_windows_context_is_front()) {
         int mx = window_mouse_x(), my = window_mouse_y();
         int down = window_mouse_left_down();
         if (d->mode == 0 && window_mouse_left_just_pressed()) {
@@ -111,6 +112,7 @@ void ui_dialog_place(ui_dialog_drag_t *d, int interactive, int window_w, int win
     else d->x = (window_w - d->w) / 2;
     if (d->h <= window_h) { if (d->y < 0) d->y = 0; if (d->y + d->h > window_h) d->y = window_h - d->h; }
     else d->y = (window_h - d->h) / 2;
+    ui_windows_context_report(d->x, d->y, d->w, d->h);
     *out_x = d->x;
     *out_y = d->y;
     *out_w = d->w;
@@ -118,6 +120,7 @@ void ui_dialog_place(ui_dialog_drag_t *d, int interactive, int window_w, int win
 }
 
 void ui_dialog_draw_backdrop(int window_w, int window_h) {
+    if (!ui_windows_context_is_front()) return;
     if (g_backdrop_tex == NULL) {
         unsigned char pixels[4 * 4 * 4];
         for (int i = 0; i < 16; i++) {

@@ -22,6 +22,7 @@
 #include "editor/ui/theme.h"
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 #include "editor/ui/labeled_button.h"
 #include "editor/panels/file_manager.h"
 #include "editor/panels/scene_tabs.h"
@@ -33,9 +34,13 @@
 #include "packages/package_manager.h"
 #include "platform/android/storage.h"
 
-#define PAGE_W 1040
+#define PAGE_DEF_W 1040
+#define PAGE_DEF_H 650
+#define PAGE_W g_pw
+#define PAGE_H g_ph
+static int g_pw = PAGE_DEF_W, g_ph = PAGE_DEF_H;
 static ui_dialog_drag_t g_drag;
-#define PAGE_H 650
+static ui_window_t g_win = UI_WINDOW_INIT(export_dialog_is_open, export_dialog_update, export_dialog_draw);
 #define PAD 24
 #define CARD_W 142
 #define CARD_H 84
@@ -185,6 +190,7 @@ void export_dialog_open(void) {
     if (first == 0) { for (int i = 0; i < MODERN_COUNT; i++) if (project_allows(i)) { first = i; break; } }
     select_platform(first);
     g_open = 1;
+    ui_windows_show(&g_win);
 }
 int export_dialog_is_open(void) { return g_open; }
 static void start_export(void) {
@@ -205,7 +211,7 @@ static void start_export(void) {
 }
 void export_dialog_update(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; { int pw, ph; ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_W, PAGE_H, PAGE_W, PAGE_H, 44, 0, &dx, &dy, &pw, &ph); }
+    int dx, dy; { ui_dialog_place(&g_drag, 1, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_pw, &g_ph); }
     int status = current_status();
     if (status) { if (g_platforms[g_selected].modern) modern_export_update(); else if (g_selected == 5) ps2_export_update(); else ps1_export_update(); pump_logs(); status = current_status(); }
     if (status == 1 && g_platforms[g_selected].modern) snprintf(g_status_text, sizeof(g_status_text), "Building %s (%d/%d) %s...", modern_export_current_architecture(), modern_export_architecture_index() + 1, modern_export_architecture_count(), g_platforms[g_selected].label);
@@ -255,7 +261,7 @@ static void draw_card(int x, int y, int index) {
 }
 void export_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
-    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); { int pw, ph; ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_W, PAGE_H, PAGE_W, PAGE_H, 44, 0, &dx, &dy, &pw, &ph); }
+    int dx, dy; ui_dialog_draw_backdrop(window_w, window_h); { ui_dialog_place(&g_drag, 0, window_w, window_h, PAGE_DEF_W, PAGE_DEF_H, PAGE_DEF_W, PAGE_DEF_H, 44, 1, &dx, &dy, &g_pw, &g_ph); }
     ui_dialog_draw_frame(dx, dy, PAGE_W, PAGE_H); ui_dialog_draw_title_left(g_title, g_title_w, g_title_h, dx, dy, 44, PAD);
     ui_dialog_draw_close_button(dx + PAGE_W - PAD - 22, dy + 11, 22);
     int modern = project_modern();

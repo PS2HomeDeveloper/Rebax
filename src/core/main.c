@@ -26,6 +26,7 @@
 #include "filesystem/storage_paths.h"
 #include "editor/panels/file_manager.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 #include "core/engine_settings.h"
 #include "core/i18n.h"
 #include "editor/panels/settings_page.h"
@@ -78,38 +79,20 @@ int main(int argc, char **argv) {
         if (loading_screen_is_visible()) {
             loading_screen_draw(window_get_width(), window_get_height());
         } else if (app_state_get_screen() == APP_SCREEN_EDITOR) {
-            if (!file_manager_is_open() && !packages_dialog_is_open()) {
-                editor_workspace_update(window_get_width(), window_get_height());
-            }
+            if (ui_windows_any_open()) ui_windows_update(window_get_width(), window_get_height());
+            else editor_workspace_update(window_get_width(), window_get_height());
+            editor_workspace_poll();
             editor_workspace_draw(window_get_width(), window_get_height());
-            if (packages_dialog_is_open()) {
-                packages_dialog_update(window_get_width(), window_get_height());
-                packages_dialog_draw(window_get_width(), window_get_height());
-            }
         } else if (app_state_get_screen() == APP_SCREEN_SETTINGS) {
             settings_page_update_and_draw(window_get_width(), window_get_height());
             if (settings_page_wants_close()) app_state_set_screen(APP_SCREEN_PROJECT_CENTER);
         } else {
             window_clear(UI_COLOR_BLACK_MUTED.r, UI_COLOR_BLACK_MUTED.g, UI_COLOR_BLACK_MUTED.b);
             ui_project_center_draw(window_get_width(), window_get_height());
-
-            if (project_dialog_is_open()) {
-                if (!file_manager_is_open()) {
-                    project_dialog_update(window_get_width(), window_get_height());
-                }
-                project_dialog_draw(window_get_width(), window_get_height());
-            }
-
-            if (packages_dialog_is_open()) {
-                packages_dialog_update(window_get_width(), window_get_height());
-                packages_dialog_draw(window_get_width(), window_get_height());
-            }
+            if (ui_windows_any_open()) ui_windows_update(window_get_width(), window_get_height());
         }
 
-        if (file_manager_is_open()) {
-            file_manager_update(window_get_width(), window_get_height());
-            file_manager_draw(window_get_width(), window_get_height());
-        }
+        ui_windows_draw(window_get_width(), window_get_height());
 
         window_present();
     }

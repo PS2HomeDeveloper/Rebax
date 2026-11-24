@@ -43,6 +43,7 @@
 #include "editor/ui/base.h"
 #include "editor/ui/selection.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 #include "filesystem/path_utils.h"
 #include "editor/ui/file_icons.h"
 #include "platform/android/storage.h"
@@ -50,8 +51,13 @@
 #include "filesystem/storage_volumes.h"
 #include "filesystem/rebax_fs.h"
 
-#define DIALOG_WIDTH        640
-#define DIALOG_HEIGHT        500
+#define DEFAULT_W           640
+#define DEFAULT_H           500
+#define DIALOG_WIDTH        g_dw
+#define DIALOG_HEIGHT       g_dh
+static int g_dw = DEFAULT_W, g_dh = DEFAULT_H;
+static ui_dialog_drag_t g_drag;
+static ui_window_t g_win = UI_WINDOW_INIT(file_manager_is_open, file_manager_update, file_manager_draw);
 #define DIALOG_PADDING         16
 #define TITLEBAR_HEIGHT        36
 #define CLOSE_BTN_SIZE          22
@@ -498,6 +504,8 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
     g_prompt = PROMPT_NONE;
     g_skip_input_frames = 2;
     g_is_open = 1;
+    ui_dialog_drag_reset(&g_drag);
+    ui_windows_show(&g_win);
     return 1;
 }
 
@@ -581,8 +589,8 @@ void file_manager_update(int window_w, int window_h) {
     if (!g_is_open) return;
     if (g_skip_input_frames > 0) { g_skip_input_frames--; return; }
 
-    int dx = (window_w - DIALOG_WIDTH) / 2;
-    int dy = (window_h - DIALOG_HEIGHT) / 2;
+    int dx, dy;
+    ui_dialog_place(&g_drag, 1, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLEBAR_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh);
 
     int mx = window_mouse_x(), my = window_mouse_y();
 
@@ -764,8 +772,8 @@ void file_manager_update(int window_w, int window_h) {
 void file_manager_draw(int window_w, int window_h) {
     if (!g_is_open) return;
 
-    int dx = (window_w - DIALOG_WIDTH) / 2;
-    int dy = (window_h - DIALOG_HEIGHT) / 2;
+    int dx, dy;
+    ui_dialog_place(&g_drag, 0, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLEBAR_HEIGHT, 1, &dx, &dy, &g_dw, &g_dh);
 
     ui_dialog_draw_backdrop(window_w, window_h);
 

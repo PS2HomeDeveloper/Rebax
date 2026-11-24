@@ -19,6 +19,7 @@
 #include "editor/dialogs/ps2_network.h"
 #include "editor/panels/file_manager.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 #include "editor/ui/draw_kit.h"
 #include "editor/ui/text_field.h"
 #include "libraries/ps2link/ps2link_probe.h"
@@ -27,8 +28,14 @@
 #include "run/run_mode.h"
 #include "run/run_settings.h"
 
-#define DIALOG_W 600
-#define DIALOG_H 500
+#define DEFAULT_W 600
+#define DEFAULT_H 500
+#define DIALOG_W g_dw
+#define DIALOG_H g_dh
+static int g_dw = DEFAULT_W, g_dh = DEFAULT_H;
+static ui_dialog_drag_t g_drag;
+static ui_window_t g_win = UI_WINDOW_INIT(ps2_network_dialog_is_open, ps2_network_dialog_update, ps2_network_dialog_draw);
+static int g_interactive = 0;
 #define PAD 22
 #define TITLE_H 44
 #define BUTTON_H 36
@@ -62,6 +69,8 @@ void ps2_network_dialog_open(void) {
     g_pending = EXPORT_NONE;
     g_skip = 2;
     g_open = 1;
+    ui_dialog_drag_reset(&g_drag);
+    ui_windows_show(&g_win);
 }
 
 int ps2_network_dialog_is_open(void) { return g_open; }
@@ -92,8 +101,7 @@ typedef struct {
 } layout_t;
 
 static void compute(int window_w, int window_h, layout_t *l, int *dx, int *dy) {
-    *dx = (window_w - DIALOG_W) / 2;
-    *dy = (window_h - DIALOG_H) / 2;
+    ui_dialog_place(&g_drag, g_interactive, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLE_H, 1, dx, dy, &g_dw, &g_dh);
     int x = *dx, y = *dy;
     l->close = (rect_t){ x + DIALOG_W - PAD - 24, y + (TITLE_H - 24) / 2, 24, 24 };
     l->test = (rect_t){ x + DIALOG_W - PAD - 150, y + TITLE_H + 10 + 5, 140, 34 };
@@ -108,6 +116,7 @@ void ps2_network_dialog_update(int window_w, int window_h) {
     if (!g_open) return;
     if (g_skip > 0) { g_skip--; return; }
     layout_t l; int dx, dy;
+    g_interactive = 1;
     compute(window_w, window_h, &l, &dx, &dy);
 
     int was = g_address.focused;
@@ -153,6 +162,7 @@ static const char *step_text(int i) {
 void ps2_network_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
     layout_t l; int dx, dy;
+    g_interactive = 0;
     compute(window_w, window_h, &l, &dx, &dy);
     ui_dialog_draw_backdrop(window_w, window_h);
     ui_dialog_draw_frame(dx, dy, DIALOG_W, DIALOG_H);

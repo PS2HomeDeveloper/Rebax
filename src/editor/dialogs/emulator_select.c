@@ -19,14 +19,20 @@
 #include "editor/dialogs/emulator_select.h"
 #include "editor/panels/file_manager.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/windows.h"
 #include "editor/ui/draw_kit.h"
 #include "platform/common/window.h"
 #include "run/emulator/emulator_catalog.h"
 #include "run/run_mode.h"
 #include "run/run_settings.h"
 
-#define DIALOG_W 580
-#define DIALOG_H 440
+#define DEFAULT_W 580
+#define DEFAULT_H 440
+#define DIALOG_W g_dw
+#define DIALOG_H g_dh
+static int g_dw = DEFAULT_W, g_dh = DEFAULT_H;
+static ui_dialog_drag_t g_drag;
+static ui_window_t g_win = UI_WINDOW_INIT(emulator_select_dialog_is_open, emulator_select_dialog_update, emulator_select_dialog_draw);
 #define PAD 22
 #define TITLE_H 44
 #define ROW_H 76
@@ -56,6 +62,8 @@ void emulator_select_dialog_open(project_type_t system, const char *notice) {
     collect();
     g_skip = 2;
     g_open = 1;
+    ui_dialog_drag_reset(&g_drag);
+    ui_windows_show(&g_win);
 }
 
 int emulator_select_dialog_is_open(void) { return g_open; }
@@ -85,7 +93,8 @@ static void row_rects(int dx, int dy, int i, rect_t *row, rect_t *select, rect_t
 void emulator_select_dialog_update(int window_w, int window_h) {
     if (!g_open) return;
     if (g_skip > 0) { g_skip--; return; }
-    int dx = (window_w - DIALOG_W) / 2, dy = (window_h - DIALOG_H) / 2;
+    int dx, dy;
+    ui_dialog_place(&g_drag, 1, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLE_H, 1, &dx, &dy, &g_dw, &g_dh);
     if (!window_mouse_left_just_pressed()) return;
     int mx = window_mouse_x(), my = window_mouse_y();
     int cx = dx + DIALOG_W - PAD - 24, cy = dy + (TITLE_H - 24) / 2;
@@ -112,7 +121,8 @@ void emulator_select_dialog_update(int window_w, int window_h) {
 
 void emulator_select_dialog_draw(int window_w, int window_h) {
     if (!g_open) return;
-    int dx = (window_w - DIALOG_W) / 2, dy = (window_h - DIALOG_H) / 2;
+    int dx, dy;
+    ui_dialog_place(&g_drag, 0, window_w, window_h, DEFAULT_W, DEFAULT_H, DEFAULT_W, DEFAULT_H, TITLE_H, 1, &dx, &dy, &g_dw, &g_dh);
     ui_dialog_draw_backdrop(window_w, window_h);
     ui_dialog_draw_frame(dx, dy, DIALOG_W, DIALOG_H);
     const char *title = g_system == PROJECT_TYPE_PS1 ? "PlayStation 1 - choose emulator" : "PlayStation 2 - choose emulator";
