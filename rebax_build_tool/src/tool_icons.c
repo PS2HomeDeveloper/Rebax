@@ -354,6 +354,7 @@ int cmd_icon_names(int argc, char **argv) {
         for (size_t j = 0; name[j] && k < sizeof(safe) - 1; j++) {
             char c = name[j];
             if (c == '-' || c == ' ') c = '_';
+            if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
             if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
                 safe[k++] = c;
             }
