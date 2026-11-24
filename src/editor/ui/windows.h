@@ -24,9 +24,10 @@ typedef struct ui_window {
     unsigned order;
     int registered;
     int x, y, w, h;
+    int armed;
 } ui_window_t;
 
-#define UI_WINDOW_INIT(is_open_fn, update_fn, draw_fn) { is_open_fn, update_fn, draw_fn, 0, 0, 0, 0, 0, 0 }
+#define UI_WINDOW_INIT(is_open_fn, update_fn, draw_fn) { is_open_fn, update_fn, draw_fn, 0, 0, 0, 0, 0, 0, 0 }
 
 void ui_windows_show(ui_window_t *window);
 int ui_windows_any_open(void);

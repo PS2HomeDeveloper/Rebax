@@ -49,13 +49,13 @@ static void compute_paths(void) {
     if (g_paths_ready) return;
 #if defined(_WIN32)
     const char *local = getenv("LOCALAPPDATA");
-    snprintf(g_root_dir, sizeof(g_root_dir), "%s/Rebax/Engine", local ? local : ".");
+    snprintf(g_root_dir, sizeof(g_root_dir), "%s/Rebax", local ? local : ".");
 #elif defined(__ANDROID__)
     const char *internal = SDL_AndroidGetInternalStoragePath();
     if (!internal) { fprintf(stderr, "[rebax] storage path is unavailable.\n"); abort(); }
-    snprintf(g_root_dir, sizeof(g_root_dir), "%s/Rebax/Engine", internal);
+    snprintf(g_root_dir, sizeof(g_root_dir), "%s/Rebax", internal);
 #else
-    char *pref = SDL_GetPrefPath("Rebax", "Engine");
+    char *pref = SDL_GetPrefPath("", "Rebax");
     if (!pref) { fprintf(stderr, "[rebax] storage path is unavailable.\n"); abort(); }
     snprintf(g_root_dir, sizeof(g_root_dir), "%s", pref);
     SDL_free(pref);

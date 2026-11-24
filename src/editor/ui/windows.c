@@ -50,6 +50,7 @@ void ui_windows_show(ui_window_t *window) {
     window->order = g_next_order++;
     window->w = 0;
     window->h = 0;
+    window->armed = 0;
 }
 
 int ui_windows_any_open(void) {
@@ -78,6 +79,10 @@ void ui_windows_update(int window_w, int window_h) {
     if (window_mouse_left_just_pressed()) raise_under_mouse();
     ui_window_t *front = find_front();
     if (front == NULL || front->update == NULL) return;
+    if (!front->armed) {
+        if (window_mouse_left_down() || window_mouse_left_just_pressed()) return;
+        front->armed = 1;
+    }
     g_current = front;
     g_front = front;
     front->update(window_w, window_h);

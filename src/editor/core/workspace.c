@@ -525,6 +525,7 @@ void editor_workspace_draw(int window_w, int window_h) {
     int center_x = g_left_width, center_w = window_w - g_left_width - g_right_width;
     int camera_h = col_h - g_bottom_center_height;
 
+    window_clear(UI_COLOR_BLACK_MUTED.r, UI_COLOR_BLACK_MUTED.g, UI_COLOR_BLACK_MUTED.b);
     window_fill_rect(0, 0, window_w, TOOLBAR_HEIGHT, UI_COLOR_BLACK_MUTED.r, UI_COLOR_BLACK_MUTED.g, UI_COLOR_BLACK_MUTED.b);
     int toolbar_x[TOOLBAR_MENU_ITEM_COUNT];
     toolbar_layout(window_w, toolbar_x);
