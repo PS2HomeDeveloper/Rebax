@@ -24,6 +24,8 @@ void window_fill_rect(int x, int y, int w, int h,
                        unsigned char r, unsigned char g, unsigned char b);
 
 typedef struct window_texture window_texture_t;
+typedef struct window_render_target window_render_target_t;
+
 window_texture_t *window_create_texture(const unsigned char *rgba_pixels,
                                          int width, int height);
 void window_draw_texture(window_texture_t *tex, int x, int y, int w, int h);
@@ -41,6 +43,18 @@ void window_draw_texture_region_rotated(window_texture_t *tex,
                                          int dst_x, int dst_y, int dst_w, int dst_h,
                                          double angle_degrees);
 void window_destroy_texture(window_texture_t *tex);
+
+window_render_target_t *window_create_render_target(int width, int height,
+                                                     int nearest_filter);
+void window_destroy_render_target(window_render_target_t *target);
+int window_begin_render_target(window_render_target_t *target);
+void window_end_render_target(void);
+void window_draw_render_target(window_render_target_t *target,
+                               int x, int y, int width, int height,
+                               int nearest_filter);
+void window_set_clip_rect(int x, int y, int w, int h);
+void window_clear_clip_rect(void);
+
 void window_present(void);
 void window_set_ui_scale_percent(int percent);
 int window_get_scale_percent(void);
@@ -87,11 +101,12 @@ int window_key_down_q(void);
 int window_key_down_e(void);
 int window_key_down_shift(void);
 int window_key_just_pressed_f(void);
+int window_key_just_pressed_escape(void);
+int window_controller_button(int button);
+float window_controller_axis(int axis);
 
 char *window_get_clipboard_text(void);
 void window_set_clipboard_text(const char *text);
-void window_set_clip_rect(int x, int y, int w, int h);
-void window_clear_clip_rect(void);
 void window_shutdown(void);
 
 #endif

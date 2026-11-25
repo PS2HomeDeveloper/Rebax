@@ -21,6 +21,7 @@ int cmd_icon_atlas(int argc, char **argv);
 int cmd_icon_atlas_pages(int argc, char **argv);
 int cmd_node_registry(int argc, char **argv);
 int cmd_node_editor_registry(int argc, char **argv);
+int cmd_node_sim_registry(int argc, char **argv);
 int cmd_mkdir(int argc, char **argv);
 int cmd_rm(int argc, char **argv);
 int cmd_cp(int argc, char **argv);

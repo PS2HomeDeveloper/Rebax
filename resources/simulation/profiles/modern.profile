@@ -1,0 +1,13 @@
+id=modern
+label=Modern
+width=640
+height=360
+alternate_width=640
+alternate_height=360
+frame_rate=60
+nearest_filter=0
+integer_scale=0
+memory_mb=256
+texture_memory_mb=64
+max_texture_size=4096
+safe_area=0

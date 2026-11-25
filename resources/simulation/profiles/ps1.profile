@@ -1,0 +1,13 @@
+id=ps1
+label=PlayStation 1
+width=320
+height=240
+alternate_width=368
+alternate_height=240
+frame_rate=60
+nearest_filter=1
+integer_scale=1
+memory_mb=2
+texture_memory_mb=1
+max_texture_size=512
+safe_area=8

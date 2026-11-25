@@ -33,6 +33,7 @@ static void usage(void) {
           "  icon-atlas-pages <dir> <header> <icon.png>... build icons1.png, icons2.png, ...\n"
           "  node-registry <registry.h> <types.h> <node.c>...\n"
           "  node-editor-registry <out.h> <node_editor.c>...\n"
+          "  node-sim-registry <out.h> <node_sim.c>...\n"
           "  android-entry <out.c>                   write the SDL_main wrapper source\n"
           "  android-keygen <keys_dir>\n"
           "  apk-pack <stage_dir> <out.apk> <keys_dir> <package> <label> <version_name> <version_code> <min_sdk> <target_sdk>\n"
@@ -58,6 +59,7 @@ int main(int argc, char **argv) {
     if (strcmp(cmd, "icon-atlas-pages") == 0) return cmd_icon_atlas_pages(argc, argv);
     if (strcmp(cmd, "node-registry") == 0) return cmd_node_registry(argc, argv);
     if (strcmp(cmd, "node-editor-registry") == 0) return cmd_node_editor_registry(argc, argv);
+    if (strcmp(cmd, "node-sim-registry") == 0) return cmd_node_sim_registry(argc, argv);
     if (strcmp(cmd, "android-entry") == 0) return cmd_android_entry(argc, argv);
     if (strcmp(cmd, "android-keygen") == 0) return cmd_android_keygen(argc, argv);
     if (strcmp(cmd, "apk-pack") == 0) return cmd_apk_pack(argc, argv);
@@ -73,4 +75,3 @@ int main(int argc, char **argv) {
     usage();
     return 2;
 }
-

@@ -24,6 +24,7 @@
 
 static SDL_Window   *g_window   = NULL;
 static SDL_Renderer *g_renderer = NULL;
+static SDL_GameController *g_controller = NULL;
 static int g_should_close = 0;
 static int g_width  = 0;
 static int g_height = 0;
@@ -146,6 +147,7 @@ static int g_key_down      = 0;
 static int g_key_tab       = 0;
 static int g_key_save      = 0;
 static int g_key_f         = 0;
+static int g_key_escape    = 0;
 
 #if defined(__ANDROID__)
 #define REBAX_WINDOW_EXTRA_FLAGS SDL_WINDOW_FULLSCREEN_DESKTOP
@@ -154,7 +156,7 @@ static int g_key_f         = 0;
 #endif
 
 int window_init(const char *title, int width, int height) {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 0;
     }
@@ -186,6 +188,7 @@ int window_init(const char *title, int width, int height) {
     }
 
     apply_window_size(width, height);
+    g_controller = SDL_NumJoysticks() > 0 && SDL_IsGameController(0) ? SDL_GameControllerOpen(0) : NULL;
     g_should_close = 0;
     g_last_frame_ticks = SDL_GetTicks();
     return 1;
@@ -221,6 +224,7 @@ void window_poll_events(void) {
     g_key_home = g_key_end = g_key_copy = g_key_paste = g_key_cut = 0;
     g_key_enter = g_key_up = g_key_down = g_key_tab = g_key_save = 0;
     g_key_f = 0;
+    g_key_escape = 0;
 
     if (g_window != NULL) {
         int w = 0, h = 0;
@@ -316,6 +320,7 @@ void window_poll_events(void) {
                 case SDLK_x: if (ctrl) g_key_cut   = 1; break;
                 case SDLK_s: if (ctrl) g_key_save = 1; break;
                 case SDLK_f: g_key_f = 1; break;
+                case SDLK_ESCAPE: g_key_escape = 1; break;
                 default: break;
             }
         }
@@ -358,6 +363,72 @@ void window_fill_rect(int x, int y, int w, int h,
 struct window_texture {
     SDL_Texture *sdl_texture;
 };
+
+struct window_render_target {
+    SDL_Texture *texture;
+    int width;
+    int height;
+};
+
+window_render_target_t *window_create_render_target(int width, int height,
+                                                     int nearest_filter) {
+    window_render_target_t *target;
+    SDL_Texture *texture;
+    if (g_renderer == NULL || width <= 0 || height <= 0) return NULL;
+    texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_RGBA8888,
+                                SDL_TEXTUREACCESS_TARGET, width, height);
+    if (texture == NULL) return NULL;
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureScaleMode(texture, nearest_filter ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
+    target = (window_render_target_t *)calloc(1, sizeof(*target));
+    if (target == NULL) {
+        SDL_DestroyTexture(texture);
+        return NULL;
+    }
+    target->texture = texture;
+    target->width = width;
+    target->height = height;
+    return target;
+}
+
+void window_destroy_render_target(window_render_target_t *target) {
+    if (target == NULL) return;
+    SDL_DestroyTexture(target->texture);
+    free(target);
+}
+
+int window_begin_render_target(window_render_target_t *target) {
+    if (target == NULL || g_renderer == NULL) return 0;
+    if (SDL_SetRenderTarget(g_renderer, target->texture) != 0) return 0;
+    SDL_RenderSetViewport(g_renderer, NULL);
+    SDL_RenderSetScale(g_renderer, 1.0f, 1.0f);
+    SDL_RenderSetClipRect(g_renderer, NULL);
+    return 1;
+}
+
+void window_end_render_target(void) {
+    if (g_renderer == NULL) return;
+    SDL_SetRenderTarget(g_renderer, NULL);
+    SDL_RenderSetScale(g_renderer, g_scale, g_scale);
+}
+
+void window_draw_render_target(window_render_target_t *target,
+                               int x, int y, int width, int height,
+                               int nearest_filter) {
+    SDL_Rect destination;
+    SDL_ScaleMode old_mode;
+    if (target == NULL || target->texture == NULL || g_renderer == NULL) return;
+    old_mode = SDL_ScaleModeLinear;
+    SDL_GetTextureScaleMode(target->texture, &old_mode);
+    SDL_SetTextureScaleMode(target->texture,
+                            nearest_filter ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
+    destination.x = x;
+    destination.y = y;
+    destination.w = width;
+    destination.h = height;
+    SDL_RenderCopy(g_renderer, target->texture, NULL, &destination);
+    SDL_SetTextureScaleMode(target->texture, old_mode);
+}
 
 window_texture_t *window_create_texture(const unsigned char *rgba_pixels,
                                          int width, int height) {
@@ -506,6 +577,7 @@ int window_key_down_shift(void) {
 }
 
 int window_key_just_pressed_f(void) { return g_key_f; }
+int window_key_just_pressed_escape(void) { return g_key_escape; }
 
 char *window_get_clipboard_text(void) {
     if (!SDL_HasClipboardText()) {
@@ -533,7 +605,21 @@ void window_clear_clip_rect(void) {
     SDL_RenderSetClipRect(g_renderer, NULL);
 }
 
+int window_controller_button(int button) {
+    if (g_controller == NULL || button < 0 || button >= SDL_CONTROLLER_BUTTON_MAX) return 0;
+    return SDL_GameControllerGetButton(g_controller, (SDL_GameControllerButton)button) != 0;
+}
+
+float window_controller_axis(int axis) {
+    if (g_controller == NULL || axis < 0 || axis >= SDL_CONTROLLER_AXIS_MAX) return 0.0f;
+    return (float)SDL_GameControllerGetAxis(g_controller, (SDL_GameControllerAxis)axis) / 32767.0f;
+}
+
 void window_shutdown(void) {
+    if (g_controller != NULL) {
+        SDL_GameControllerClose(g_controller);
+        g_controller = NULL;
+    }
     if (g_renderer != NULL) {
         SDL_DestroyRenderer(g_renderer);
         g_renderer = NULL;

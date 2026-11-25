@@ -405,8 +405,10 @@ NODE_SRC_DIR := $(NODE_SDK_DIR)/nodes/src
 NODE_EDITOR_SRC_DIR := $(SRC_DIR)/dev_systems/nodes/editor
 NODE_SOURCE_FILES := $(sort $(wildcard $(NODE_SRC_DIR)/*.c))
 NODE_EDITOR_SOURCE_FILES := $(sort $(wildcard $(NODE_EDITOR_SRC_DIR)/*.c))
+NODE_SIM_SOURCE_FILES := $(sort $(wildcard $(SRC_DIR)/run/simulation/nodes/*.c))
 NODE_REGISTRY_GENERATED := $(GEN_DIR)/node_registry_generated.h
 NODE_EDITOR_REGISTRY_GENERATED := $(GEN_DIR)/node_editor_registry_generated.h
+NODE_SIM_REGISTRY_GENERATED := $(GEN_DIR)/node_sim_registry_generated.h
 NODE_TYPES_HEADER := $(GEN_DIR)/node_types.h
 SRCS := $(call rwildcard,$(SRC_DIR)/,*.c)
 SRC_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
@@ -416,7 +418,7 @@ THIRD_PARTY_OBJS := $(patsubst third_party/%.c,$(CACHE_OBJ)/third_party/%.o,$(TH
 OBJS := $(SRC_OBJS) $(THIRD_PARTY_OBJS)
 DEPS := $(SRC_OBJS:.o=.d) $(THIRD_PARTY_OBJS:.o=.d)
 
-.PHONY: all clean clean-tool clean-cache clean-all objects libs engine-objs third-party-objs run generate bundle-runtime-libs bundle-resources bundle-packages gen-icons gen-node-registry gen-node-editor-registry \
+.PHONY: all clean clean-tool clean-cache clean-all objects libs engine-objs third-party-objs run generate bundle-runtime-libs bundle-resources bundle-packages gen-icons gen-node-registry gen-node-editor-registry gen-node-sim-registry \
   build-selected apk-selected apk-package ios-package \
   $(ALL_TARGET_GOALS) $(APK_VARIANT_GOALS) $(PLATFORM_WORDS) $(ARCH_WORDS) universal
 
@@ -484,13 +486,14 @@ ios-package: $(TARGET) | $(RTOOL)
 
 apk-selected: apk-package
 
-generate: gen-icons gen-node-registry gen-node-editor-registry
+generate: gen-icons gen-node-registry gen-node-editor-registry gen-node-sim-registry
 gen-icons: | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) mkdir $(GEN_DIR)
 	@$(RTOOL) icon-names $(ICON_NAMES_HEADER) $(ICON_SOURCE_FILES)
 	@$(RTOOL) icon-atlas-pages $(ICON_ATLAS_DIR) $(ICON_ATLAS_HEADER) $(ICON_SOURCE_FILES)
 gen-node-registry: $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER)
 gen-node-editor-registry: $(NODE_EDITOR_REGISTRY_GENERATED)
+gen-node-sim-registry: $(NODE_SIM_REGISTRY_GENERATED)
 
 $(ICON_NAMES_HEADER): $(ICON_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) mkdir $(GEN_DIR)
@@ -516,7 +519,10 @@ $(NODE_REGISTRY_GENERATED) $(NODE_TYPES_HEADER): $(NODE_SOURCE_FILES) | $(RTOOL)
 $(NODE_EDITOR_REGISTRY_GENERATED): $(NODE_EDITOR_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
 	@$(RTOOL) mkdir $(GEN_DIR)
 	@$(RTOOL) node-editor-registry $@ $(NODE_EDITOR_SOURCE_FILES)
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_REGISTRY_GENERATED) $(NODE_EDITOR_REGISTRY_GENERATED) | $(RTOOL)
+$(NODE_SIM_REGISTRY_GENERATED): $(NODE_SIM_SOURCE_FILES) | $(RTOOL) $(BUILD_DIR)
+	@$(RTOOL) mkdir $(GEN_DIR)
+	@$(RTOOL) node-sim-registry $@ $(NODE_SIM_SOURCE_FILES)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(ICON_NAMES_HEADER) $(NODE_TYPES_HEADER) $(NODE_REGISTRY_GENERATED) $(NODE_EDITOR_REGISTRY_GENERATED) $(NODE_SIM_REGISTRY_GENERATED) | $(RTOOL)
 	@$(RTOOL) mkdir $(dir $@)
 	$(TARGET_CC) $(TARGET_CFLAGS) $(CFLAGS) -c $< -o $@
 $(CACHE_OBJ)/third_party/%.o: third_party/%.c | $(RTOOL)

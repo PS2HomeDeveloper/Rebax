@@ -1,0 +1,13 @@
+id=ps2
+label=PlayStation 2
+width=640
+height=448
+alternate_width=640
+alternate_height=480
+frame_rate=60
+nearest_filter=1
+integer_scale=1
+memory_mb=32
+texture_memory_mb=8
+max_texture_size=1024
+safe_area=16

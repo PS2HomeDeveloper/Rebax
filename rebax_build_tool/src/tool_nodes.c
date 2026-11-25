@@ -378,3 +378,36 @@ int cmd_node_editor_registry(int argc, char **argv) {
     return 0;
 }
 
+typedef struct { char *type; char *update; char *draw; } sim_entry_t;
+typedef struct { sim_entry_t *items; int count; } sim_parse_t;
+static void sim_line(char *line, int first_line, void *user) {
+    sim_parse_t *p = (sim_parse_t *)user;
+    char *s, *eq, *token; const char *type = NULL, *update = "NULL", *draw = "NULL";
+    (void)first_line;
+    if (!strstr(line, "@NODE_SIM")) return;
+    s = after_last_tag(line, "@NODE_SIM", 0); cut_comment_end(s);
+    while (*s) {
+        while (is_ws(*s)) s++; if (!*s) break;
+        token = s; while (*s && !is_ws(*s)) s++; if (*s) *s++ = '\0';
+        eq = strchr(token, '='); if (!eq) continue; *eq = '\0';
+        if (strcmp(token, "type") == 0) type = eq + 1;
+        else if (strcmp(token, "update") == 0) update = eq + 1;
+        else if (strcmp(token, "draw") == 0) draw = eq + 1;
+    }
+    if (!type || !*type) return;
+    p->items = (sim_entry_t *)xrealloc(p->items, sizeof(*p->items) * (size_t)(p->count + 1));
+    p->items[p->count].type = xstrdup(type); p->items[p->count].update = xstrdup(update); p->items[p->count].draw = xstrdup(draw); p->count++;
+}
+int cmd_node_sim_registry(int argc, char **argv) {
+    if (argc < 4) die("usage: node-sim-registry <out.h> <node_sim.c>...");
+    sim_parse_t p = { NULL, 0 }; for (int i = 3; i < argc; i++) for_each_line(argv[i], sim_line, &p);
+    sb_t out = { 0, 0, 0 }; sb_puts(&out, "#ifndef NODE_SIM_REGISTRY_GENERATED_H\n#define NODE_SIM_REGISTRY_GENERATED_H\n\ntypedef struct sim_world sim_world_t;\n\n");
+    for (int i = 0; i < p.count; i++) {
+        if (strcmp(p.items[i].update, "NULL") != 0) sb_printf(&out, "void %s(sim_world_t *, int, float);\n", p.items[i].update);
+        if (strcmp(p.items[i].draw, "NULL") != 0) sb_printf(&out, "void %s(sim_world_t *, int);\n", p.items[i].draw);
+    }
+    sb_puts(&out, "typedef struct { int type; void (*update)(sim_world_t *, int, float); void (*draw)(sim_world_t *, int); } node_sim_registry_entry_t;\nstatic const node_sim_registry_entry_t g_node_sim_registry[] = {\n");
+    for (int i = 0; i < p.count; i++) sb_printf(&out, "    { %s, %s, %s },\n", p.items[i].type, p.items[i].update, p.items[i].draw);
+    sb_printf(&out, "};\n#define NODE_SIM_REGISTRY_GENERATED_COUNT %d\n#endif\n", p.count); write_file(argv[2], out.data, out.len); sb_free(&out);
+    for (int i = 0; i < p.count; i++) { free(p.items[i].type); free(p.items[i].update); free(p.items[i].draw); } free(p.items); return 0;
+}

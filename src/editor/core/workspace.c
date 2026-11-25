@@ -39,6 +39,7 @@
 #include "editor/ui/icon_atlas.h"
 #include "editor/dialogs/export.h"
 #include "editor/panels/run_controls.h"
+#include "run/simulation/simulation_runner.h"
 #include "editor/dialogs/ps2_network.h"
 #include "editor/dialogs/emulator_select.h"
 #include "editor/dialogs/settings.h"
@@ -521,6 +522,10 @@ static ui_splitter_visual_t splitter_visual(splitter_id_t id) {
 
 void editor_workspace_draw(int window_w, int window_h) {
     ensure_ui_ready();
+    if (simulation_runner_is_running()) {
+        simulation_runner_draw(window_w, window_h);
+        return;
+    }
     int col_top = TOOLBAR_HEIGHT, col_h = window_h - TOOLBAR_HEIGHT;
     int right_x = window_w - g_right_width;
     int center_x = g_left_width, center_w = window_w - g_left_width - g_right_width;

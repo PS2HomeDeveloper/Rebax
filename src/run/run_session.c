@@ -60,7 +60,7 @@ void run_session_update(void) {
     if (!g_running) return;
     int alive = 1;
     const char *error = "";
-    if (g_mode == RUN_MODE_SIMULATION) alive = simulation_runner_is_running();
+    if (g_mode == RUN_MODE_SIMULATION) { simulation_runner_update(); alive = simulation_runner_is_running(); error = simulation_runner_error(); }
     else if (g_mode == RUN_MODE_COMPILED) { compiled_runner_update(); alive = compiled_runner_is_running(); error = compiled_runner_error(); }
     else if (g_mode == RUN_MODE_EMULATOR) alive = emulator_runner_is_running();
     else if (g_mode == RUN_MODE_PS2_DEVICE) {
