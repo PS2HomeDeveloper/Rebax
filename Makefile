@@ -370,7 +370,8 @@ $(BOOT_CLANG_OK):
 ifeq ($(BOOT_CLANG_DOWNLOAD),1)
 	$(call BOOT_GET,$(BOOT_CLANG_ARCHIVE),$(TOOLCHAINS_URL)/rebax-clang-$(BOOT_ID).tar.xz)
 endif
-	tar -xf $(BOOT_CLANG_ARCHIVE) -C $(BOOT_CLANG_ROOT)
+	$(call MKTREE,$(BOOT_CLANG_ROOT)/clang)
+	tar -xf $(BOOT_CLANG_ARCHIVE) -C $(BOOT_CLANG_ROOT)/clang
 	$(call BOOT_DEL,$(BOOT_CLANG_ARCHIVE))
 	@echo ok> $@
 
@@ -379,7 +380,8 @@ $(BOOT_SDK_OK):
 ifeq ($(BOOT_SDK_DOWNLOAD),1)
 	$(call BOOT_GET,$(BOOT_SDK_ARCHIVE),$(SDKS_URL)/rebax-sdk-$(BOOT_ID).tar.xz)
 endif
-	tar -xf $(BOOT_SDK_ARCHIVE) -C sdks
+	$(call MKTREE,$(BOOT_SDK))
+	tar -xf $(BOOT_SDK_ARCHIVE) -C $(BOOT_SDK)
 	$(call BOOT_DEL,$(BOOT_SDK_ARCHIVE))
 	@echo ok> $@
 endif
@@ -401,7 +403,7 @@ ICON_ATLAS_PNGS := $(sort $(wildcard $(ICON_ATLAS_DIR)/icons[0-9]*.png))
 ICON_SOURCE_FILES := $(sort $(wildcard $(ICON_SRC_DIR)/*.png))
 rwildcard = $(filter-out $(patsubst %/,%,$(wildcard $1*/)),$(wildcard $1$2)) $(foreach d,$(wildcard $1*/),$(call rwildcard,$d,$2))
 NODE_SDK_DIR := sdk/ps2
-NODE_SRC_DIR := $(NODE_SDK_DIR)/nodes/src
+NODE_SRC_DIR := $(NODE_SDK_DIR)/systems/nodes/src
 NODE_EDITOR_SRC_DIR := $(SRC_DIR)/dev_systems/nodes/editor
 NODE_SOURCE_FILES := $(sort $(wildcard $(NODE_SRC_DIR)/*.c))
 NODE_EDITOR_SOURCE_FILES := $(sort $(wildcard $(NODE_EDITOR_SRC_DIR)/*.c))
@@ -438,13 +440,13 @@ third-party-objs: $(THIRD_PARTY_OBJS)
 ifeq ($(OS),Windows_NT)
 .PHONY: install-local-packages
 install-local-packages:
-	@if exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz (tar -xf toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz -C toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y toolchains\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz) else if exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang.tar.xz (tar -xf toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang.tar.xz -C toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y toolchains\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\clang.tar.xz)
-	@if exist sdks\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz (tar -xf sdks\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz -C sdks && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\rebax-sdk-$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH).tar.xz) else if exist sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\sdk.tar.xz (tar -xf sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\sdk.tar.xz -C sdks && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\sdk.tar.xz) else if exist sdks\\sdk.tar.xz (tar -xf sdks\\sdk.tar.xz -C sdks && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\sdk.tar.xz $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)
+	@if exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz (if not exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang mkdir toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang && tar -xf toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz -C toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y toolchains\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz) else if exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang.tar.xz (if not exist toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang mkdir toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang && tar -xf toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang.tar.xz -C toolchains\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\clang && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y toolchains\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\clang.tar.xz)
+	@if exist sdks\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz (if not exist sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) mkdir sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && tar -xf sdks\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz -C sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\rebax-sdk-$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH).tar.xz) else if exist sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\sdk.tar.xz (if not exist sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) mkdir sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && tar -xf sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH)\\sdk.tar.xz -C sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\$(TARGET_PLATFORM $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)-$(TARGET_ARCH)\\sdk.tar.xz) else if exist sdks\\sdk.tar.xz (if not exist sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) mkdir sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && tar -xf sdks\\sdk.tar.xz -C sdks\\$(TARGET_PLATFORM)-$(TARGET_ARCH) && if not exist $(CACHE_DIR)\\packages mkdir $(CACHE_DIR)\\packages && move /y sdks\\sdk.tar.xz $(CACHE_DIR)\\packages\\rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz)
 else
 .PHONY: install-local-packages
 install-local-packages:
-	@clang_archive=""; for f in "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/clang.tar.xz"; do if [ -f "$$f" ]; then clang_archive="$$f"; break; fi; done; if [ -n "$$clang_archive" ]; then echo "Installing local Clang archive: $$clang_archive"; tar -xf "$$clang_archive" -C "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)" && mkdir -p $(CACHE_DIR)/packages && mv -f "$$clang_archive" $(CACHE_DIR)/packages/rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
-	@sdk_archive=""; for f in "sdks/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)/sdk.tar.xz" "sdks/sdk.tar.xz"; do if [ -f "$$f" ]; then sdk_archive="$$f"; break; fi; done; if [ -n "$$sdk_archive" ]; then echo "Installing local SDK archive: $$sdk_archive"; tar -xf "$$sdk_archive" -C sdks && mkdir -p $(CACHE_DIR)/packages && mv -f "$$sdk_archive" $(CACHE_DIR)/packages/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
+	@clang_archive=""; for f in "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/clang.tar.xz"; do if [ -f "$$f" ]; then clang_archive="$$f"; break; fi; done; if [ -n "$$clang_archive" ]; then echo "Installing local Clang archive: $$clang_archive"; mkdir -p "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/clang" && tar -xf "$$clang_archive" -C "toolchains/$(TARGET_PLATFORM)-$(TARGET_ARCH)/clang" && mkdir -p $(CACHE_DIR)/packages && mv -f "$$clang_archive" $(CACHE_DIR)/packages/rebax-clang-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
+	@sdk_archive=""; for f in "sdks/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz" "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)/sdk.tar.xz" "sdks/sdk.tar.xz"; do if [ -f "$$f" ]; then sdk_archive="$$f"; break; fi; done; if [ -n "$$sdk_archive" ]; then echo "Installing local SDK archive: $$sdk_archive"; mkdir -p "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)" && tar -xf "$$sdk_archive" -C "sdks/$(TARGET_PLATFORM)-$(TARGET_ARCH)" && mkdir -p $(CACHE_DIR)/packages && mv -f "$$sdk_archive" $(CACHE_DIR)/packages/rebax-sdk-$(TARGET_PLATFORM)-$(TARGET_ARCH).tar.xz; fi
 endif
 
 ifeq ($(ANDROID_ALL),1)

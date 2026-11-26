@@ -239,24 +239,16 @@ static void on_warning(const char *text, void *user) {
 }
 
 static int normalise_into(const char *tmp, const char *dest) {
-    char only[PATH_CAP];
     int entries = 0;
-    only[0] = '\0';
     DIR *d = opendir(tmp);
     if (!d) return 0;
     struct dirent *e;
     while ((e = readdir(d)) != NULL) {
         if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
         entries++;
-        snprintf(only, sizeof(only), "%s/%s", tmp, e->d_name);
     }
     closedir(d);
     if (entries == 0) return 0;
-    if (entries == 1 && rebax_fs_is_dir(only)) {
-        if (!rebax_fs_move(only, dest)) return 0;
-        rebax_fs_remove_recursive(tmp);
-        return 1;
-    }
     return rebax_fs_move(tmp, dest);
 }
 

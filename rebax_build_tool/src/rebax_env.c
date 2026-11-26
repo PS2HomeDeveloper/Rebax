@@ -408,9 +408,9 @@ int rebax_env_main(int argc, char **argv) {
         snprintf(n1, sizeof(n1), "%s.tar.xz", t->sdk);
         snprintf(n2, sizeof(n2), "sdk-%s.tar.xz", t->sdk);
         const char *const names[] = { url, n1, n2, NULL };
-        use_local_archive(names, "sdks", sdk, sdk_need);
+        use_local_archive(names, sdk, sdk, sdk_need);
     }
-    fetch(SDKS_URL, url, "sdks", sdk, sdk_need);
+    fetch(SDKS_URL, url, sdk, sdk, sdk_need);
 
     clang_dir[0] = '\0';
     if (!ios) snprintf(clang_dir, sizeof(clang_dir), "toolchains/%s-%s/clang", tp, ta);
@@ -418,7 +418,7 @@ int rebax_env_main(int argc, char **argv) {
     snprintf(host_clang_dir, sizeof(host_clang_dir), "toolchains/%s-%s/clang", hp, ha);
     {
         static const char *const host_need[] = { "bin", NULL };
-        snprintf(extract, sizeof(extract), "toolchains/%s-%s", hp, ha);
+        snprintf(extract, sizeof(extract), "%s", host_clang_dir);
         snprintf(url, sizeof(url), "rebax-clang-%s-%s.tar.xz", hp, ha);
         if (!(rebax_fs_is_dir(host_clang_dir) && has_children(host_clang_dir, host_need))) {
             const char *const names[] = { url, NULL };

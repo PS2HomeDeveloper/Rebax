@@ -459,7 +459,7 @@ static void prepare_export(void) {
 
     reset_shared_export_data();
     node_source_use("modern", g_modern_sdk_root);
-    snprintf(g_nodes_src_dir, sizeof(g_nodes_src_dir), "%s/rebax/modern", g_modern_sdk_root);
+    snprintf(g_nodes_src_dir, sizeof(g_nodes_src_dir), "%s/rebax/systems/nodes/src", g_modern_sdk_root);
     const char *project_root = current_project_get_path();
     log_pushf("[modern] preparing %s-%s export for %s (%s).", g_modern_target, g_modern_arch, g_modern_product_name, g_modern_release ? "Release" : "Debug");
     if (!write_scene_data(project_root)) {

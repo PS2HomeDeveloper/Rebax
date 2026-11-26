@@ -81,7 +81,7 @@ int ps1_export_start(const char *exe_name, int is_release, const char *output_di
         char sdk_root[1536];
         snprintf(sdk_root, sizeof(sdk_root), "%s/ps1", rebax_sdks_dir());
         node_source_use("ps1", sdk_root);
-        snprintf(g_nodes_src_dir, sizeof(g_nodes_src_dir), "%s/rebax/ps1", sdk_root);
+        snprintf(g_nodes_src_dir, sizeof(g_nodes_src_dir), "%s/rebax/systems/nodes/src", sdk_root);
     }
 
     strncpy(g_build_dir, rebax_temp_export_dir(), sizeof(g_build_dir) - 1);
