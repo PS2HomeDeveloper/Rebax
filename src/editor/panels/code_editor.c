@@ -284,7 +284,6 @@ int code_editor_open_path(const char *path) {
     if (path == NULL || path[0] == '\0') return 0;
     if (g_path[0] != '\0' && strcmp(g_path, path) == 0) {
         g_active = 1;
-        g_has_focus = 1;
         set_status("File is already open");
         return 1;
     }
@@ -294,14 +293,12 @@ int code_editor_open_path(const char *path) {
     }
     load_file(path);
     g_active = 1;
-    g_has_focus = 1;
     return g_path[0] != '\0' && strcmp(g_path, path) == 0;
 }
 
 static void on_open_file(const char *path, void *unused) {
     (void)unused;
     if (path) code_editor_open_path(path);
-    g_has_focus = 1;
 }
 
 static void save_to_path(const char *path) {
@@ -322,19 +319,18 @@ static void save_to_path(const char *path) {
 static void on_save_file(const char *path, void *unused) {
     (void)unused;
     if (path) save_to_path(path);
-    g_has_focus = 1;
 }
 
 static void open_file_dialog(void) {
     window_stop_text_input();
-    file_manager_open(FILE_MANAGER_ROOT_DEVICE, FILE_MANAGER_MODE_PICK_FILE,
+    file_manager_open(FILE_MANAGER_ROOT_ASSETS, FILE_MANAGER_MODE_PICK_FILE,
                       g_code_extensions, CODE_EDITOR_EXT_COUNT,
                       on_open_file, NULL);
 }
 
 static void save_file(void) {
     if (g_path[0]) save_to_path(g_path);
-    else file_manager_open_save(FILE_MANAGER_ROOT_DEVICE, g_title, on_save_file, NULL);
+    else file_manager_open_save(FILE_MANAGER_ROOT_ASSETS, g_title, on_save_file, NULL);
 }
 
 static void new_file(void) {
@@ -495,7 +491,8 @@ void code_editor_update(int x, int y, int w, int h) {
         if (g_hover_button == 0) new_file();
         else if (g_hover_button == 1) open_file_dialog();
         else if (g_hover_button == 2) save_file();
-        else if (g_hover_button == 3) file_manager_open_save(FILE_MANAGER_ROOT_DEVICE, g_title, on_save_file, NULL);
+        else if (g_hover_button == 3) file_manager_open_save(FILE_MANAGER_ROOT_ASSETS, g_title, on_save_file, NULL);
+        if (!in_area) g_has_focus = 0;
         g_press_active = in_area;
         g_press_x = mx;
         g_press_y = my;

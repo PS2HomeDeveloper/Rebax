@@ -424,6 +424,7 @@ static void fit_layout(int window_w, int window_h) {
     int max_side = window_w - CAMERA_MIN_W;
     g_left_split_y = clamp_split(g_left_split_y, col_h);
     g_right_split_y = clamp_split(g_right_split_y, col_h);
+    if (g_bottom_center_height < TAB_BAR_HEIGHT + 2) g_bottom_center_height = TAB_BAR_HEIGHT + 2;
     if (g_left_width + g_right_width > max_side && max_side > 0) {
         int excess = g_left_width + g_right_width - max_side;
         int from_left = excess / 2;
@@ -465,7 +466,7 @@ static void update_splitters(int window_w, int window_h, int mx, int my) {
         case SPLITTER_RIGHT_INNER: g_right_split_y = clamp_split(my - col_top, col_h); break;
         case SPLITTER_CAMERA_BOTTOM: {
             int max_h = col_h - CAMERA_MIN_H - SCENE_TABS_BAR_HEIGHT - CAMERA_TOP_BAR_HEIGHT;
-            g_bottom_center_height = window_h - my; if (g_bottom_center_height < 0) g_bottom_center_height = 0;
+            g_bottom_center_height = window_h - my; if (g_bottom_center_height < TAB_BAR_HEIGHT + 2) g_bottom_center_height = TAB_BAR_HEIGHT + 2;
             if (g_bottom_center_height > max_h) g_bottom_center_height = max_h > 0 ? max_h : 0;
             break;
         }

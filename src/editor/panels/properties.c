@@ -29,6 +29,7 @@
 #include "scene/current_scene.h"
 #include "editor/ui/theme.h"
 #include "editor/ui/scrollbar.h"
+#include "editor/ui/draw_kit.h"
 #include "filesystem/path_utils.h"
 
 #define ROW_HEIGHT      26
@@ -144,7 +145,9 @@ static void rebuild_rows(void) {
         row->field.cursor_pos = (int)strlen(row->field.text);
 
         if (row->is_asset_path) {
-            font_text_image_t value_txt = font_render_text(row->field.text, FONT_WEIGHT_REGULAR, 12);
+            char fitted[TEXT_FIELD_MAX_LEN];
+            ui_kit_fit_text_weight(row->field.text, FONT_WEIGHT_REGULAR, 12, FIELD_WIDTH - 14, fitted, sizeof(fitted));
+            font_text_image_t value_txt = font_render_text(fitted, FONT_WEIGHT_REGULAR, 12);
             if (value_txt.pixels != NULL) {
                 row->value_tex = window_create_texture(value_txt.pixels, value_txt.px_w, value_txt.px_h);
                 row->value_w = value_txt.width;

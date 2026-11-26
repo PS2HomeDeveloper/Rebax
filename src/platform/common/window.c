@@ -165,6 +165,8 @@ static float g_delta_time = 0.0f;
 
 static char g_text_input_buffer[64] = "";
 static int g_text_input_wanted = 0;
+static int g_text_input_request = 0;
+static int g_text_input_idle = 0;
 static int g_text_input_suppressed = 0;
 
 static int g_key_backspace = 0;
@@ -305,7 +307,17 @@ void window_poll_events(void) {
     if (g_text_input_wanted && !SDL_IsTextInputActive()) {
         g_text_input_suppressed = 1;
         g_text_input_wanted = 0;
+        g_text_input_request = 0;
     }
+    if (g_text_input_request) {
+        g_text_input_idle = 0;
+        if (!SDL_IsTextInputActive()) SDL_StartTextInput();
+        g_text_input_wanted = 1;
+    } else {
+        if (++g_text_input_idle >= 3 && SDL_IsTextInputActive()) SDL_StopTextInput();
+        if (g_text_input_idle >= 3) g_text_input_wanted = 0;
+    }
+    g_text_input_request = 0;
 
     if (g_background) SDL_Delay(50);
 
@@ -635,13 +647,10 @@ void window_set_relative_mouse_mode(int enabled) {
 float window_get_delta_time(void) { return g_delta_time; }
 
 void window_start_text_input(void) {
-    if (g_text_input_suppressed || g_text_input_wanted) return;
-    g_text_input_wanted = 1;
-    if (!SDL_IsTextInputActive()) SDL_StartTextInput();
+    if (g_text_input_suppressed) return;
+    g_text_input_request = 1;
 }
 void window_stop_text_input(void) {
-    g_text_input_wanted = 0;
-    if (SDL_IsTextInputActive()) SDL_StopTextInput();
 }
 
 const char *window_text_input_this_frame(void) { return g_text_input_buffer; }

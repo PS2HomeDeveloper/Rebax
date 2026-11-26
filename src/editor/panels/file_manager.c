@@ -1065,11 +1065,16 @@ void file_manager_draw(int window_w, int window_h) {
         } else if (e->label_tex != NULL) {
             int label_x = cell_x + (CELL_W - e->label_w) / 2;
             int label_y = icon_area_y + GRID_ICON_SIZE + 6;
-            window_set_clip_rect(cell_x + 2, label_y, CELL_W - 4, LABEL_FONT_SIZE + 4);
-            if (is_dim) {
-                window_draw_texture_tinted(e->label_tex, label_x, label_y, e->label_w, e->label_h, tint, tint, tint);
-            } else {
-                window_draw_texture(e->label_tex, label_x, label_y, e->label_w, e->label_h);
+            int clip_top = label_y > grid_y ? label_y : grid_y;
+            int clip_bottom = label_y + LABEL_FONT_SIZE + 4;
+            if (clip_bottom > grid_y + grid_h) clip_bottom = grid_y + grid_h;
+            if (clip_bottom > clip_top) {
+                window_set_clip_rect(cell_x + 2, clip_top, CELL_W - 4, clip_bottom - clip_top);
+                if (is_dim) {
+                    window_draw_texture_tinted(e->label_tex, label_x, label_y, e->label_w, e->label_h, tint, tint, tint);
+                } else {
+                    window_draw_texture(e->label_tex, label_x, label_y, e->label_w, e->label_h);
+                }
             }
             window_set_clip_rect(grid_x, grid_y, grid_w, grid_h);
         }

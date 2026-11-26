@@ -46,6 +46,7 @@
 #define ZOOM_WHEEL_MULT 1.15f
 #define GIZMO_LENGTH 54
 #define VIEW_SCROLLBAR_SIZE 10
+#define VIEW_EDGE_GAP 12
 #define VIEW_SCROLLBAR_MIN_THUMB 24
 #define INITIAL_WORLD_HALF_RANGE 1024.0f
 #define WORLD_RANGE_MARGIN_VIEWS 2.0f
@@ -252,9 +253,9 @@ static void draw_axis_scrollbar(int horizontal, int track_start, int track_len,
 }
 
 void viewport_2d_update(int x, int y, int w, int h) {
-    if (w <= VIEW_SCROLLBAR_SIZE || h <= VIEW_SCROLLBAR_SIZE) return;
-    int view_w = w - VIEW_SCROLLBAR_SIZE;
-    int view_h = h - VIEW_SCROLLBAR_SIZE;
+    if (w <= VIEW_SCROLLBAR_SIZE + VIEW_EDGE_GAP || h <= VIEW_SCROLLBAR_SIZE + VIEW_EDGE_GAP) return;
+    int view_w = w - VIEW_SCROLLBAR_SIZE - VIEW_EDGE_GAP;
+    int view_h = h - VIEW_SCROLLBAR_SIZE - VIEW_EDGE_GAP;
     int mx = window_mouse_x(), my = window_mouse_y();
     int inside_view = mx >= x && mx < x + view_w && my >= y && my < y + view_h;
 
@@ -425,9 +426,9 @@ static void draw_marquee(void) {
 }
 
 void viewport_2d_draw(int x, int y, int w, int h) {
-    if (w <= VIEW_SCROLLBAR_SIZE || h <= VIEW_SCROLLBAR_SIZE) return;
-    int view_w = w - VIEW_SCROLLBAR_SIZE;
-    int view_h = h - VIEW_SCROLLBAR_SIZE;
+    if (w <= VIEW_SCROLLBAR_SIZE + VIEW_EDGE_GAP || h <= VIEW_SCROLLBAR_SIZE + VIEW_EDGE_GAP) return;
+    int view_w = w - VIEW_SCROLLBAR_SIZE - VIEW_EDGE_GAP;
+    int view_h = h - VIEW_SCROLLBAR_SIZE - VIEW_EDGE_GAP;
     window_set_clip_rect(x, y, view_w, view_h);
     window_fill_rect(x, y, view_w, view_h, BG_R, BG_G, BG_B);
     int origin_x = x + view_w / 2 + (int)g_pan_offset_x;
@@ -484,6 +485,9 @@ void viewport_2d_draw(int x, int y, int w, int h) {
                         g_world_min_x, g_world_max_x, cx);
     draw_axis_scrollbar(0, y, view_h, x + view_w, VIEW_SCROLLBAR_SIZE, view_h,
                         g_world_min_y, g_world_max_y, cy);
+    window_fill_rect(x, y + view_h + VIEW_SCROLLBAR_SIZE, w, VIEW_EDGE_GAP, UI_RGB(UI_COLOR_SURFACE_PANEL));
+    window_fill_rect(x + view_w + VIEW_SCROLLBAR_SIZE, y, VIEW_EDGE_GAP, h - VIEW_EDGE_GAP, UI_RGB(UI_COLOR_SURFACE_PANEL));
+    window_fill_rect(x + view_w, y + view_h, VIEW_SCROLLBAR_SIZE, VIEW_SCROLLBAR_SIZE, UI_RGB(UI_COLOR_SURFACE_PANEL));
 }
 
 void viewport_2d_project(float world_x, float world_y,

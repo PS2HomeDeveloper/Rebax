@@ -212,40 +212,60 @@ static int dir_has_children(const char *path) {
     return found;
 }
 
+typedef struct {
+    char *name;
+    int is_dir;
+    long long modified;
+} dir_item_t;
+
+static int compare_dir_items(const void *a, const void *b) {
+    const dir_item_t *x = (const dir_item_t *)a;
+    const dir_item_t *y = (const dir_item_t *)b;
+    if (x->is_dir != y->is_dir) return x->is_dir ? -1 : 1;
+    return path_utils_compare_names_ci(&x->name, &y->name);
+}
+
 static void add_directory_contents(const char *dir_path, int depth) {
     DIR *dir = opendir(dir_path);
     if (dir == NULL) return;
-    char **names = malloc(sizeof(char *) * MAX_ROWS);
+    dir_item_t *items = malloc(sizeof(dir_item_t) * MAX_ROWS);
     int count = 0;
     struct dirent *entry;
-    if (names == NULL) {
+    if (items == NULL) {
         closedir(dir);
         return;
     }
     while ((entry = readdir(dir)) != NULL && count < MAX_ROWS) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-        names[count] = strdup(entry->d_name);
-        if (names[count] != NULL) count++;
+        char full_path[600];
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+        struct stat status;
+        if (stat(full_path, &status) != 0) continue;
+        items[count].name = strdup(entry->d_name);
+        if (items[count].name == NULL) continue;
+        items[count].is_dir = S_ISDIR(status.st_mode) ? 1 : 0;
+        items[count].modified = (long long)status.st_mtime;
+        count++;
     }
     closedir(dir);
-    qsort(names, (size_t)count, sizeof(char *), path_utils_compare_names);
-    for (int i = 0; i < count && g_row_count < MAX_ROWS; i++) {
-        char full_path[600];
-        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, names[i]);
-        struct stat status;
-        if (stat(full_path, &status) != 0) { free(names[i]); continue; }
-        fs_row_t *row = &g_rows[g_row_count++];
-        memset(row, 0, sizeof(*row));
-        strncpy(row->path, full_path, sizeof(row->path) - 1);
-        strncpy(row->display_name, names[i], sizeof(row->display_name) - 1);
-        row->depth = depth;
-        row->is_dir = S_ISDIR(status.st_mode);
-        row->has_children = row->is_dir ? dir_has_children(full_path) : 0;
-        row->modified = (long long)status.st_mtime;
-        free(names[i]);
-        if (row->is_dir && is_expanded(full_path)) add_directory_contents(full_path, depth + 1);
+    qsort(items, (size_t)count, sizeof(dir_item_t), compare_dir_items);
+    for (int i = 0; i < count; i++) {
+        if (g_row_count < MAX_ROWS) {
+            char full_path[600];
+            snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, items[i].name);
+            fs_row_t *row = &g_rows[g_row_count++];
+            memset(row, 0, sizeof(*row));
+            strncpy(row->path, full_path, sizeof(row->path) - 1);
+            strncpy(row->display_name, items[i].name, sizeof(row->display_name) - 1);
+            row->depth = depth;
+            row->is_dir = items[i].is_dir;
+            row->has_children = row->is_dir ? dir_has_children(full_path) : 0;
+            row->modified = items[i].modified;
+            if (row->is_dir && is_expanded(full_path)) add_directory_contents(full_path, depth + 1);
+        }
+        free(items[i].name);
     }
-    free(names);
+    free(items);
 }
 
 static void free_rows(void) {
@@ -464,9 +484,15 @@ void file_system_panel_update(int x, int y, int w, int h) {
             strncpy(g_last_click_path, g_rows[clicked].path, sizeof(g_last_click_path) - 1);
             g_last_click_path[sizeof(g_last_click_path) - 1] = '\0';
             g_last_click_remaining = 0.45f;
-        } else {
+        } else if (g_last_click_remaining > 0.0f && strcmp(g_last_click_path, g_rows[clicked].path) == 0) {
+            toggle_expanded(g_rows[clicked].path);
+            g_needs_rebuild = 1;
             g_last_click_remaining = 0.0f;
             g_last_click_path[0] = '\0';
+        } else {
+            strncpy(g_last_click_path, g_rows[clicked].path, sizeof(g_last_click_path) - 1);
+            g_last_click_path[sizeof(g_last_click_path) - 1] = '\0';
+            g_last_click_remaining = 0.45f;
         }
     }
 }
