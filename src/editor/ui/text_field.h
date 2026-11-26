@@ -32,6 +32,8 @@ typedef struct {
     int   _cache_text_w;
     int   _cache_text_h;
     int   _cache_valid;
+    int   _font_size;
+    int   _cache_focus;
 } text_field_t;
 
 void text_field_init(text_field_t *field);

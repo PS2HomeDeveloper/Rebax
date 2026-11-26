@@ -60,6 +60,9 @@ typedef struct {
 
 static float g_pan_offset_x, g_pan_offset_y, g_zoom = 1.0f;
 static int g_pan_active;
+static int g_touch_pan;
+static int g_pinch_active;
+static float g_pinch_dist, g_pinch_mx, g_pinch_my;
 static int g_focus_scene_pending;
 static drag_mode_t g_drag_mode;
 static float g_last_world_x, g_last_world_y;
@@ -273,7 +276,7 @@ void viewport_2d_update(int x, int y, int w, int h) {
     }
 
     float camera_x = camera_world_x(), camera_y = camera_world_y();
-    expand_world_range(view_w, view_h);
+    if (!g_horizontal_scroll.dragging && !g_vertical_scroll.dragging) expand_world_range(view_w, view_h);
     update_axis_scroll(&g_horizontal_scroll, 1, x, view_w, y + view_h,
                        VIEW_SCROLLBAR_SIZE, view_w, g_world_min_x, g_world_max_x, &camera_x);
     update_axis_scroll(&g_vertical_scroll, 0, y, view_h, x + view_w,
@@ -288,6 +291,37 @@ void viewport_2d_update(int x, int y, int w, int h) {
         g_pan_offset_y += (float)window_mouse_delta_y();
     }
 
+    int fingers = window_touch_count();
+    if (fingers >= 2) {
+        int ax, ay, bx, by;
+        window_touch_point(0, &ax, &ay);
+        window_touch_point(1, &bx, &by);
+        float cx = (float)(ax + bx) * 0.5f, cy = (float)(ay + by) * 0.5f;
+        float dx = (float)(ax - bx), dy = (float)(ay - by);
+        float dist = sqrtf(dx * dx + dy * dy);
+        if (g_pinch_active && g_pinch_dist > 8.0f && dist > 8.0f) {
+            float world_x = (g_pinch_mx - ((float)(x + view_w / 2) + g_pan_offset_x)) / g_zoom;
+            float world_y = (g_pinch_my - ((float)(y + view_h / 2) + g_pan_offset_y)) / g_zoom;
+            g_zoom *= dist / g_pinch_dist;
+            if (g_zoom < ZOOM_MIN) g_zoom = ZOOM_MIN;
+            if (g_zoom > ZOOM_MAX) g_zoom = ZOOM_MAX;
+            g_pan_offset_x = cx - world_x * g_zoom - (float)(x + view_w / 2);
+            g_pan_offset_y = cy - world_y * g_zoom - (float)(y + view_h / 2);
+        }
+        g_pinch_active = 1;
+        g_pinch_dist = dist; g_pinch_mx = cx; g_pinch_my = cy;
+        g_drag_mode = DRAG_NONE;
+        g_touch_pan = 0;
+    } else {
+        g_pinch_active = 0;
+    }
+    if (g_touch_pan) {
+        if (window_mouse_left_down() && fingers < 2) {
+            g_pan_offset_x += (float)window_mouse_delta_x();
+            g_pan_offset_y += (float)window_mouse_delta_y();
+        } else g_touch_pan = 0;
+    }
+
     int wheel = window_mouse_wheel_delta();
     if (wheel != 0 && inside_view) {
         float old_zoom = g_zoom;
@@ -300,7 +334,7 @@ void viewport_2d_update(int x, int y, int w, int h) {
         g_pan_offset_y = (float)my - world_y * g_zoom - (float)(y + view_h / 2);
     }
 
-    if (inside_view && window_mouse_left_just_pressed() &&
+    if (inside_view && window_mouse_left_just_pressed() && fingers < 2 &&
         !g_horizontal_scroll.dragging && !g_vertical_scroll.dragging) {
         int selected = scene_data_get_selected_index();
         int sx = 0, sy = 0;
@@ -319,6 +353,8 @@ void viewport_2d_update(int x, int y, int w, int h) {
                 else scene_data_add_to_selection(hit);
                 properties_panel_set_selected(hit);
                 g_drag_mode = DRAG_MOVE;
+            } else if (window_pointer_is_touch()) {
+                g_touch_pan = 1;
             } else {
                 scene_data_clear_selection();
                 properties_panel_clear_selection();

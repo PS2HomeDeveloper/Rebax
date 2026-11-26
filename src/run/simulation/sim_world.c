@@ -45,6 +45,8 @@ struct sim_world {
     size_t texture_bytes;
     size_t texture_budget;
     int max_texture_size;
+    int origin_x;
+    int origin_y;
     char warnings[SIM_MAX_WARNINGS][SIM_WARNING_LENGTH];
     int warning_count;
     sim_hook_t hooks[SIM_MAX_HOOKS];
@@ -212,6 +214,12 @@ void sim_world_set_limits(sim_world_t *world, int texture_memory_mb,
     world->max_texture_size = max_texture_size > 0 ? max_texture_size : 0;
 }
 
+void sim_world_set_origin(sim_world_t *world, int x, int y) {
+    if (world == NULL) return;
+    world->origin_x = x;
+    world->origin_y = y;
+}
+
 int sim_world_build_from_scene(sim_world_t *world) {
     int scene_count;
     int i;
@@ -337,8 +345,8 @@ void sim_world_draw_sprite(sim_world_t *world, int node_index) {
     if (width < 1 || height < 1) return;
     draw_width = abs(width);
     draw_height = abs(height);
-    x = (int)node->transform.x - draw_width / 2;
-    y = (int)node->transform.y - draw_height / 2;
+    x = (int)node->transform.x + world->origin_x - draw_width / 2;
+    y = (int)node->transform.y + world->origin_y - draw_height / 2;
     window_draw_texture_region_rotated(texture->texture, 0, 0,
         texture->width, texture->height, x, y, draw_width, draw_height,
         (double)node->transform.rotation * 180.0 / SIM_PI);

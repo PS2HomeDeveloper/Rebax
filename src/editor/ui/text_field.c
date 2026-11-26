@@ -21,8 +21,11 @@
 #include "editor/ui/shape_provider.h"
 #include "editor/ui/font.h"
 #include "editor/ui/theme.h"
+#include "editor/ui/draw_kit.h"
 
 #define TEXT_FIELD_CORNER_RADIUS 8
+#define TEXT_FIELD_PADDING 8
+#define CARET_BLINK_MS 530
 
 void text_field_init(text_field_t *field) {
     field->text[0] = '\0';
@@ -38,6 +41,8 @@ void text_field_init(text_field_t *field) {
     field->_cache_text_w = 0;
     field->_cache_text_h = 0;
     field->_cache_valid = 0;
+    field->_font_size = 14;
+    field->_cache_focus = 0;
 }
 
 void text_field_free(text_field_t *field) {
@@ -52,6 +57,20 @@ void text_field_free(text_field_t *field) {
     field->_cache_valid = 0;
 }
 
+static int utf8_next(const char *text, int index, int len) {
+    if (index >= len) return len;
+    index++;
+    while (index < len && ((unsigned char)text[index] & 0xC0) == 0x80) index++;
+    return index;
+}
+
+static int utf8_prev(const char *text, int index) {
+    if (index <= 0) return 0;
+    index--;
+    while (index > 0 && ((unsigned char)text[index] & 0xC0) == 0x80) index--;
+    return index;
+}
+
 static int measure_text_width_upto(const char *text, int upto_chars, int pixel_size) {
     if (upto_chars <= 0) {
         return 0;
@@ -62,10 +81,7 @@ static int measure_text_width_upto(const char *text, int upto_chars, int pixel_s
     memcpy(buffer, text, (size_t)n);
     buffer[n] = '\0';
 
-    font_text_image_t img = font_render_text(buffer, FONT_WEIGHT_REGULAR, pixel_size);
-    int w = img.width;
-    font_free_text_image(&img);
-    return w;
+    return font_measure_text(buffer, FONT_WEIGHT_REGULAR, pixel_size);
 }
 
 void text_field_update(text_field_t *field, int x, int y, int w, int h,
@@ -76,6 +92,17 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
         int inside = (mx >= x && mx < x + w && my >= y && my < y + h);
         if (inside) {
             field->focused = 1;
+            int target = mx - x - TEXT_FIELD_PADDING + field->scroll_offset;
+            int length = (int)strlen(field->text);
+            int best = length;
+            for (int i = 0; i <= length; i = utf8_next(field->text, i, length)) {
+                if (measure_text_width_upto(field->text, i, field->_font_size) >= target) {
+                    best = i;
+                    break;
+                }
+                if (i == length) break;
+            }
+            field->cursor_pos = best;
         } else if (field->focused) {
             field->focused = 0;
         }
@@ -101,25 +128,27 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
     }
 
     if (window_key_just_pressed_backspace() && field->cursor_pos > 0) {
-        memmove(field->text + field->cursor_pos - 1,
+        int start = utf8_prev(field->text, field->cursor_pos);
+        memmove(field->text + start,
                 field->text + field->cursor_pos,
                 (size_t)(len - field->cursor_pos + 1));
-        field->cursor_pos--;
-        len--;
+        len -= field->cursor_pos - start;
+        field->cursor_pos = start;
     }
 
     if (window_key_just_pressed_delete() && field->cursor_pos < len) {
+        int end = utf8_next(field->text, field->cursor_pos, len);
         memmove(field->text + field->cursor_pos,
-                field->text + field->cursor_pos + 1,
-                (size_t)(len - field->cursor_pos));
-        len--;
+                field->text + end,
+                (size_t)(len - end + 1));
+        len -= end - field->cursor_pos;
     }
 
     if (window_key_just_pressed_left() && field->cursor_pos > 0) {
-        field->cursor_pos--;
+        field->cursor_pos = utf8_prev(field->text, field->cursor_pos);
     }
     if (window_key_just_pressed_right() && field->cursor_pos < len) {
-        field->cursor_pos++;
+        field->cursor_pos = utf8_next(field->text, field->cursor_pos, len);
     }
     if (window_key_just_pressed_home()) {
         field->cursor_pos = 0;
@@ -149,8 +178,8 @@ void text_field_update(text_field_t *field, int x, int y, int w, int h,
         }
     }
 
-    int padding = 8;
-    int cursor_px = measure_text_width_upto(field->text, field->cursor_pos, 14);
+    int padding = TEXT_FIELD_PADDING;
+    int cursor_px = measure_text_width_upto(field->text, field->cursor_pos, field->_font_size);
     int visible_w = field_width - padding * 2;
 
     if (cursor_px - field->scroll_offset > visible_w) {
@@ -185,13 +214,22 @@ void text_field_draw(text_field_t *field, int x, int y, int w, int h,
         window_draw_texture((window_texture_t *)field->_cache_bg_tex, x, y, w, h);
     }
 
-    if (strcmp(field->text, field->_cache_text) != 0) {
+    field->_font_size = font_pixel_size;
+    char shown[TEXT_FIELD_MAX_LEN + 8];
+    const char *display = field->text;
+    int text_area = w - TEXT_FIELD_PADDING * 2;
+    if (!field->focused && field->text[0] != '\0') {
+        ui_kit_fit_text(field->text, font_pixel_size, text_area, shown, (int)sizeof(shown));
+        display = shown;
+    }
+
+    if (strcmp(display, field->_cache_text) != 0) {
         if (field->_cache_text_tex != NULL) {
             window_destroy_texture((window_texture_t *)field->_cache_text_tex);
             field->_cache_text_tex = NULL;
         }
-        if (field->text[0] != '\0') {
-            font_text_image_t txt = font_render_text(field->text, FONT_WEIGHT_REGULAR, font_pixel_size);
+        if (display[0] != '\0') {
+            font_text_image_t txt = font_render_text(display, FONT_WEIGHT_REGULAR, font_pixel_size);
             if (txt.pixels != NULL) {
                 field->_cache_text_tex = window_create_texture(txt.pixels, txt.px_w, txt.px_h);
                 field->_cache_text_w = txt.width;
@@ -202,17 +240,30 @@ void text_field_draw(text_field_t *field, int x, int y, int w, int h,
             field->_cache_text_w = 0;
             field->_cache_text_h = 0;
         }
-        strncpy(field->_cache_text, field->text, TEXT_FIELD_MAX_LEN - 1);
+        strncpy(field->_cache_text, display, TEXT_FIELD_MAX_LEN - 1);
         field->_cache_text[TEXT_FIELD_MAX_LEN - 1] = '\0';
     }
 
+    int scroll = field->focused ? field->scroll_offset : 0;
     if (field->_cache_text_tex != NULL) {
-        int padding = 8;
         window_set_clip_rect(x, y, w, h);
         window_draw_texture((window_texture_t *)field->_cache_text_tex,
-                             x + padding - field->scroll_offset,
+                             x + TEXT_FIELD_PADDING - scroll,
                              y + (h - field->_cache_text_h) / 2,
                              field->_cache_text_w, field->_cache_text_h);
         window_clear_clip_rect();
+    }
+
+    if (field->focused) {
+        ui_kit_outline(x, y, w, h, TEXT_FIELD_CORNER_RADIUS, 90, 160, 235);
+        if ((window_ticks() / CARET_BLINK_MS) % 2 == 0) {
+            int caret_x = x + TEXT_FIELD_PADDING - scroll +
+                          measure_text_width_upto(field->text, field->cursor_pos, font_pixel_size);
+            int caret_h = font_pixel_size + 4;
+            if (caret_h > h - 6) caret_h = h - 6;
+            if (caret_x >= x + 2 && caret_x < x + w - 2) {
+                window_fill_rect(caret_x, y + (h - caret_h) / 2, 2, caret_h, 235, 235, 235);
+            }
+        }
     }
 }

@@ -27,6 +27,9 @@ void ui_kit_outline(int x, int y, int w, int h, int radius, int r, int g, int b)
 
 void ui_kit_button(const char *text, int x, int y, int w, int h, int enabled, int primary);
 
+void ui_kit_fit_text_weight(const char *text, int weight, int size, int max_w, char *out, int out_size);
+void ui_kit_fit_text(const char *text, int size, int max_w, char *out, int out_size);
+
 int ui_kit_hover(int x, int y, int w, int h);
 
 int ui_kit_clicked(int x, int y, int w, int h);

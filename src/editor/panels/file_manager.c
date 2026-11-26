@@ -48,6 +48,8 @@
 #include "editor/ui/file_icons.h"
 #include "platform/android/storage.h"
 #include "editor/ui/draw_kit.h"
+#include "editor/ui/scrollbar.h"
+#include "core/i18n.h"
 #include "filesystem/storage_volumes.h"
 #include "filesystem/rebax_fs.h"
 
@@ -75,7 +77,8 @@ static ui_window_t g_win = UI_WINDOW_INIT(file_manager_is_open, file_manager_upd
 
 #define SCROLL_STEP_PX           40
 
-#define AB_MAX_ENTRIES          512
+#define AB_MAX_ENTRIES        20000
+#define THUMB_BUDGET_TICKS        6
 #define AB_MAX_PATH              900
 #define AB_MAX_EXTS               16
 #define AB_MAX_CRUMBS             24
@@ -92,6 +95,7 @@ typedef struct {
 
     window_texture_t *label_tex;
     int  label_w, label_h;
+    int  thumb_tried;
 } ab_entry_t;
 
 static int g_ready = 0;
@@ -110,8 +114,17 @@ static char g_root_label[64];
 static char g_current_path[AB_MAX_PATH];
 static int g_skip_input_frames = 0;
 
-static ab_entry_t g_entries[AB_MAX_ENTRIES];
+static ab_entry_t *g_entries = NULL;
+static int g_entry_capacity = 0;
 static int g_entry_count = 0;
+static int g_scroll_dragging = 0;
+static int g_press_index = -1;
+static int g_press_moved = 0;
+static int g_rename_index = -1;
+static int g_rename_is_new = 0;
+static text_field_t g_rename_field;
+static int g_rename_ready = 0;
+static char g_inline_error[120];
 
 static char g_crumb_label[AB_MAX_CRUMBS][64];
 static char g_crumb_path[AB_MAX_CRUMBS][AB_MAX_PATH];
@@ -198,7 +211,16 @@ static window_texture_t *make_thumbnail_texture(const unsigned char *src, int sw
     return tex;
 }
 
+static void cancel_rename(void) {
+    if (g_rename_index < 0) return;
+    g_rename_index = -1;
+    g_rename_is_new = 0;
+    window_stop_text_input();
+}
+
 static void free_entries(void) {
+    cancel_rename();
+    g_press_index = -1;
     for (int i = 0; i < g_entry_count; i++) {
         if (g_entries[i].thumb_tex != NULL) window_destroy_texture(g_entries[i].thumb_tex);
         if (g_entries[i].label_tex != NULL) window_destroy_texture(g_entries[i].label_tex);
@@ -208,32 +230,46 @@ static void free_entries(void) {
 
 static void add_entry(const char *full_path, const char *display_name, int is_dir) {
     if (g_entry_count >= AB_MAX_ENTRIES) return;
+    if (g_entry_count >= g_entry_capacity) {
+        int grown_capacity = g_entry_capacity > 0 ? g_entry_capacity * 2 : 256;
+        ab_entry_t *grown = realloc(g_entries, (size_t)grown_capacity * sizeof(*grown));
+        if (grown == NULL) return;
+        g_entries = grown;
+        g_entry_capacity = grown_capacity;
+    }
 
     ab_entry_t *e = &g_entries[g_entry_count++];
     memset(e, 0, sizeof(*e));
-    strncpy(e->full_path, full_path, sizeof(e->full_path) - 1);
-    strncpy(e->display_name, display_name, sizeof(e->display_name) - 1);
+    snprintf(e->full_path, sizeof(e->full_path), "%s", full_path);
+    snprintf(e->display_name, sizeof(e->display_name), "%s", display_name);
     e->is_dir = is_dir;
+}
 
-    font_text_image_t txt = font_render_text(display_name, FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE);
-    if (txt.pixels != NULL) {
-        e->label_tex = window_create_texture(txt.pixels, txt.px_w, txt.px_h);
-        e->label_w = txt.width;
-        e->label_h = txt.height;
-        font_free_text_image(&txt);
+static void prepare_entry_visuals(ab_entry_t *e, unsigned int started) {
+    if (e->label_tex == NULL) {
+        char fitted[200];
+        ui_kit_fit_text(e->display_name, LABEL_FONT_SIZE, CELL_W - 8, fitted, (int)sizeof(fitted));
+        font_text_image_t txt = font_render_text(fitted, FONT_WEIGHT_REGULAR, LABEL_FONT_SIZE);
+        if (txt.pixels != NULL) {
+            e->label_tex = window_create_texture(txt.pixels, txt.px_w, txt.px_h);
+            e->label_w = txt.width;
+            e->label_h = txt.height;
+            font_free_text_image(&txt);
+        }
     }
-
-    if (!is_dir) {
-        const char *dot = strrchr(display_name, '.');
-        if (dot != NULL && file_icons_is_raster_image_ext(dot + 1)) {
-            struct stat st;
-            if (stat(full_path, &st) == 0 && st.st_size > 0 && st.st_size <= THUMB_MAX_FILE_SIZE) {
-                int w, h;
-                unsigned char *pixels = image_loader_editor_load(full_path, &w, &h, 0, 0, 0);
-                if (pixels != NULL) {
-                    e->thumb_tex = make_thumbnail_texture(pixels, w, h, GRID_ICON_SIZE, &e->thumb_w, &e->thumb_h);
-                    free(pixels);
-                }
+    if (e->is_dir || e->thumb_tried || e->thumb_tex != NULL) return;
+    if (window_ticks() - started > THUMB_BUDGET_TICKS) return;
+    e->thumb_tried = 1;
+    const char *dot = strrchr(e->display_name, '.');
+    if (dot != NULL && file_icons_is_raster_image_ext(dot + 1)) {
+        struct stat st;
+        if (stat(e->full_path, &st) == 0 && st.st_size > 0 && st.st_size <= THUMB_MAX_FILE_SIZE) {
+            int w;
+            int h;
+            unsigned char *pixels = image_loader_editor_load(e->full_path, &w, &h, 0, 0, 0);
+            if (pixels != NULL) {
+                e->thumb_tex = make_thumbnail_texture(pixels, w, h, GRID_ICON_SIZE, &e->thumb_w, &e->thumb_h);
+                free(pixels);
             }
         }
     }
@@ -302,9 +338,15 @@ static void load_directory(const char *path) {
         return;
     }
 
-    char *dir_names[AB_MAX_ENTRIES];
-    char *file_names[AB_MAX_ENTRIES];
+    char **dir_names = malloc(sizeof(char *) * AB_MAX_ENTRIES);
+    char **file_names = malloc(sizeof(char *) * AB_MAX_ENTRIES);
     int dir_count = 0, file_count = 0;
+    if (dir_names == NULL || file_names == NULL) {
+        free(dir_names);
+        free(file_names);
+        closedir(d);
+        return;
+    }
 
     struct dirent *entry;
     while ((entry = readdir(d)) != NULL) {
@@ -343,6 +385,8 @@ static void load_directory(const char *path) {
         add_entry(full, file_names[i], 0);
         free(file_names[i]);
     }
+    free(dir_names);
+    free(file_names);
 
     strncpy(g_current_path, path, sizeof(g_current_path) - 1);
     g_current_path[sizeof(g_current_path) - 1] = '\0';
@@ -395,6 +439,107 @@ static void run_prompt_action(void) {
     char here[AB_MAX_PATH];
     snprintf(here, sizeof(here), "%s", g_current_path);
     load_directory(here);
+}
+
+static int g_scroll_to = -1;
+
+static void begin_rename(int index, int is_new) {
+    if (index < 0 || index >= g_entry_count) return;
+    if (!g_rename_ready) {
+        g_rename_ready = 1;
+        text_field_init(&g_rename_field);
+    }
+    g_rename_index = index;
+    g_rename_is_new = is_new;
+    g_inline_error[0] = '\0';
+    snprintf(g_rename_field.text, sizeof(g_rename_field.text), "%s", g_entries[index].display_name);
+    g_rename_field.cursor_pos = (int)strlen(g_rename_field.text);
+    g_rename_field.scroll_offset = 0;
+    g_rename_field.focused = 1;
+    g_scroll_to = index;
+    window_start_text_input();
+}
+
+static void reload_current(void) {
+    char here[AB_MAX_PATH];
+    snprintf(here, sizeof(here), "%s", g_current_path);
+    load_directory(here);
+}
+
+static void commit_rename(void) {
+    if (g_rename_index < 0 || g_rename_index >= g_entry_count) {
+        cancel_rename();
+        return;
+    }
+    char old_path[AB_MAX_PATH];
+    char target[AB_MAX_PATH];
+    char name[TEXT_FIELD_MAX_LEN];
+    snprintf(old_path, sizeof(old_path), "%s", g_entries[g_rename_index].full_path);
+    snprintf(name, sizeof(name), "%s", g_rename_field.text);
+    int unchanged = strcmp(name, g_entries[g_rename_index].display_name) == 0;
+    cancel_rename();
+    if (unchanged) return;
+    g_inline_error[0] = '\0';
+    if (!valid_entry_name(name)) {
+        snprintf(g_inline_error, sizeof(g_inline_error), "This name is not valid");
+        return;
+    }
+    snprintf(target, sizeof(target), "%s/%s", g_current_path, name);
+    if (rebax_fs_exists(target)) {
+        snprintf(g_inline_error, sizeof(g_inline_error), "This name already exists");
+        return;
+    }
+    if (rename(old_path, target) != 0) {
+        snprintf(g_inline_error, sizeof(g_inline_error), "Could not rename it");
+        return;
+    }
+    reload_current();
+    for (int i = 0; i < g_entry_count; i++) {
+        if (strcmp(g_entries[i].display_name, name) == 0) {
+            g_selected_index = g_manage ? i : -1;
+            g_scroll_to = i;
+        }
+    }
+}
+
+static void begin_new_folder(void) {
+    char name[160];
+    char target[AB_MAX_PATH];
+    snprintf(name, sizeof(name), "%s", tr("New folder"));
+    for (int n = 2;; n++) {
+        snprintf(target, sizeof(target), "%s/%s", g_current_path, name);
+        if (!rebax_fs_exists(target)) break;
+        if (n > 999) return;
+        snprintf(name, sizeof(name), "%s %d", tr("New folder"), n);
+    }
+    g_inline_error[0] = '\0';
+    if (!rebax_fs_mkdir_p(target)) {
+        snprintf(g_inline_error, sizeof(g_inline_error), "Could not create the folder");
+        return;
+    }
+    reload_current();
+    for (int i = 0; i < g_entry_count; i++) {
+        if (strcmp(g_entries[i].display_name, name) == 0) {
+            begin_rename(i, 1);
+            return;
+        }
+    }
+}
+
+static void activate_entry(int i) {
+    ab_entry_t *e = &g_entries[i];
+    if (g_manage) {
+        g_selected_index = i;
+    } else if (e->is_dir) {
+        char next_path[AB_MAX_PATH];
+        snprintf(next_path, sizeof(next_path), "%s", e->full_path);
+        g_search_field.text[0] = '\0';
+        g_search_field.cursor_pos = 0;
+        g_search_field.scroll_offset = 0;
+        load_directory(next_path);
+    } else if (g_pick_mode == FILE_MANAGER_MODE_PICK_FILE) {
+        g_selected_index = i;
+    }
 }
 
 static void open_prompt(prompt_t kind) {
@@ -626,9 +771,9 @@ void file_manager_update(int window_w, int window_h) {
         int sel_ok = g_selected_index >= 0 && g_selected_index < g_entry_count;
         int can_edit = !g_in_devices;
         if (g_root_mode == FILE_MANAGER_ROOT_DEVICE && ui_kit_clicked(tr[0].x, tr[0].y, tr[0].w, tr[0].h)) { load_devices(); return; }
-        if (can_edit && ui_kit_clicked(tr[1].x, tr[1].y, tr[1].w, tr[1].h)) { open_prompt(PROMPT_NEW_FOLDER); return; }
+        if (can_edit && ui_kit_clicked(tr[1].x, tr[1].y, tr[1].w, tr[1].h)) { begin_new_folder(); return; }
         if (can_edit && ui_kit_clicked(tr[2].x, tr[2].y, tr[2].w, tr[2].h)) { g_manage = !g_manage; g_selected_index = -1; return; }
-        if (g_manage && sel_ok && ui_kit_clicked(tr[3].x, tr[3].y, tr[3].w, tr[3].h)) { open_prompt(PROMPT_RENAME); return; }
+        if (g_manage && sel_ok && ui_kit_clicked(tr[3].x, tr[3].y, tr[3].w, tr[3].h)) { begin_rename(g_selected_index, 0); return; }
         if (g_manage && sel_ok && ui_kit_clicked(tr[4].x, tr[4].y, tr[4].w, tr[4].h)) { open_prompt(PROMPT_DELETE); return; }
     }
 
@@ -654,7 +799,8 @@ void file_manager_update(int window_w, int window_h) {
     int search_w = 220;
     text_field_update(&g_search_field, search_x + 20, toolbar_y, search_w - 20, TOOLBAR_HEIGHT - 6, search_w - 20);
 
-    if (g_search_field.focused) window_start_text_input(); else window_stop_text_input();
+    if (g_search_field.focused) window_start_text_input();
+    else if (g_rename_index < 0) window_stop_text_input();
 
     int grid_x = dx + DIALOG_PADDING;
     int grid_y = toolbar_y + TOOLBAR_HEIGHT + GRID_TOP_GAP;
@@ -662,27 +808,34 @@ void file_manager_update(int window_w, int window_h) {
     int filename_row_reserve = (g_pick_mode == FILE_MANAGER_MODE_SAVE_FILE) ? FILENAME_ROW_HEIGHT : 0;
     int grid_h = DIALOG_HEIGHT - (grid_y - dy) - FOOTER_HEIGHT - DIALOG_PADDING - filename_row_reserve;
 
-    int columns = grid_w / CELL_W;
+    int columns = (grid_w - UI_SCROLLBAR_WIDTH - 4) / CELL_W;
     if (columns < 1) columns = 1;
 
     int visible_count = 0;
+    int scroll_row = -1;
     for (int i = 0; i < g_entry_count; i++) {
-        if (ui_text_contains_ci(g_entries[i].display_name, g_search_field.text)) visible_count++;
+        if (!ui_text_contains_ci(g_entries[i].display_name, g_search_field.text)) continue;
+        if (i == g_scroll_to) scroll_row = visible_count / columns;
+        visible_count++;
     }
     int total_rows = (visible_count + columns - 1) / columns;
     int content_h = total_rows * CELL_H;
-    int max_scroll = content_h - grid_h;
-    if (max_scroll < 0) max_scroll = 0;
-
-    if (mx >= grid_x && mx < grid_x + grid_w && my >= grid_y && my < grid_y + grid_h) {
-        g_scroll_offset -= window_mouse_wheel_delta() * SCROLL_STEP_PX;
+    if (scroll_row >= 0) {
+        if (scroll_row * CELL_H < g_scroll_offset) g_scroll_offset = scroll_row * CELL_H;
+        if ((scroll_row + 1) * CELL_H > g_scroll_offset + grid_h) g_scroll_offset = (scroll_row + 1) * CELL_H - grid_h;
     }
-    if (g_scroll_offset < 0) g_scroll_offset = 0;
-    if (g_scroll_offset > max_scroll) g_scroll_offset = max_scroll;
+    g_scroll_to = -1;
+    if (g_rename_index < 0) {
+        ui_scrollbar_update(&g_scroll_offset, &g_scroll_dragging, grid_x, grid_w, grid_y, grid_h, content_h, SCROLL_STEP_PX);
+    }
 
+    int touch = window_pointer_is_touch();
+    int pressed = window_mouse_left_just_pressed() && !g_scroll_dragging && g_rename_index < 0;
+    int activate = -1;
+    int rename_x = 0;
+    int rename_y = 0;
     int visible_index = 0;
-    int clicked_grid = 0;
-    for (int i = 0; i < g_entry_count && !clicked_grid; i++) {
+    for (int i = 0; i < g_entry_count; i++) {
         ab_entry_t *e = &g_entries[i];
         if (!ui_text_contains_ci(e->display_name, g_search_field.text)) continue;
 
@@ -691,29 +844,45 @@ void file_manager_update(int window_w, int window_h) {
         int cell_x = grid_x + col * CELL_W;
         int cell_y = grid_y + row * CELL_H - g_scroll_offset;
         visible_index++;
+        if (i == g_rename_index) {
+            rename_x = cell_x;
+            rename_y = cell_y;
+        }
 
         if (cell_y + CELL_H < grid_y || cell_y > grid_y + grid_h) continue;
 
         int inside = (mx >= cell_x && mx < cell_x + CELL_W && my >= cell_y && my < cell_y + CELL_H
                       && my >= grid_y && my < grid_y + grid_h);
-        if (inside && window_mouse_left_just_pressed()) {
-            if (g_manage) {
-                g_selected_index = i;
-                clicked_grid = 1;
-            } else if (e->is_dir) {
-                char next_path[AB_MAX_PATH];
-                strncpy(next_path, e->full_path, sizeof(next_path) - 1);
-                next_path[sizeof(next_path) - 1] = '\0';
-                g_search_field.text[0] = '\0';
-                g_search_field.cursor_pos = 0;
-                g_search_field.scroll_offset = 0;
-                load_directory(next_path);
-                clicked_grid = 1;
-            } else if (g_pick_mode == FILE_MANAGER_MODE_PICK_FILE) {
-                g_selected_index = i;
-                clicked_grid = 1;
+        if (inside && pressed) {
+            if (touch) {
+                g_press_index = i;
+                g_press_moved = 0;
+            } else {
+                activate = i;
+                break;
             }
         }
+    }
+    if (touch) {
+        if (g_scroll_dragging == 2) g_press_moved = 1;
+        if (g_press_index >= 0 && !window_mouse_left_down()) {
+            if (!g_press_moved) activate = g_press_index;
+            g_press_index = -1;
+        }
+    }
+    if (activate >= 0 && activate < g_entry_count) activate_entry(activate);
+
+    if (g_rename_index >= 0) {
+        int field_x = rename_x + 2;
+        int field_y = rename_y + 8 + GRID_ICON_SIZE + 4;
+        window_start_text_input();
+        text_field_update(&g_rename_field, field_x, field_y, CELL_W - 4, 24, CELL_W - 4);
+        if (window_key_just_pressed_escape()) {
+            cancel_rename();
+        } else if (window_key_just_pressed_enter() || !g_rename_field.focused) {
+            commit_rename();
+        }
+        return;
     }
 
     int can_select = 0;
@@ -832,13 +1001,16 @@ void file_manager_draw(int window_w, int window_h) {
     int filename_row_reserve = (g_pick_mode == FILE_MANAGER_MODE_SAVE_FILE) ? FILENAME_ROW_HEIGHT : 0;
     int grid_h = DIALOG_HEIGHT - (grid_y - dy) - FOOTER_HEIGHT - DIALOG_PADDING - filename_row_reserve;
 
-    int columns = grid_w / CELL_W;
+    int columns = (grid_w - UI_SCROLLBAR_WIDTH - 4) / CELL_W;
     if (columns < 1) columns = 1;
 
     window_set_clip_rect(grid_x, grid_y, grid_w, grid_h);
 
     int mx = window_mouse_x(), my = window_mouse_y();
+    int touch = window_pointer_is_touch();
+    unsigned int started = window_ticks();
     int visible_index = 0;
+    int shown_count = 0;
     for (int i = 0; i < g_entry_count; i++) {
         ab_entry_t *e = &g_entries[i];
         if (!ui_text_contains_ci(e->display_name, g_search_field.text)) continue;
@@ -851,8 +1023,10 @@ void file_manager_draw(int window_w, int window_h) {
 
         if (cell_y + CELL_H < grid_y || cell_y > grid_y + grid_h) continue;
 
+        prepare_entry_visuals(e, started);
+
         int is_dim = (!e->is_dir && g_pick_mode == FILE_MANAGER_MODE_PICK_FOLDER);
-        int is_hover = (mx >= cell_x && mx < cell_x + CELL_W && my >= cell_y && my < cell_y + CELL_H
+        int is_hover = !touch && (mx >= cell_x && mx < cell_x + CELL_W && my >= cell_y && my < cell_y + CELL_H
                          && my >= grid_y && my < grid_y + grid_h);
         int is_selected = ((!e->is_dir || g_manage) && i == g_selected_index);
 
@@ -886,7 +1060,9 @@ void file_manager_draw(int window_w, int window_h) {
             }
         }
 
-        if (e->label_tex != NULL) {
+        if (i == g_rename_index) {
+            text_field_draw(&g_rename_field, cell_x + 2, icon_area_y + GRID_ICON_SIZE + 4, CELL_W - 4, 24, 13);
+        } else if (e->label_tex != NULL) {
             int label_x = cell_x + (CELL_W - e->label_w) / 2;
             int label_y = icon_area_y + GRID_ICON_SIZE + 6;
             window_set_clip_rect(cell_x + 2, label_y, CELL_W - 4, LABEL_FONT_SIZE + 4);
@@ -900,6 +1076,14 @@ void file_manager_draw(int window_w, int window_h) {
     }
 
     window_clear_clip_rect();
+    for (int i = 0; i < g_entry_count; i++) {
+        if (ui_text_contains_ci(g_entries[i].display_name, g_search_field.text)) shown_count++;
+    }
+    ui_scrollbar_draw(g_scroll_offset, grid_x, grid_w, grid_y, grid_h,
+                      ((shown_count + columns - 1) / columns) * CELL_H);
+    if (g_inline_error[0] != '\0') {
+        ui_kit_text(g_inline_error, 12, grid_x, grid_y + grid_h + 2, 225, 100, 100);
+    }
 
     int can_select = 0;
     if (g_in_devices) {
@@ -968,8 +1152,13 @@ void file_manager_draw(int window_w, int window_h) {
 
 void file_manager_shutdown(void) {
     free_entries();
+    free(g_entries);
+    g_entries = NULL;
+    g_entry_capacity = 0;
     free_crumb_textures();
 
+    if (g_rename_ready) text_field_free(&g_rename_field);
+    g_rename_ready = 0;
     if (g_title_tex != NULL) window_destroy_texture(g_title_tex);
     if (g_filter_label_tex != NULL) window_destroy_texture(g_filter_label_tex);
     if (g_crumb_sep_tex != NULL) window_destroy_texture(g_crumb_sep_tex);

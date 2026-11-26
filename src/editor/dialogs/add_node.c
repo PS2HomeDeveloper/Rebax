@@ -30,6 +30,7 @@
 #include "editor/ui/selection.h"
 #include "editor/ui/dialog.h"
 #include "editor/ui/windows.h"
+#include "editor/ui/scrollbar.h"
 
 #define DEFAULT_W        320
 #define DEFAULT_H        320
@@ -46,11 +47,15 @@ static ui_window_t g_win = UI_WINDOW_INIT(add_node_dialog_is_open, add_node_dial
 #define GAP                8
 #define ROW_HEIGHT         28
 #define ICON_SIZE          16
-#define MAX_NODE_TYPES     32
+#define MAX_NODE_TYPES     128
 
 static int g_is_open = 0;
 static int g_hovered_index = -1;
 static int g_selected_index = 0;
+static int g_scroll = 0;
+static int g_scroll_dragging = 0;
+static int g_press_index = -1;
+static int g_press_moved = 0;
 
 static text_field_t g_search_field;
 
@@ -108,6 +113,8 @@ void add_node_dialog_open(void) {
     ui_windows_show(&g_win);
     ui_dialog_drag_reset(&g_drag);
     g_selected_index = 0;
+    g_scroll = 0;
+    g_press_index = -1;
     g_search_field.text[0] = '\0';
     g_search_field.cursor_pos = 0;
     g_search_field.scroll_offset = 0;
@@ -140,21 +147,46 @@ void add_node_dialog_update(int window_w, int window_h) {
 
     int mx = window_mouse_x(), my = window_mouse_y();
     int count = node_registry_count();
+    int list_h = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height - GAP - list_y;
+    int shown = 0;
+    for (int i = 0; i < count; i++) {
+        const node_registry_entry_t *entry = node_registry_get_by_index(i);
+        if (ui_text_contains_ci(entry->name, g_search_field.text)) shown++;
+    }
+    ui_scrollbar_update(&g_scroll, &g_scroll_dragging, list_x, list_w, list_y, list_h,
+                        shown * ROW_HEIGHT, ROW_HEIGHT);
 
+    int touch = window_pointer_is_touch();
+    int pressed = window_mouse_left_just_pressed() && !g_scroll_dragging;
+    int activate = -1;
     g_hovered_index = -1;
     int visible_row = 0;
     for (int i = 0; i < count; i++) {
         const node_registry_entry_t *entry = node_registry_get_by_index(i);
         if (!ui_text_contains_ci(entry->name, g_search_field.text)) continue;
-        int row_y = list_y + visible_row * ROW_HEIGHT;
-        if (mx >= list_x && mx < list_x + list_w && my >= row_y && my < row_y + ROW_HEIGHT) {
-            g_hovered_index = i;
-            if (window_mouse_left_just_pressed()) {
-                g_selected_index = i;
+        int row_y = list_y + visible_row * ROW_HEIGHT - g_scroll;
+        visible_row++;
+        if (my < list_y || my >= list_y + list_h) continue;
+        if (mx >= list_x && mx < list_x + list_w - UI_SCROLLBAR_WIDTH && my >= row_y && my < row_y + ROW_HEIGHT) {
+            if (!touch) g_hovered_index = i;
+            if (pressed) {
+                if (touch) {
+                    g_press_index = i;
+                    g_press_moved = 0;
+                } else {
+                    activate = i;
+                }
             }
         }
-        visible_row++;
     }
+    if (touch) {
+        if (g_scroll_dragging == 2) g_press_moved = 1;
+        if (g_press_index >= 0 && !window_mouse_left_down()) {
+            if (!g_press_moved) activate = g_press_index;
+            g_press_index = -1;
+        }
+    }
+    if (activate >= 0) g_selected_index = activate;
 
     int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
     int add_x    = dx + DIALOG_WIDTH - DIALOG_PADDING - g_add_btn.width;
@@ -208,11 +240,17 @@ void add_node_dialog_draw(int window_w, int window_h) {
     text_field_draw(&g_search_field, search_field_x, search_y, search_field_w, SEARCH_HEIGHT, 13);
 
     int count = node_registry_count();
+    int list_h = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height - GAP - list_y;
     int visible_row = 0;
+    window_set_clip_rect(list_x, list_y, list_w, list_h);
     for (int i = 0; i < count; i++) {
         const node_registry_entry_t *entry = node_registry_get_by_index(i);
         if (!ui_text_contains_ci(entry->name, g_search_field.text)) continue;
-        int row_y = list_y + visible_row * ROW_HEIGHT;
+        int row_y = list_y + visible_row * ROW_HEIGHT - g_scroll;
+        if (row_y + ROW_HEIGHT < list_y || row_y > list_y + list_h) {
+            visible_row++;
+            continue;
+        }
 
         if (i == g_selected_index && g_selected_tex != NULL) {
             window_draw_texture(g_selected_tex, list_x, row_y, list_w, ROW_HEIGHT);
@@ -232,6 +270,8 @@ void add_node_dialog_draw(int window_w, int window_h) {
 
         visible_row++;
     }
+    window_clear_clip_rect();
+    ui_scrollbar_draw(g_scroll, list_x, list_w, list_y, list_h, visible_row * ROW_HEIGHT);
 
     int buttons_y = dy + DIALOG_HEIGHT - DIALOG_PADDING - g_cancel_btn.height;
     int add_x    = dx + DIALOG_WIDTH - DIALOG_PADDING - g_add_btn.width;

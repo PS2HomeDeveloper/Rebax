@@ -49,6 +49,7 @@ typedef struct {
     window_texture_t *name_tex;
     int name_w;
     int name_h;
+    int fit_w;
 } ui_tree_cache_item_t;
 
 typedef struct {
@@ -66,6 +67,11 @@ typedef struct {
     window_texture_t *hover_tex;
     window_texture_t *selected_tex;
     int highlight_width;
+    int *last_child;
+    int last_child_capacity;
+    int press_row;
+    int press_toggle;
+    int press_moved;
     int ready;
 } ui_tree_t;
 

@@ -21,6 +21,5 @@ void simulation_runner_stop(void);
 int simulation_runner_is_running(void);
 const char *simulation_runner_error(void);
 void simulation_runner_update(void);
-void simulation_runner_draw(int width, int height);
 
 #endif

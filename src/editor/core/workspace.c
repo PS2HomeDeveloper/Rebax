@@ -27,6 +27,7 @@
 #include "editor/ui/layout.h"
 #include "editor/ui/dialog.h"
 #include "editor/ui/windows.h"
+#include "editor/panels/settings_page.h"
 #include "editor/panels/scene_tree.h"
 #include "scene/scene_data.h"
 #include "scene/current_scene.h"
@@ -39,7 +40,6 @@
 #include "editor/ui/icon_atlas.h"
 #include "editor/dialogs/export.h"
 #include "editor/panels/run_controls.h"
-#include "run/simulation/simulation_runner.h"
 #include "editor/dialogs/ps2_network.h"
 #include "editor/dialogs/emulator_select.h"
 #include "editor/dialogs/settings.h"
@@ -410,6 +410,30 @@ static void request_close_scene_tab(int index) {
     }
 }
 
+static int clamp_split(int value, int col_h) {
+    int min_h = TAB_BAR_HEIGHT + SPLITTER_THICKNESS;
+    int max_value = col_h - min_h;
+    if (max_value < min_h) return col_h / 2;
+    if (value < min_h) return min_h;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static void fit_layout(int window_w, int window_h) {
+    int col_h = window_h - TOOLBAR_HEIGHT;
+    int max_side = window_w - CAMERA_MIN_W;
+    g_left_split_y = clamp_split(g_left_split_y, col_h);
+    g_right_split_y = clamp_split(g_right_split_y, col_h);
+    if (g_left_width + g_right_width > max_side && max_side > 0) {
+        int excess = g_left_width + g_right_width - max_side;
+        int from_left = excess / 2;
+        g_left_width -= from_left;
+        g_right_width -= excess - from_left;
+        if (g_left_width < 0) g_left_width = 0;
+        if (g_right_width < 0) g_right_width = 0;
+    }
+}
+
 static void update_splitters(int window_w, int window_h, int mx, int my) {
     int col_top = TOOLBAR_HEIGHT, col_h = window_h - TOOLBAR_HEIGHT;
     int right_x = window_w - g_right_width;
@@ -422,9 +446,9 @@ static void update_splitters(int window_w, int window_h, int mx, int my) {
         g_hovered_splitter = SPLITTER_NONE;
         if (ui_point_in_rect(mx, my, g_left_width - SPLITTER_THICKNESS / 2, col_top, SPLITTER_THICKNESS, col_h)) g_hovered_splitter = SPLITTER_LEFT_RIGHT_COL;
         else if (ui_point_in_rect(mx, my, right_x - SPLITTER_THICKNESS / 2, col_top, SPLITTER_THICKNESS, col_h)) g_hovered_splitter = SPLITTER_CENTER_RIGHT_COL;
-        else if (ui_point_in_rect(mx, my, 0, left_inner_y - SPLITTER_THICKNESS / 2, g_left_width, SPLITTER_THICKNESS)) g_hovered_splitter = SPLITTER_LEFT_INNER;
-        else if (ui_point_in_rect(mx, my, right_x, right_inner_y - SPLITTER_THICKNESS / 2, g_right_width, SPLITTER_THICKNESS)) g_hovered_splitter = SPLITTER_RIGHT_INNER;
-        else if (ui_point_in_rect(mx, my, center_x, camera_bottom_y - SPLITTER_THICKNESS / 2, center_w, SPLITTER_THICKNESS)) g_hovered_splitter = SPLITTER_CAMERA_BOTTOM;
+        else if (ui_point_in_rect(mx, my, 0, left_inner_y - SPLITTER_THICKNESS / 2, g_left_width - SPLITTER_THICKNESS / 2, SPLITTER_THICKNESS)) g_hovered_splitter = SPLITTER_LEFT_INNER;
+        else if (ui_point_in_rect(mx, my, right_x + SPLITTER_THICKNESS / 2, right_inner_y - SPLITTER_THICKNESS / 2, g_right_width - SPLITTER_THICKNESS / 2, SPLITTER_THICKNESS)) g_hovered_splitter = SPLITTER_RIGHT_INNER;
+        else if (ui_point_in_rect(mx, my, center_x + SPLITTER_THICKNESS / 2, camera_bottom_y - SPLITTER_THICKNESS / 2, center_w - SPLITTER_THICKNESS, SPLITTER_THICKNESS)) g_hovered_splitter = SPLITTER_CAMERA_BOTTOM;
     }
     if (g_dragging == SPLITTER_NONE && window_mouse_left_just_pressed()) g_dragging = g_hovered_splitter;
     if (!window_mouse_left_down()) g_dragging = SPLITTER_NONE;
@@ -437,8 +461,8 @@ static void update_splitters(int window_w, int window_h, int mx, int my) {
             int max_w = window_w - g_left_width - CAMERA_MIN_W;
             g_right_width = window_w - mx; if (g_right_width < 0) g_right_width = 0; if (g_right_width > max_w) g_right_width = max_w > 0 ? max_w : 0; break;
         }
-        case SPLITTER_LEFT_INNER: g_left_split_y = my - col_top; if (g_left_split_y < 0) g_left_split_y = 0; if (g_left_split_y > col_h) g_left_split_y = col_h; break;
-        case SPLITTER_RIGHT_INNER: g_right_split_y = my - col_top; if (g_right_split_y < 0) g_right_split_y = 0; if (g_right_split_y > col_h) g_right_split_y = col_h; break;
+        case SPLITTER_LEFT_INNER: g_left_split_y = clamp_split(my - col_top, col_h); break;
+        case SPLITTER_RIGHT_INNER: g_right_split_y = clamp_split(my - col_top, col_h); break;
         case SPLITTER_CAMERA_BOTTOM: {
             int max_h = col_h - CAMERA_MIN_H - SCENE_TABS_BAR_HEIGHT - CAMERA_TOP_BAR_HEIGHT;
             g_bottom_center_height = window_h - my; if (g_bottom_center_height < 0) g_bottom_center_height = 0;
@@ -452,6 +476,7 @@ static void update_splitters(int window_w, int window_h, int mx, int my) {
 void editor_workspace_update(int window_w, int window_h) {
     static int scene_system_initialized = 0;
     ensure_ui_ready();
+    fit_layout(window_w, window_h);
     if (!scene_system_initialized) { scene_system_initialized = 1; scene_tabs_init(); }
 
     int run_menu_was_open = run_controls_menu_is_open();
@@ -467,6 +492,7 @@ void editor_workspace_update(int window_w, int window_h) {
             g_toolbar_menu_hovered = i;
             if (i == 0 && window_mouse_left_just_pressed()) { export_dialog_open(); return; }
             if (i == 1 && window_mouse_left_just_pressed()) { project_settings_dialog_open(); return; }
+            if (i == 3 && window_mouse_left_just_pressed()) { settings_page_open(); app_state_open_settings(APP_SCREEN_EDITOR); return; }
             if (i == 2 && window_mouse_left_just_pressed()) { export_dialog_shutdown(); project_settings_dialog_shutdown(); project_session_close(); app_state_set_screen(APP_SCREEN_PROJECT_CENTER); return; }
         }
     }
@@ -522,10 +548,7 @@ static ui_splitter_visual_t splitter_visual(splitter_id_t id) {
 
 void editor_workspace_draw(int window_w, int window_h) {
     ensure_ui_ready();
-    if (simulation_runner_is_running()) {
-        simulation_runner_draw(window_w, window_h);
-        return;
-    }
+    fit_layout(window_w, window_h);
     int col_top = TOOLBAR_HEIGHT, col_h = window_h - TOOLBAR_HEIGHT;
     int right_x = window_w - g_right_width;
     int center_x = g_left_width, center_w = window_w - g_left_width - g_right_width;
@@ -566,9 +589,9 @@ void editor_workspace_draw(int window_w, int window_h) {
 
     ui_layout_draw_splitter(g_left_width - SPLITTER_THICKNESS / 2, col_top, SPLITTER_THICKNESS, col_h, splitter_visual(SPLITTER_LEFT_RIGHT_COL));
     ui_layout_draw_splitter(right_x - SPLITTER_THICKNESS / 2, col_top, SPLITTER_THICKNESS, col_h, splitter_visual(SPLITTER_CENTER_RIGHT_COL));
-    ui_layout_draw_splitter(0, col_top + g_left_split_y - SPLITTER_THICKNESS / 2, g_left_width, SPLITTER_THICKNESS, splitter_visual(SPLITTER_LEFT_INNER));
-    ui_layout_draw_splitter(right_x, col_top + g_right_split_y - SPLITTER_THICKNESS / 2, g_right_width, SPLITTER_THICKNESS, splitter_visual(SPLITTER_RIGHT_INNER));
-    ui_layout_draw_splitter(center_x, col_top + camera_h - SPLITTER_THICKNESS / 2, center_w, SPLITTER_THICKNESS, splitter_visual(SPLITTER_CAMERA_BOTTOM));
+    ui_layout_draw_splitter(0, col_top + g_left_split_y - SPLITTER_THICKNESS / 2, g_left_width - SPLITTER_THICKNESS / 2, SPLITTER_THICKNESS, splitter_visual(SPLITTER_LEFT_INNER));
+    ui_layout_draw_splitter(right_x + SPLITTER_THICKNESS / 2, col_top + g_right_split_y - SPLITTER_THICKNESS / 2, g_right_width - SPLITTER_THICKNESS / 2, SPLITTER_THICKNESS, splitter_visual(SPLITTER_RIGHT_INNER));
+    ui_layout_draw_splitter(center_x + SPLITTER_THICKNESS / 2, col_top + camera_h - SPLITTER_THICKNESS / 2, center_w - SPLITTER_THICKNESS, SPLITTER_THICKNESS, splitter_visual(SPLITTER_CAMERA_BOTTOM));
 
     const char *project_path = current_project_get_path();
     char status[800];

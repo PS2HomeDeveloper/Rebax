@@ -34,7 +34,25 @@ labeled_button_t labeled_button_create(const char *text, font_weight_t weight,
         return out;
     }
 
-    int btn_w = txt.width  + padding_x * 2;
+    int ink_l = txt.px_w, ink_r = -1, ink_t = txt.px_h, ink_b = -1;
+    for (int yy = 0; yy < txt.px_h; yy++) {
+        const unsigned char *row = txt.pixels + (size_t)yy * txt.px_w * 4;
+        for (int xx = 0; xx < txt.px_w; xx++) {
+            if (row[xx * 4 + 3] > 24) {
+                if (xx < ink_l) ink_l = xx;
+                if (xx > ink_r) ink_r = xx;
+                if (yy < ink_t) ink_t = yy;
+                if (yy > ink_b) ink_b = yy;
+            }
+        }
+    }
+    float inv = txt.px_w > 0 && txt.width > 0 ? (float)txt.width / (float)txt.px_w : 1.0f;
+    int lead_x = 0, ink_w = txt.width;
+    if (ink_r >= ink_l) {
+        lead_x = (int)(ink_l * inv);
+        ink_w = (int)((ink_r - ink_l + 1) * inv + 0.999f);
+    }
+    int btn_w = ink_w + padding_x * 2;
     int btn_h = txt.height + padding_y * 2;
 
     shape_image_t shape = shape_provider_render_rect(btn_w, btn_h, corner_radius, r, g, b);
@@ -47,7 +65,7 @@ labeled_button_t labeled_button_create(const char *text, font_weight_t weight,
     out.text_img       = txt;
     out.width           = shape.width;
     out.height          = shape.height;
-    out.text_offset_x  = padding_x;
+    out.text_offset_x  = padding_x - lead_x;
     out.text_offset_y  = padding_y;
     return out;
 }

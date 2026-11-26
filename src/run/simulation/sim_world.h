@@ -33,6 +33,7 @@ sim_world_t *sim_world_create(void);
 void sim_world_destroy(sim_world_t *world);
 void sim_world_set_limits(sim_world_t *world, int texture_memory_mb,
                           int max_texture_size);
+void sim_world_set_origin(sim_world_t *world, int x, int y);
 int sim_world_build_from_scene(sim_world_t *world);
 void sim_world_update(sim_world_t *world, float delta_time);
 void sim_world_draw(sim_world_t *world);

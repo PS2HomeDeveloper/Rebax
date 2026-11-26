@@ -132,6 +132,41 @@ void ui_kit_button(const char *text, int x, int y, int w, int h, int enabled, in
     ui_kit_text(text, 14, x + (w - tw) / 2, y + (h - th) / 2, c, c, c);
 }
 
+static int utf8_prev_boundary(const char *text, int index) {
+    if (index <= 0) return 0;
+    index--;
+    while (index > 0 && ((unsigned char)text[index] & 0xC0) == 0x80) index--;
+    return index;
+}
+
+void ui_kit_fit_text_weight(const char *text, int weight, int size, int max_w, char *out, int out_size) {
+    char probe[512];
+    int n;
+    if (out_size <= 0) return;
+    out[0] = '\0';
+    if (text == NULL) return;
+    if (font_measure_text(text, (font_weight_t)weight, size) <= max_w) {
+        snprintf(out, (size_t)out_size, "%s", text);
+        return;
+    }
+    n = (int)strlen(text);
+    if (n > (int)sizeof(probe) - 4) n = utf8_prev_boundary(text, (int)sizeof(probe) - 4);
+    while (n > 0) {
+        memcpy(probe, text, (size_t)n);
+        memcpy(probe + n, "...", 4);
+        if (font_measure_text(probe, (font_weight_t)weight, size) <= max_w) break;
+        n = utf8_prev_boundary(text, n);
+    }
+    if (n > out_size - 4) n = utf8_prev_boundary(text, out_size - 4);
+    if (n < 0) n = 0;
+    memcpy(out, text, (size_t)n);
+    memcpy(out + n, "...", 4);
+}
+
+void ui_kit_fit_text(const char *text, int size, int max_w, char *out, int out_size) {
+    ui_kit_fit_text_weight(text, FONT_WEIGHT_REGULAR, size, max_w, out, out_size);
+}
+
 int ui_kit_hover(int x, int y, int w, int h) {
     return ui_point_in_rect(window_mouse_x(), window_mouse_y(), x, y, w, h);
 }

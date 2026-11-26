@@ -21,6 +21,7 @@
 #include "editor/panels/settings_page.h"
 #include "editor/ui/base.h"
 #include "editor/ui/draw_kit.h"
+#include "editor/ui/scrollbar.h"
 #include "packages/package_manager.h"
 #include "platform/common/window.h"
 
@@ -38,6 +39,8 @@ static const int g_scale_options[] = {75, 100, 125, 150, 175, 200};
 static int g_category;
 static int g_close;
 static int g_scroll;
+static int g_scroll_drag;
+static int g_content_h;
 
 void settings_page_open(void) {
     g_category = CAT_GENERAL;
@@ -169,9 +172,8 @@ void settings_page_update_and_draw(int window_w, int window_h) {
     int cw = window_w - cx - 28;
     if (cw < 160) cw = 160;
     int view_h = window_h - TOP_H;
-    int wheel = window_mouse_wheel_delta();
-    if (wheel != 0) g_scroll -= wheel * 40;
-    if (g_scroll < 0) g_scroll = 0;
+    ui_scrollbar_update(&g_scroll, &g_scroll_drag, SIDEBAR_W, window_w - SIDEBAR_W, TOP_H, view_h,
+                        g_content_h, 40);
 
     int y = TOP_H + 24 - g_scroll;
     int end;
@@ -182,9 +184,11 @@ void settings_page_update_and_draw(int window_w, int window_h) {
         default: end = draw_about(cx, y, cw); break;
     }
     int content_h = end - (TOP_H - g_scroll) + 24;
+    g_content_h = content_h;
     int max_scroll = content_h > view_h ? content_h - view_h : 0;
     if (g_scroll > max_scroll) g_scroll = max_scroll;
 
+    ui_scrollbar_draw(g_scroll, SIDEBAR_W, window_w - SIDEBAR_W, TOP_H, view_h, content_h);
     ui_kit_rect(0, 0, SIDEBAR_W, window_h, 0, UI_RGB(UI_COLOR_SURFACE_PANEL));
     ui_kit_rect(0, 0, window_w, TOP_H, 0, UI_RGB(UI_COLOR_SURFACE_RAISED));
 

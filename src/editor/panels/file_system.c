@@ -45,7 +45,9 @@
 #include "editor/core/workspace.h"
 #include "editor/viewport/2d.h"
 
-#define MAX_ROWS 256
+#define MAX_ROWS 6000
+#define THUMB_CACHE 384
+#define THUMB_BUDGET_TICKS 6
 #define FILE_TREE_THUMB_SIZE 16
 #define FILE_TREE_THUMB_MAX_BYTES (8 * 1024 * 1024)
 #define MAX_EXPANDED 64
@@ -58,8 +60,19 @@ typedef struct {
     int depth;
     int is_dir;
     int has_children;
+    long long modified;
     window_texture_t *thumbnail_tex;
 } fs_row_t;
+
+typedef struct {
+    char path[600];
+    long long modified;
+    window_texture_t *tex;
+    int used;
+} thumb_entry_t;
+
+static thumb_entry_t g_thumbs[THUMB_CACHE];
+static int g_thumb_next = 0;
 
 static fs_row_t g_rows[MAX_ROWS];
 static int g_row_count = 0;
@@ -202,10 +215,14 @@ static int dir_has_children(const char *path) {
 static void add_directory_contents(const char *dir_path, int depth) {
     DIR *dir = opendir(dir_path);
     if (dir == NULL) return;
-    char *names[256];
+    char **names = malloc(sizeof(char *) * MAX_ROWS);
     int count = 0;
     struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL && count < 256) {
+    if (names == NULL) {
+        closedir(dir);
+        return;
+    }
+    while ((entry = readdir(dir)) != NULL && count < MAX_ROWS) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
         names[count] = strdup(entry->d_name);
         if (names[count] != NULL) count++;
@@ -224,25 +241,63 @@ static void add_directory_contents(const char *dir_path, int depth) {
         row->depth = depth;
         row->is_dir = S_ISDIR(status.st_mode);
         row->has_children = row->is_dir ? dir_has_children(full_path) : 0;
-        if (!row->is_dir) {
-            const char *dot = strrchr(row->display_name, '.');
-            if (dot != NULL && file_icons_is_raster_image_ext(dot + 1)) {
-                row->thumbnail_tex = load_tree_thumbnail(row->path);
-            }
-        }
+        row->modified = (long long)status.st_mtime;
         free(names[i]);
         if (row->is_dir && is_expanded(full_path)) add_directory_contents(full_path, depth + 1);
     }
+    free(names);
 }
 
 static void free_rows(void) {
-    for (int i = 0; i < g_row_count; i++) {
-        if (g_rows[i].thumbnail_tex != NULL) {
-            window_destroy_texture(g_rows[i].thumbnail_tex);
-            g_rows[i].thumbnail_tex = NULL;
+    g_row_count = 0;
+}
+
+static void free_thumbnails(void) {
+    for (int i = 0; i < THUMB_CACHE; i++) {
+        if (g_thumbs[i].tex != NULL) window_destroy_texture(g_thumbs[i].tex);
+        memset(&g_thumbs[i], 0, sizeof(g_thumbs[i]));
+    }
+    g_thumb_next = 0;
+}
+
+static thumb_entry_t *find_thumbnail(const fs_row_t *row) {
+    for (int i = 0; i < THUMB_CACHE; i++) {
+        if (g_thumbs[i].used && g_thumbs[i].modified == row->modified &&
+            strcmp(g_thumbs[i].path, row->path) == 0) {
+            return &g_thumbs[i];
         }
     }
-    g_row_count = 0;
+    return NULL;
+}
+
+static void resolve_visible_thumbnails(int list_y, int list_h) {
+    int row_h = g_tree.style.row_height;
+    int first = g_tree.scroll_offset / row_h;
+    int last = (g_tree.scroll_offset + list_h) / row_h + 1;
+    unsigned int started = window_ticks();
+    (void)list_y;
+    if (first < 0) first = 0;
+    if (last >= g_row_count) last = g_row_count - 1;
+    for (int i = first; i <= last; i++) {
+        fs_row_t *row = &g_rows[i];
+        const char *dot = row->is_dir ? NULL : strrchr(row->display_name, '.');
+        thumb_entry_t *entry;
+        if (dot == NULL || !file_icons_is_raster_image_ext(dot + 1)) continue;
+        entry = find_thumbnail(row);
+        if (entry == NULL) {
+            if (window_ticks() - started > THUMB_BUDGET_TICKS) continue;
+            entry = &g_thumbs[g_thumb_next];
+            g_thumb_next = (g_thumb_next + 1) % THUMB_CACHE;
+            if (entry->tex != NULL) window_destroy_texture(entry->tex);
+            snprintf(entry->path, sizeof(entry->path), "%s", row->path);
+            entry->modified = row->modified;
+            entry->tex = load_tree_thumbnail(row->path);
+            entry->used = 1;
+        }
+        row->thumbnail_tex = entry->tex;
+        g_tree_items[i].thumbnail_tex = entry->tex;
+        if (entry->tex == NULL) g_tree_items[i].icon_id = ICON_broken_image;
+    }
 }
 
 static window_texture_t *load_tree_thumbnail(const char *path) {
@@ -275,12 +330,7 @@ static void sync_tree_items(void) {
     for (int i = 0; i < g_row_count; i++) {
         g_tree_items[i].name = g_rows[i].display_name;
         g_tree_items[i].icon_id = g_rows[i].is_dir ? ICON_folder : file_icons_for_name(g_rows[i].display_name);
-        if (!g_rows[i].is_dir && file_icons_is_raster_image_ext(strrchr(g_rows[i].display_name, '.') != NULL
-                                                                ? strrchr(g_rows[i].display_name, '.') + 1 : "")
-            && g_rows[i].thumbnail_tex == NULL) {
-            g_tree_items[i].icon_id = ICON_broken_image;
-        }
-        g_tree_items[i].thumbnail_tex = g_rows[i].thumbnail_tex;
+        g_tree_items[i].thumbnail_tex = NULL;
         g_tree_items[i].depth = g_rows[i].depth;
         g_tree_items[i].has_children = g_rows[i].is_dir;
         g_tree_items[i].expanded = g_rows[i].is_dir && is_expanded(g_rows[i].path);
@@ -301,7 +351,7 @@ static unsigned long long directory_signature(const char *dir_path, int depth, u
     if (dir == NULL) return hash;
     struct dirent *entry;
     int visited = 0;
-    while ((entry = readdir(dir)) != NULL && visited < 512) {
+    while ((entry = readdir(dir)) != NULL && visited < MAX_ROWS) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
         visited++;
         char full_path[600];
@@ -371,6 +421,7 @@ void file_system_panel_update(int x, int y, int w, int h) {
         strncpy(g_last_project_path, project_path, sizeof(g_last_project_path) - 1);
         g_last_project_path[sizeof(g_last_project_path) - 1] = '\0';
         g_needs_rebuild = 1;
+        free_thumbnails();
     }
     g_refresh_timer += window_get_delta_time();
     if (!g_needs_rebuild && g_refresh_timer >= ASSETS_REFRESH_INTERVAL) {
@@ -394,6 +445,7 @@ void file_system_panel_update(int x, int y, int w, int h) {
 
     int list_y = y + TOOLBAR_HEIGHT + 4;
     ui_tree_update(&g_tree, x, list_y, w, h - TOOLBAR_HEIGHT - 4);
+    resolve_visible_thumbnails(list_y, h - TOOLBAR_HEIGHT - 4);
     int toggled = ui_tree_toggled_index(&g_tree);
     if (toggled >= 0 && toggled < g_row_count && g_rows[toggled].is_dir) {
         toggle_expanded(g_rows[toggled].path);
@@ -434,6 +486,7 @@ void file_system_panel_draw(int x, int y, int w, int h) {
 
 void file_system_panel_shutdown(void) {
     free_rows();
+    free_thumbnails();
     ui_tree_shutdown(&g_tree);
     text_field_free(&g_search_field);
     g_ready = 0;

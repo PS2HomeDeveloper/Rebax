@@ -25,6 +25,7 @@
 #include "platform/common/window.h"
 #include "editor/ui/font.h"
 #include "editor/ui/base.h"
+#include "editor/ui/draw_kit.h"
 #include "editor/dialogs/project.h"
 #include "editor/dialogs/packages.h"
 #include "project/project_catalog.h"
@@ -40,7 +41,7 @@
 #define ROW_HEIGHT 64
 #define LIST_PADDING 18
 #define BUTTON_MARGIN 12
-#define BUTTON_COUNT 6
+#define BUTTON_COUNT 5
 
 typedef struct {
     labeled_button_t button;
@@ -56,10 +57,11 @@ typedef struct {
     window_texture_t *path_tex;
     window_texture_t *date_tex;
     int name_w, name_h, path_w, path_h, date_w, date_h;
+    int name_fit, path_fit;
 } project_visual_t;
 
 static const char *g_button_labels[BUTTON_COUNT] = {
-    "Create Project", "Import Project", "Open Selected", "Remove from List", "Export Packages", "Settings"
+    "Create Project", "Import Project", "Remove from List", "Export Packages", "Settings"
 };
 static center_button_t g_buttons[BUTTON_COUNT];
 static project_visual_t g_visuals[PROJECT_CATALOG_MAX];
@@ -68,6 +70,10 @@ static int g_ready;
 static int g_selected = -1;
 static int g_scroll_first;
 static int g_last_clicked_project = -1;
+static int g_press_project = -1;
+static int g_press_y;
+static int g_press_first;
+static int g_press_moved;
 static float g_clock_seconds;
 static float g_last_project_click_seconds = -1.0f;
 static char g_selected_path[PROJECT_CATALOG_PATH_MAX];
@@ -162,8 +168,6 @@ static void build_visuals(void) {
         project_visual_t *v = &g_visuals[i];
         snprintf(v->path, sizeof(v->path), "%s", entry->path);
         snprintf(v->name, sizeof(v->name), "%s", entry->name);
-        v->name_tex = ui_make_text_texture(v->name, FONT_WEIGHT_BOLD, 14, &v->name_w, &v->name_h);
-        v->path_tex = ui_make_text_texture(v->path, FONT_WEIGHT_REGULAR, 11, &v->path_w, &v->path_h);
         char date[64];
         snprintf(date, sizeof(date), "%s", tr("Last opened: unknown"));
         if (entry->last_opened > 0) {
@@ -201,7 +205,7 @@ static void on_import_project(const char *path, void *user_data) {
     if (project_catalog_add(path)) {
         snprintf(g_selected_path, sizeof(g_selected_path), "%s", path);
         build_visuals();
-        open_selected_project();
+        set_notice("Project added to the list.");
     } else set_notice("Could not save the project list in the Editor folder.");
 }
 
@@ -279,21 +283,68 @@ void ui_project_center_draw(int window_w, int window_h) {
                                            UI_COLOR_BUTTON_BLUE.r, UI_COLOR_BUTTON_BLUE.g, UI_COLOR_BUTTON_BLUE.b);
             project_visual_t *v = &g_visuals[i];
             int tx = projects.x + LIST_PADDING + 14;
+            int name_max = list_w - 28 - v->date_w - 24;
+            int path_max = list_w - 28;
+            if (name_max < 60) name_max = 60;
+            if (v->name_fit != name_max) {
+                char fitted[PROJECT_CATALOG_NAME_MAX + 8];
+                if (v->name_tex) window_destroy_texture(v->name_tex);
+                ui_kit_fit_text_weight(v->name, FONT_WEIGHT_BOLD, 14, name_max, fitted, (int)sizeof(fitted));
+                v->name_tex = ui_make_text_texture(fitted, FONT_WEIGHT_BOLD, 14, &v->name_w, &v->name_h);
+                v->name_fit = name_max;
+            }
+            if (v->path_fit != path_max) {
+                char fitted[PROJECT_CATALOG_PATH_MAX + 8];
+                if (v->path_tex) window_destroy_texture(v->path_tex);
+                ui_kit_fit_text_weight(v->path, FONT_WEIGHT_REGULAR, 11, path_max, fitted, (int)sizeof(fitted));
+                v->path_tex = ui_make_text_texture(fitted, FONT_WEIGHT_REGULAR, 11, &v->path_w, &v->path_h);
+                v->path_fit = path_max;
+            }
             if (v->name_tex) window_draw_texture(v->name_tex, tx, ry + 7, v->name_w, v->name_h);
             if (v->path_tex) window_draw_texture_tinted(v->path_tex, tx, ry + 27, v->path_w, v->path_h, UI_RGB(UI_COLOR_TEXT_MUTED));
             if (v->date_tex) window_draw_texture_tinted(v->date_tex, projects.x + projects.w - v->date_w - LIST_PADDING - 12,
                                                           ry + 8, v->date_w, v->date_h, UI_RGB(UI_COLOR_TEXT_FAINT));
-            if (interactive && window_mouse_left_just_pressed() && ui_point_in_rect(window_mouse_x(), window_mouse_y(),
-                    projects.x + LIST_PADDING, ry, list_w, ROW_HEIGHT - 5)) {
-                int double_click = (g_last_clicked_project == i &&
-                                    g_clock_seconds - g_last_project_click_seconds <= 0.45f);
-                g_selected = i;
-                snprintf(g_selected_path, sizeof(g_selected_path), "%s", v->path);
-                if (double_click) open_selected_project();
-                g_last_clicked_project = i;
-                g_last_project_click_seconds = g_clock_seconds;
+        }
+    }
+    int touch = window_pointer_is_touch();
+    int activate = -1;
+    if (interactive && count > 0 && ui_point_in_rect(mx, my, projects.x + LIST_PADDING, list_top, list_w, visible * ROW_HEIGHT)) {
+        int row = (my - list_top) / ROW_HEIGHT;
+        int hit = g_scroll_first + row;
+        int inside_row = (my - list_top) % ROW_HEIGHT < ROW_HEIGHT - 5;
+        if (window_mouse_left_just_pressed() && hit < count && inside_row) {
+            if (touch) {
+                g_press_project = hit;
+                g_press_y = my;
+                g_press_first = g_scroll_first;
+                g_press_moved = 0;
+            } else {
+                activate = hit;
             }
         }
+    }
+    if (touch && g_press_project >= 0) {
+        if (window_mouse_left_down()) {
+            int rows = (g_press_y - my) / ROW_HEIGHT;
+            if (g_press_y - my > 12 || my - g_press_y > 12) g_press_moved = 1;
+            if (g_press_moved) {
+                g_scroll_first = g_press_first + rows;
+                if (g_scroll_first < 0) g_scroll_first = 0;
+                if (g_scroll_first > max_first) g_scroll_first = max_first;
+            }
+        } else {
+            if (!g_press_moved) activate = g_press_project;
+            g_press_project = -1;
+        }
+    }
+    if (activate >= 0 && activate < count) {
+        int double_click = (g_last_clicked_project == activate &&
+                            g_clock_seconds - g_last_project_click_seconds <= 0.45f);
+        g_selected = activate;
+        snprintf(g_selected_path, sizeof(g_selected_path), "%s", g_visuals[activate].path);
+        if (double_click) open_selected_project();
+        g_last_clicked_project = activate;
+        g_last_project_click_seconds = g_clock_seconds;
     }
     for (int i = 0; i < BUTTON_COUNT; i++) {
         center_button_t *b = &g_buttons[i];
@@ -306,9 +357,8 @@ void ui_project_center_draw(int window_w, int window_h) {
             if (i == 0) project_dialog_open();
             else if (i == 1) file_manager_open(FILE_MANAGER_ROOT_DEVICE, FILE_MANAGER_MODE_PICK_FOLDER,
                                                NULL, 0, on_import_project, NULL);
-            else if (i == 2) open_selected_project();
-            else if (i == 4) packages_dialog_open();
-            else if (i == 5) { settings_page_open(); app_state_set_screen(APP_SCREEN_SETTINGS); }
+            else if (i == 3) packages_dialog_open();
+            else if (i == 4) { settings_page_open(); app_state_open_settings(APP_SCREEN_PROJECT_CENTER); }
             else if (g_selected >= 0 && project_catalog_remove(g_selected)) {
                 g_selected = -1; g_selected_path[0] = '\0';
                 set_notice("Removed from this list. Project files were not deleted.");

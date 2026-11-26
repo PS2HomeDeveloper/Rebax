@@ -16,6 +16,7 @@
 #include "core/app_state.h"
 
 static app_screen_t g_current_screen = APP_SCREEN_PROJECT_CENTER;
+static app_screen_t g_settings_return = APP_SCREEN_PROJECT_CENTER;
 
 void app_state_set_screen(app_screen_t screen) {
     g_current_screen = screen;
@@ -23,4 +24,13 @@ void app_state_set_screen(app_screen_t screen) {
 
 app_screen_t app_state_get_screen(void) {
     return g_current_screen;
+}
+
+void app_state_open_settings(app_screen_t return_to) {
+    g_settings_return = return_to;
+    g_current_screen = APP_SCREEN_SETTINGS;
+}
+
+void app_state_close_settings(void) {
+    g_current_screen = g_settings_return;
 }

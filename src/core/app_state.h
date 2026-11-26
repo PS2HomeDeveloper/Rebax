@@ -26,4 +26,8 @@ void app_state_set_screen(app_screen_t screen);
 
 app_screen_t app_state_get_screen(void);
 
+void app_state_open_settings(app_screen_t return_to);
+
+void app_state_close_settings(void);
+
 #endif

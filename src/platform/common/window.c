@@ -122,8 +122,43 @@ static int g_mouse_right_down = 0;
 static int g_mouse_middle_just_pressed = 0;
 static int g_mouse_middle_down = 0;
 static int g_mouse_wheel_delta = 0;
+static int g_pointer_touch = 0;
+
+typedef struct {
+    SDL_FingerID id;
+    int x;
+    int y;
+    int active;
+} touch_finger_t;
+
+static touch_finger_t g_fingers[2];
+
 static int g_mouse_delta_x = 0;
 static int g_mouse_delta_y = 0;
+
+static void track_finger(const SDL_Event *event) {
+    int raw_w = 0;
+    int raw_h = 0;
+    int slot = -1;
+    SDL_GetWindowSize(g_window, &raw_w, &raw_h);
+    for (int i = 0; i < 2; i++) {
+        if (g_fingers[i].active && g_fingers[i].id == event->tfinger.fingerId) slot = i;
+    }
+    if (event->type == SDL_FINGERUP) {
+        if (slot >= 0) g_fingers[slot].active = 0;
+        return;
+    }
+    if (slot < 0) {
+        for (int i = 0; i < 2 && slot < 0; i++) {
+            if (!g_fingers[i].active) slot = i;
+        }
+    }
+    if (slot < 0) return;
+    g_fingers[slot].id = event->tfinger.fingerId;
+    g_fingers[slot].active = 1;
+    g_fingers[slot].x = (int)(event->tfinger.x * (float)raw_w / g_scale) - g_inset_left;
+    g_fingers[slot].y = (int)(event->tfinger.y * (float)raw_h / g_scale) - g_inset_top;
+}
 
 static Uint32 g_last_frame_ticks = 0;
 static float g_delta_time = 0.0f;
@@ -155,6 +190,38 @@ static int g_key_escape    = 0;
 #define REBAX_WINDOW_EXTRA_FLAGS 0
 #endif
 
+#if defined(__ANDROID__)
+static void android_enable_rotation_fade(void) {
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+    jobject activity = (jobject)SDL_AndroidGetActivity();
+    if (env == NULL || activity == NULL) return;
+    jclass activity_class = (*env)->GetObjectClass(env, activity);
+    jmethodID get_window = (*env)->GetMethodID(env, activity_class, "getWindow", "()Landroid/view/Window;");
+    jobject win = get_window ? (*env)->CallObjectMethod(env, activity, get_window) : NULL;
+    if (win != NULL) {
+        jclass win_class = (*env)->GetObjectClass(env, win);
+        jmethodID get_attrs = (*env)->GetMethodID(env, win_class, "getAttributes", "()Landroid/view/WindowManager$LayoutParams;");
+        jmethodID set_attrs = (*env)->GetMethodID(env, win_class, "setAttributes", "(Landroid/view/WindowManager$LayoutParams;)V");
+        jobject attrs = get_attrs ? (*env)->CallObjectMethod(env, win, get_attrs) : NULL;
+        if (attrs != NULL && set_attrs != NULL) {
+            jclass attrs_class = (*env)->GetObjectClass(env, attrs);
+            jfieldID field = (*env)->GetFieldID(env, attrs_class, "rotationAnimation", "I");
+            if (field != NULL) {
+                (*env)->SetIntField(env, attrs, field, 2);
+                (*env)->CallVoidMethod(env, win, set_attrs, attrs);
+            }
+            (*env)->DeleteLocalRef(env, attrs_class);
+        }
+        if (attrs != NULL) (*env)->DeleteLocalRef(env, attrs);
+        (*env)->DeleteLocalRef(env, win_class);
+        (*env)->DeleteLocalRef(env, win);
+    }
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    (*env)->DeleteLocalRef(env, activity_class);
+    (*env)->DeleteLocalRef(env, activity);
+}
+#endif
+
 int window_init(const char *title, int width, int height) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -176,6 +243,9 @@ int window_init(const char *title, int width, int height) {
         return 0;
     }
 
+#if defined(__ANDROID__)
+    android_enable_rotation_fade();
+#endif
     g_renderer = SDL_CreateRenderer(
         g_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
@@ -268,7 +338,11 @@ void window_poll_events(void) {
             g_mouse_left_just_pressed = g_mouse_right_just_pressed = g_mouse_middle_just_pressed = 0;
             g_last_frame_ticks = SDL_GetTicks();
             g_delta_time = 0.0f;
+        } else if (event.type == SDL_FINGERDOWN || event.type == SDL_FINGERMOTION ||
+                   event.type == SDL_FINGERUP) {
+            track_finger(&event);
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+            g_pointer_touch = event.button.which == SDL_TOUCH_MOUSEID;
             g_text_input_suppressed = 0;
             if (event.button.button == SDL_BUTTON_LEFT) {
                 g_mouse_left_just_pressed = 1;
@@ -291,6 +365,7 @@ void window_poll_events(void) {
         } else if (event.type == SDL_MOUSEWHEEL) {
             g_mouse_wheel_delta += event.wheel.y;
         } else if (event.type == SDL_MOUSEMOTION) {
+            g_pointer_touch = event.motion.which == SDL_TOUCH_MOUSEID;
             g_mouse_x = (int)(event.motion.x / g_scale) - g_inset_left;
             g_mouse_y = (int)(event.motion.y / g_scale) - g_inset_top;
             if (g_mouse_x < 0) g_mouse_x = 0;
@@ -527,6 +602,28 @@ int window_mouse_middle_just_pressed(void) { return g_mouse_middle_just_pressed;
 int window_mouse_middle_down(void) { return g_mouse_middle_down; }
 
 int window_mouse_wheel_delta(void) { return g_mouse_wheel_delta; }
+int window_pointer_is_touch(void) { return g_pointer_touch; }
+unsigned int window_ticks(void) { return SDL_GetTicks(); }
+
+int window_touch_count(void) {
+    int count = 0;
+    for (int i = 0; i < 2; i++) {
+        if (g_fingers[i].active) count++;
+    }
+    return count;
+}
+
+int window_touch_point(int index, int *x, int *y) {
+    int seen = 0;
+    for (int i = 0; i < 2; i++) {
+        if (!g_fingers[i].active) continue;
+        if (seen++ != index) continue;
+        if (x != NULL) *x = g_fingers[i].x;
+        if (y != NULL) *y = g_fingers[i].y;
+        return 1;
+    }
+    return 0;
+}
 
 int window_mouse_delta_x(void) { return g_mouse_delta_x; }
 int window_mouse_delta_y(void) { return g_mouse_delta_y; }
@@ -538,7 +635,7 @@ void window_set_relative_mouse_mode(int enabled) {
 float window_get_delta_time(void) { return g_delta_time; }
 
 void window_start_text_input(void) {
-    if (g_text_input_suppressed) return;
+    if (g_text_input_suppressed || g_text_input_wanted) return;
     g_text_input_wanted = 1;
     if (!SDL_IsTextInputActive()) SDL_StartTextInput();
 }
