@@ -605,16 +605,17 @@ static int open_common(file_manager_root_t root, file_manager_callback_t callbac
     g_callback = callback;
     g_user_data = user_data;
 
-    if (root == FILE_MANAGER_ROOT_ASSETS) {
+    if (root == FILE_MANAGER_ROOT_ASSETS || root == FILE_MANAGER_ROOT_SOURCE) {
         const char *project_path = current_project_get_path();
         if (project_path == NULL) {
             if (callback != NULL) callback(NULL, user_data);
             return 0;
         }
-        snprintf(g_root_path, sizeof(g_root_path), "%s/assets", project_path);
+        const char *dir_name = root == FILE_MANAGER_ROOT_SOURCE ? "source" : "assets";
+        snprintf(g_root_path, sizeof(g_root_path), "%s/%s", project_path, dir_name);
         struct stat st;
         if (stat(g_root_path, &st) != 0) REBAX_MKDIR(g_root_path, 0755);
-        strncpy(g_root_label, "Assets://", sizeof(g_root_label) - 1);
+        strncpy(g_root_label, root == FILE_MANAGER_ROOT_SOURCE ? "Source://" : "Assets://", sizeof(g_root_label) - 1);
         g_root_label[sizeof(g_root_label) - 1] = '\0';
     } else {
         strncpy(g_root_path, "/", sizeof(g_root_path) - 1);

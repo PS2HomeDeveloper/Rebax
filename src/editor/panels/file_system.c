@@ -391,29 +391,39 @@ static unsigned long long directory_signature(const char *dir_path, int depth, u
     return hash;
 }
 
+static const char *const k_root_dirs[2] = { "assets", "source" };
+static const char *const k_root_labels[2] = { "Assets://", "Source://" };
+
 static unsigned long long assets_signature(void) {
     const char *project_path = current_project_get_path();
     if (project_path == NULL) return 0;
-    char assets_path[600];
-    snprintf(assets_path, sizeof(assets_path), "%s/assets", project_path);
-    return directory_signature(assets_path, 0, 14695981039346656037ULL);
+    unsigned long long hash = 14695981039346656037ULL;
+    for (int r = 0; r < 2; r++) {
+        char root_path[600];
+        snprintf(root_path, sizeof(root_path), "%s/%s", project_path, k_root_dirs[r]);
+        hash = directory_signature(root_path, 0, hash);
+    }
+    return hash;
 }
 
 static void rebuild_rows(void) {
     free_rows();
     const char *project_path = current_project_get_path();
     if (project_path == NULL) { g_needs_rebuild = 0; sync_tree_items(); return; }
-    char assets_path[600];
-    snprintf(assets_path, sizeof(assets_path), "%s/assets", project_path);
-    struct stat status;
-    if (stat(assets_path, &status) != 0) REBAX_MKDIR(assets_path, 0755);
-    fs_row_t *root = &g_rows[g_row_count++];
-    memset(root, 0, sizeof(*root));
-    strncpy(root->path, assets_path, sizeof(root->path) - 1);
-    strncpy(root->display_name, "Assets://", sizeof(root->display_name) - 1);
-    root->is_dir = 1;
-    root->has_children = dir_has_children(assets_path);
-    if (is_expanded(assets_path)) add_directory_contents(assets_path, 1);
+    for (int r = 0; r < 2; r++) {
+        char root_path[600];
+        snprintf(root_path, sizeof(root_path), "%s/%s", project_path, k_root_dirs[r]);
+        struct stat status;
+        if (stat(root_path, &status) != 0) REBAX_MKDIR(root_path, 0755);
+        if (g_row_count >= MAX_ROWS) break;
+        fs_row_t *root = &g_rows[g_row_count++];
+        memset(root, 0, sizeof(*root));
+        strncpy(root->path, root_path, sizeof(root->path) - 1);
+        strncpy(root->display_name, k_root_labels[r], sizeof(root->display_name) - 1);
+        root->is_dir = 1;
+        root->has_children = dir_has_children(root_path);
+        if (is_expanded(root_path)) add_directory_contents(root_path, 1);
+    }
     g_needs_rebuild = 0;
     sync_tree_items();
 }

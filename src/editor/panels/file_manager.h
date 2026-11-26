@@ -18,6 +18,7 @@
 
 typedef enum {
     FILE_MANAGER_ROOT_ASSETS,
+    FILE_MANAGER_ROOT_SOURCE,
     FILE_MANAGER_ROOT_DEVICE
 } file_manager_root_t;
 
