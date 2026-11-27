@@ -44,6 +44,11 @@
 #include "editor/panels/code_editor.h"
 #include "editor/core/workspace.h"
 #include "editor/viewport/2d.h"
+#include "editor/dialogs/context_menu.h"
+#include "editor/dialogs/prompt.h"
+#include "editor/dialogs/image_viewer.h"
+#include "filesystem/rebax_fs.h"
+#include "filesystem/rebax_fs_tree.h"
 
 #define MAX_ROWS 6000
 #define THUMB_CACHE 384
@@ -116,6 +121,19 @@ static int script_extension_supported(const char *name) {
     return 0;
 }
 
+static int image_extension_supported(const char *name) {
+    static const char *extensions[] = { "png", "jpg", "jpeg", "bmp", "tga", "gif" };
+    const char *dot = strrchr(name ? name : "", '.');
+    if (dot == NULL || dot[1] == '\0') return 0;
+    for (size_t i = 0; i < sizeof(extensions) / sizeof(extensions[0]); i++) {
+        size_t n = strlen(extensions[i]), j = 0;
+        if (strlen(dot + 1) != n) continue;
+        while (j < n && tolower((unsigned char)dot[j + 1]) == extensions[i][j]) j++;
+        if (j == n) return 1;
+    }
+    return 0;
+}
+
 static int scene_type_dimension(const char *type) {
     if (strstr(type, "2D") != NULL || strstr(type, "2d") != NULL) return 1;
     if (strstr(type, "3D") != NULL || strstr(type, "3d") != NULL) return 2;
@@ -175,7 +193,160 @@ static void open_file_resource(const fs_row_t *row) {
     } else if (script_extension_supported(row->display_name)) {
         editor_workspace_activate_script();
         code_editor_open_path(row->path);
+    } else if (image_extension_supported(row->display_name)) {
+        image_viewer_open(row->path);
     }
+}
+
+enum {
+    MENU_OPEN = 1, MENU_PREVIEW, MENU_TOGGLE, MENU_NEW_FOLDER, MENU_NEW_SCRIPT,
+    MENU_RENAME, MENU_DUPLICATE, MENU_DELETE, MENU_COPY_PATH
+};
+
+static char g_target_path[600];
+static int g_target_is_dir;
+static int is_expanded(const char *path);
+static void toggle_expanded(const char *path);
+
+static int is_separator(char c) { return c == '/' || c == '\\'; }
+
+static void split_path(const char *path, char *dir, size_t dir_size, const char **name) {
+    const char *slash = NULL;
+    for (const char *p = path; *p; p++) if (is_separator(*p)) slash = p;
+    if (slash == NULL) { dir[0] = '\0'; *name = path; return; }
+    size_t n = (size_t)(slash - path);
+    if (n >= dir_size) n = dir_size - 1;
+    memcpy(dir, path, n);
+    dir[n] = '\0';
+    *name = slash + 1;
+}
+
+static int valid_name(const char *name) {
+    if (name == NULL || name[0] == '\0' || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return 0;
+    for (const char *p = name; *p; p++) if (is_separator(*p) || *p == ':' || *p == '*' || *p == '?' || *p == '"' || *p == '<' || *p == '>' || *p == '|') return 0;
+    return 1;
+}
+
+static void unique_copy_path(const char *path, char *out, size_t out_size) {
+    char dir[600];
+    const char *name;
+    split_path(path, dir, sizeof(dir), &name);
+    const char *dot = strrchr(name, '.');
+    size_t stem = dot && dot != name ? (size_t)(dot - name) : strlen(name);
+    for (int i = 1; i < 1000; i++) {
+        if (i == 1) snprintf(out, out_size, "%s/%.*s_copy%s", dir, (int)stem, name, name + stem);
+        else snprintf(out, out_size, "%s/%.*s_copy%d%s", dir, (int)stem, name, i, name + stem);
+        if (!rebax_fs_exists(out)) return;
+    }
+}
+
+static void on_rename(const char *text, void *unused) {
+    (void)unused;
+    char dir[600], target[640];
+    const char *name;
+    if (!valid_name(text)) return;
+    split_path(g_target_path, dir, sizeof(dir), &name);
+    snprintf(target, sizeof(target), "%s/%s", dir, text);
+    if (rebax_fs_exists(target)) return;
+    rebax_fs_move(g_target_path, target);
+    g_needs_rebuild = 1;
+}
+
+static void on_new_folder(const char *text, void *unused) {
+    (void)unused;
+    char target[640];
+    if (!valid_name(text)) return;
+    snprintf(target, sizeof(target), "%s/%s", g_target_path, text);
+    if (rebax_fs_exists(target)) return;
+    rebax_fs_mkdir_p(target);
+    g_needs_rebuild = 1;
+}
+
+static void on_new_script(const char *text, void *unused) {
+    (void)unused;
+    char target[640];
+    if (!valid_name(text)) return;
+    snprintf(target, sizeof(target), "%s/%s", g_target_path, text);
+    if (rebax_fs_exists(target)) return;
+    const char *header = script_extension_supported(text) ? "#include <rebax.h>\n\n" : "";
+    if (!rebax_fs_write_atomic(target, header, strlen(header))) return;
+    g_needs_rebuild = 1;
+    if (script_extension_supported(text)) {
+        editor_workspace_activate_script();
+        code_editor_open_path(target);
+    }
+}
+
+static void on_delete(const char *text, void *unused) {
+    (void)text; (void)unused;
+    rebax_fs_remove_recursive(g_target_path);
+    g_needs_rebuild = 1;
+}
+
+static void on_menu_choice(int id, void *user_data) {
+    const fs_row_t *row = (const fs_row_t *)user_data;
+    char dir[600], target[640];
+    const char *name;
+    (void)row;
+    split_path(g_target_path, dir, sizeof(dir), &name);
+    switch (id) {
+        case MENU_OPEN:
+        case MENU_PREVIEW: {
+            fs_row_t temp;
+            memset(&temp, 0, sizeof(temp));
+            snprintf(temp.path, sizeof(temp.path), "%s", g_target_path);
+            snprintf(temp.display_name, sizeof(temp.display_name), "%s", name);
+            open_file_resource(&temp);
+            break;
+        }
+        case MENU_TOGGLE: toggle_expanded(g_target_path); g_needs_rebuild = 1; break;
+        case MENU_NEW_FOLDER: prompt_input_open("New Folder", "NewFolder", "Create", on_new_folder, NULL); break;
+        case MENU_NEW_SCRIPT: prompt_input_open("New Script", "script.c", "Create", on_new_script, NULL); break;
+        case MENU_RENAME: prompt_input_open("Rename", name, "Rename", on_rename, NULL); break;
+        case MENU_DUPLICATE:
+            unique_copy_path(g_target_path, target, sizeof(target));
+            if (g_target_is_dir) rebax_fs_copy_tree(g_target_path, target);
+            else rebax_fs_copy_file(g_target_path, target);
+            g_needs_rebuild = 1;
+            break;
+        case MENU_DELETE: prompt_confirm_open("Delete", "This item will be deleted permanently.", "Delete", 1, on_delete, NULL); break;
+        case MENU_COPY_PATH: window_set_clipboard_text(g_target_path); break;
+        default: break;
+    }
+}
+
+static int path_is_inside(const char *path, const char *section) {
+    const char *project = current_project_get_path();
+    char root[700];
+    if (project == NULL) return 0;
+    snprintf(root, sizeof(root), "%s/%s", project, section);
+    size_t n = strlen(root);
+    return strncmp(path, root, n) == 0 && (path[n] == '\0' || is_separator(path[n]));
+}
+
+static void open_row_menu(const fs_row_t *row, int x, int y) {
+    context_menu_item_t items[CONTEXT_MENU_MAX_ITEMS];
+    int n = 0;
+    int is_root = row->is_dir && row->depth == 0;
+    snprintf(g_target_path, sizeof(g_target_path), "%s", row->path);
+    g_target_is_dir = row->is_dir;
+    if (row->is_dir) {
+        items[n++] = (context_menu_item_t){ is_expanded(row->path) ? "Collapse" : "Expand", MENU_TOGGLE, 1, 0 };
+        items[n++] = (context_menu_item_t){ "New Folder", MENU_NEW_FOLDER, 1, 1 };
+        items[n++] = (context_menu_item_t){ "New Script", MENU_NEW_SCRIPT, path_is_inside(row->path, "source"), 0 };
+    } else if (has_rscene_extension(row->display_name)) {
+        items[n++] = (context_menu_item_t){ "Open Scene", MENU_OPEN, 1, 0 };
+    } else if (script_extension_supported(row->display_name)) {
+        items[n++] = (context_menu_item_t){ "Open in Editor", MENU_OPEN, 1, 0 };
+    } else if (image_extension_supported(row->display_name)) {
+        items[n++] = (context_menu_item_t){ "Preview", MENU_PREVIEW, 1, 0 };
+    }
+    int has_primary = n > 0;
+    items[n++] = (context_menu_item_t){ "Rename", MENU_RENAME, !is_root, has_primary };
+    items[n++] = (context_menu_item_t){ "Duplicate", MENU_DUPLICATE, !is_root, 0 };
+    items[n++] = (context_menu_item_t){ "Delete", MENU_DELETE, !is_root, 0 };
+    items[n++] = (context_menu_item_t){ "Copy Path", MENU_COPY_PATH, 1, 1 };
+    context_menu_open(x, y, items, n, on_menu_choice, NULL);
 }
 
 static int is_expanded(const char *path) {
@@ -476,6 +647,15 @@ void file_system_panel_update(int x, int y, int w, int h) {
     int list_y = y + TOOLBAR_HEIGHT + 4;
     ui_tree_update(&g_tree, x, list_y, w, h - TOOLBAR_HEIGHT - 4);
     resolve_visible_thumbnails(list_y, h - TOOLBAR_HEIGHT - 4);
+    {
+        int menu_x = 0, menu_y = 0;
+        int menu_row = ui_tree_menu_index(&g_tree, &menu_x, &menu_y);
+        if (menu_row >= 0 && menu_row < g_row_count) {
+            strncpy(g_selected_path, g_rows[menu_row].path, sizeof(g_selected_path) - 1);
+            g_selected_path[sizeof(g_selected_path) - 1] = '\0';
+            open_row_menu(&g_rows[menu_row], menu_x, menu_y);
+        }
+    }
     int toggled = ui_tree_toggled_index(&g_tree);
     if (toggled >= 0 && toggled < g_row_count && g_rows[toggled].is_dir) {
         toggle_expanded(g_rows[toggled].path);

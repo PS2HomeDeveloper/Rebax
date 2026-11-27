@@ -60,6 +60,7 @@ void ui_tree_init(ui_tree_t *tree, int max_items, const ui_tree_style_t *style) 
     tree->clicked_index = -1;
     tree->toggled_index = -1;
     tree->press_row = -1;
+    tree->menu_index = -1;
     tree->ready = 1;
     icon_atlas_init();
 }
@@ -168,6 +169,7 @@ void ui_tree_update(ui_tree_t *tree, int x, int y, int w, int h) {
     if (tree == NULL || !tree->ready || tree->items == NULL) return;
     tree->clicked_index = -1;
     tree->toggled_index = -1;
+    tree->menu_index = -1;
     ui_tree_update_highlights(tree, w);
 
     int viewport_h = h;
@@ -211,9 +213,18 @@ void ui_tree_update(ui_tree_t *tree, int x, int y, int w, int h) {
             tree->press_row = activate_row;
             tree->press_toggle = activate_toggle;
             tree->press_moved = 0;
+            tree->press_tick = window_ticks();
             activate_row = -1;
         }
         if (tree->scroll_dragging == 2) tree->press_moved = 1;
+        if (tree->press_row >= 0 && !tree->press_moved && window_mouse_left_down() &&
+            window_ticks() - tree->press_tick >= 500) {
+            tree->menu_index = tree->press_row;
+            tree->menu_x = mx;
+            tree->menu_y = my;
+            tree->selected_index = tree->press_row;
+            tree->press_row = -1;
+        }
         if (tree->press_row >= 0 && !window_mouse_left_down()) {
             if (!tree->press_moved) {
                 activate_row = tree->press_row;
@@ -221,6 +232,12 @@ void ui_tree_update(ui_tree_t *tree, int x, int y, int w, int h) {
             }
             tree->press_row = -1;
         }
+    }
+    if (!touch && window_mouse_right_just_pressed() && tree->hovered_index >= 0) {
+        tree->menu_index = tree->hovered_index;
+        tree->menu_x = mx;
+        tree->menu_y = my;
+        tree->selected_index = tree->hovered_index;
     }
     if (activate_row >= 0 && activate_row < tree->item_count) {
         if (activate_toggle) {
@@ -305,6 +322,13 @@ void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h) {
     int viewport_h = h;
     if (viewport_h < row_h) viewport_h = row_h;
     ui_scrollbar_draw(tree->scroll_offset, x, w, y, viewport_h, tree->item_count * row_h);
+}
+
+int ui_tree_menu_index(const ui_tree_t *tree, int *out_x, int *out_y) {
+    if (tree == NULL || tree->menu_index < 0) return -1;
+    if (out_x) *out_x = tree->menu_x;
+    if (out_y) *out_y = tree->menu_y;
+    return tree->menu_index;
 }
 
 void ui_tree_shutdown(ui_tree_t *tree) {

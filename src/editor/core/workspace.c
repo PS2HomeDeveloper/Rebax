@@ -33,6 +33,9 @@
 #include "scene/current_scene.h"
 #include "editor/panels/scene_tabs.h"
 #include "editor/dialogs/close_scene.h"
+#include "editor/dialogs/context_menu.h"
+#include "editor/dialogs/prompt.h"
+#include "editor/dialogs/image_viewer.h"
 #include "editor/panels/file_manager.h"
 #include "editor/dialogs/add_node.h"
 #include "editor/panels/file_system.h"
@@ -588,6 +591,12 @@ void editor_workspace_draw(int window_w, int window_h) {
     else if (g_camera_mode == EDITOR_CAMERA_MODE_3D) viewport_3d_draw(center_x, viewport_y, center_w, viewport_h);
     else viewport_2d_draw(center_x, viewport_y, center_w, viewport_h);
 
+    window_fill_rect(0, TOOLBAR_HEIGHT - 1, window_w, 1, UI_RGB(UI_COLOR_SURFACE_BORDER));
+    window_fill_rect(g_left_width, col_top, 1, col_h, UI_RGB(UI_COLOR_SURFACE_BORDER));
+    window_fill_rect(right_x, col_top, 1, col_h, UI_RGB(UI_COLOR_SURFACE_BORDER));
+    window_fill_rect(0, col_top + g_left_split_y, g_left_width, 1, UI_RGB(UI_COLOR_SURFACE_BORDER));
+    window_fill_rect(right_x, col_top + g_right_split_y, g_right_width, 1, UI_RGB(UI_COLOR_SURFACE_BORDER));
+    window_fill_rect(center_x, col_top + camera_h, center_w, 1, UI_RGB(UI_COLOR_SURFACE_BORDER));
     ui_layout_draw_splitter(g_left_width - SPLITTER_THICKNESS / 2, col_top, SPLITTER_THICKNESS, col_h, splitter_visual(SPLITTER_LEFT_RIGHT_COL));
     ui_layout_draw_splitter(right_x - SPLITTER_THICKNESS / 2, col_top, SPLITTER_THICKNESS, col_h, splitter_visual(SPLITTER_CENTER_RIGHT_COL));
     ui_layout_draw_splitter(0, col_top + g_left_split_y - SPLITTER_THICKNESS / 2, g_left_width - SPLITTER_THICKNESS / 2, SPLITTER_THICKNESS, splitter_visual(SPLITTER_LEFT_INNER));
@@ -633,6 +642,9 @@ void editor_workspace_shutdown(void) {
     emulator_select_dialog_shutdown();
     scene_tabs_shutdown();
     close_scene_dialog_shutdown();
+    context_menu_shutdown();
+    prompt_shutdown();
+    image_viewer_shutdown();
     export_dialog_shutdown();
     project_settings_dialog_shutdown();
     code_editor_shutdown();

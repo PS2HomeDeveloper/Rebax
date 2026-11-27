@@ -12,6 +12,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#include "editor/dialogs/packages.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -197,11 +198,22 @@ int export_dialog_is_open(void) { return g_open; }
 static void start_export(void) {
     if (!g_name.text[0] || !g_path.text[0] || !project_allows(g_selected)) return;
     int status = current_status(); if (status == 1) return;
+    if (!g_platforms[g_selected].modern && !platform_installed(g_selected)) {
+        snprintf(g_error_text, sizeof(g_error_text), "%s", tr(g_selected == 5 ? "PlayStation 2 tools are not installed yet. Opening the package manager." : "PlayStation 1 tools are not installed yet. Opening the package manager."));
+        close_export();
+        packages_dialog_open();
+        return;
+    }
     scene_tabs_save_all(); clear_logs(); g_details = 0; g_error_text[0] = '\0';
     if (g_platforms[g_selected].modern) {
         const char *architectures[4]; int count = 0;
         for (int i = 0; i < arch_count(); i++) if (g_arch_mask & (1u << i)) architectures[count++] = arch_name(i);
-        if (count == 0) { snprintf(g_error_text, sizeof(g_error_text), "Select at least one installed architecture."); return; }
+        if (count == 0) {
+            int any = 0;
+            for (int i = 0; i < arch_count(); i++) if (package_arch_state(g_platforms[g_selected].package_id, i) == PKG_STATE_INSTALLED) any = 1;
+            if (!any) { close_export(); packages_dialog_open(); return; }
+            snprintf(g_error_text, sizeof(g_error_text), "Select at least one installed architecture."); return;
+        }
         g_started = modern_export_start_multi(g_name.text, g_release, g_path.text, g_platforms[g_selected].id, architectures, count);
         snprintf(g_status_text, sizeof(g_status_text), tr("Preparing %s (%d architectures)"), tr(g_platforms[g_selected].label), count);
     } else if (g_selected == 5) {

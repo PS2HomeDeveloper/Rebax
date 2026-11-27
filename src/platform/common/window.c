@@ -34,6 +34,8 @@ static int g_inset_right = 0;
 static int g_inset_bottom = 0;
 
 static float g_scale = 1.0f;
+static unsigned g_fade_start = 0;
+static int g_last_w = 0, g_last_h = 0;
 static int g_background = 0;
 
 static int g_user_scale_percent = 0;
@@ -193,37 +195,6 @@ static int g_key_escape    = 0;
 #define REBAX_WINDOW_EXTRA_FLAGS 0
 #endif
 
-#if defined(__ANDROID__)
-static void android_enable_rotation_fade(void) {
-    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
-    jobject activity = (jobject)SDL_AndroidGetActivity();
-    if (env == NULL || activity == NULL) return;
-    jclass activity_class = (*env)->GetObjectClass(env, activity);
-    jmethodID get_window = (*env)->GetMethodID(env, activity_class, "getWindow", "()Landroid/view/Window;");
-    jobject win = get_window ? (*env)->CallObjectMethod(env, activity, get_window) : NULL;
-    if (win != NULL) {
-        jclass win_class = (*env)->GetObjectClass(env, win);
-        jmethodID get_attrs = (*env)->GetMethodID(env, win_class, "getAttributes", "()Landroid/view/WindowManager$LayoutParams;");
-        jmethodID set_attrs = (*env)->GetMethodID(env, win_class, "setAttributes", "(Landroid/view/WindowManager$LayoutParams;)V");
-        jobject attrs = get_attrs ? (*env)->CallObjectMethod(env, win, get_attrs) : NULL;
-        if (attrs != NULL && set_attrs != NULL) {
-            jclass attrs_class = (*env)->GetObjectClass(env, attrs);
-            jfieldID field = (*env)->GetFieldID(env, attrs_class, "rotationAnimation", "I");
-            if (field != NULL) {
-                (*env)->SetIntField(env, attrs, field, 1);
-                (*env)->CallVoidMethod(env, win, set_attrs, attrs);
-            }
-            (*env)->DeleteLocalRef(env, attrs_class);
-        }
-        if (attrs != NULL) (*env)->DeleteLocalRef(env, attrs);
-        (*env)->DeleteLocalRef(env, win_class);
-        (*env)->DeleteLocalRef(env, win);
-    }
-    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
-    (*env)->DeleteLocalRef(env, activity_class);
-    (*env)->DeleteLocalRef(env, activity);
-}
-#endif
 
 int window_init(const char *title, int width, int height) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
@@ -246,9 +217,6 @@ int window_init(const char *title, int width, int height) {
         return 0;
     }
 
-#if defined(__ANDROID__)
-    android_enable_rotation_fade();
-#endif
     g_renderer = SDL_CreateRenderer(
         g_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
@@ -334,6 +302,11 @@ void window_poll_events(void) {
         } else if (event.type == SDL_WINDOWEVENT
                    && (event.window.event == SDL_WINDOWEVENT_RESIZED
                        || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)) {
+            if (event.window.data1 != g_last_w || event.window.data2 != g_last_h) {
+                if (g_last_w != 0) g_fade_start = SDL_GetTicks();
+                g_last_w = event.window.data1;
+                g_last_h = event.window.data2;
+            }
             apply_window_size(event.window.data1, event.window.data2);
             g_refresh_frames = 30;
         } else if (event.type == SDL_APP_WILLENTERBACKGROUND) {
@@ -595,12 +568,34 @@ void window_destroy_texture(window_texture_t *tex) {
     free(tex);
 }
 
+#define WINDOW_FADE_MS 320
+
+static void draw_resize_fade(void) {
+    if (g_fade_start == 0) return;
+    unsigned elapsed = SDL_GetTicks() - g_fade_start;
+    if (elapsed >= WINDOW_FADE_MS) { g_fade_start = 0; return; }
+    int alpha = 255 - (int)(255u * elapsed / WINDOW_FADE_MS);
+    SDL_Rect none;
+    int w = 0, h = 0;
+    SDL_GetRendererOutputSize(g_renderer, &w, &h);
+    none.x = 0; none.y = 0; none.w = w; none.h = h;
+    SDL_RenderSetViewport(g_renderer, NULL);
+    SDL_RenderSetClipRect(g_renderer, NULL);
+    SDL_RenderSetScale(g_renderer, 1.0f, 1.0f);
+    SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_renderer, 17, 22, 29, (Uint8)alpha);
+    SDL_RenderFillRect(g_renderer, &none);
+    SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
+    SDL_RenderSetScale(g_renderer, g_scale, g_scale);
+}
+
 void window_present(void) {
     if (g_background) return;
     if (g_hold_until != 0) {
         if (SDL_GetTicks() < g_hold_until) return;
         g_hold_until = 0;
     }
+    draw_resize_fade();
     SDL_RenderPresent(g_renderer);
     if (g_refresh_frames > 0) g_refresh_frames--;
 }

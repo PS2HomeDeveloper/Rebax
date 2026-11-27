@@ -72,6 +72,9 @@ typedef struct {
     int press_row;
     int press_toggle;
     int press_moved;
+    unsigned press_tick;
+    int menu_index;
+    int menu_x, menu_y;
     int ready;
 } ui_tree_t;
 
@@ -82,6 +85,7 @@ void ui_tree_set_selected(ui_tree_t *tree, int index);
 int ui_tree_get_selected(const ui_tree_t *tree);
 int ui_tree_clicked_index(const ui_tree_t *tree);
 int ui_tree_toggled_index(const ui_tree_t *tree);
+int ui_tree_menu_index(const ui_tree_t *tree, int *out_x, int *out_y);
 void ui_tree_update(ui_tree_t *tree, int x, int y, int w, int h);
 void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h);
 void ui_tree_shutdown(ui_tree_t *tree);

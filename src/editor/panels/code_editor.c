@@ -368,6 +368,131 @@ static void normalize_view(void) {
     if (g_scroll_line < 0) g_scroll_line = 0;
 }
 
+static void replace_range(size_t a, size_t b, const char *bytes, size_t n) {
+    if (g_length - (b - a) + n >= CODE_EDITOR_CAPACITY) return;
+    memmove(g_text + a + n, g_text + b, g_length - b + 1);
+    memcpy(g_text + a, bytes, n);
+    g_length = g_length - (b - a) + n;
+}
+
+static size_t indent_length(size_t start) {
+    size_t n = 0;
+    while (start + n < g_length && (g_text[start + n] == ' ' || g_text[start + n] == '\t')) n++;
+    return n;
+}
+
+static void dedent_closing_brace(void) {
+    size_t brace = g_cursor - 1, ls = brace, p, depth = 0;
+    while (ls > 0 && g_text[ls - 1] != '\n') ls--;
+    for (p = ls; p < brace; p++) if (g_text[p] != ' ' && g_text[p] != '\t') return;
+    p = brace;
+    while (p > 0) {
+        p--;
+        if (g_text[p] == '}') depth++;
+        else if (g_text[p] == '{') {
+            if (depth == 0) break;
+            depth--;
+        }
+        if (p == 0) return;
+    }
+    if (g_text[p] != '{') return;
+    while (p > 0 && g_text[p - 1] != '\n') p--;
+    size_t indent = indent_length(p);
+    char copy[128];
+    if (indent >= sizeof(copy)) return;
+    memcpy(copy, g_text + p, indent);
+    replace_range(ls, brace, copy, indent);
+    g_cursor = ls + indent + 1;
+    g_anchor = g_cursor;
+}
+
+static char closing_pair(char c) {
+    switch (c) {
+        case '(': return ')';
+        case '[': return ']';
+        case '{': return '}';
+        case '"': return '"';
+        case '\'': return '\'';
+        default: return 0;
+    }
+}
+
+static void type_text(const char *typed) {
+    char c = typed[0];
+    int single = typed[1] == '\0';
+    char next = g_cursor < g_length ? g_text[g_cursor] : '\0';
+    char prev = g_cursor > 0 ? g_text[g_cursor - 1] : '\0';
+    char close = single ? closing_pair(c) : 0;
+    if (single && g_anchor == g_cursor && next == c && (c == ')' || c == ']' || c == '}' || c == '"' || c == '\'')) {
+        g_cursor++;
+        g_anchor = g_cursor;
+        return;
+    }
+    if (close && (c != '"' && c != '\'' ? 1 : (!is_word_char(prev) && !is_word_char(next) && prev != c))) {
+        char pair[2] = { c, close };
+        insert_bytes(pair, 2);
+        g_cursor--;
+        g_anchor = g_cursor;
+        return;
+    }
+    insert_bytes(typed, strlen(typed));
+    if (single && c == '}') dedent_closing_brace();
+}
+
+static void smart_enter(void) {
+    size_t start = line_start_for_cursor();
+    size_t indent = indent_length(start);
+    char buffer[200];
+    size_t n = 0;
+    int opens = g_cursor > 0 && g_text[g_cursor - 1] == '{';
+    int between = opens && g_cursor < g_length && g_text[g_cursor] == '}';
+    if (indent > g_cursor - start) indent = g_cursor - start;
+    if (indent > 80) indent = 80;
+    buffer[n++] = '\n';
+    memcpy(buffer + n, g_text + start, indent);
+    n += indent;
+    if (opens) { memcpy(buffer + n, "    ", 4); n += 4; }
+    if (between) {
+        size_t after = n;
+        buffer[n++] = '\n';
+        memcpy(buffer + n, g_text + start, indent);
+        n += indent;
+        insert_bytes(buffer, n);
+        g_cursor -= n - after;
+        g_anchor = g_cursor;
+        return;
+    }
+    insert_bytes(buffer, n);
+}
+
+static void smart_backspace(void) {
+    if (g_anchor != g_cursor) { delete_selection(); return; }
+    if (g_cursor == 0) return;
+    char prev = g_text[g_cursor - 1];
+    char next = g_cursor < g_length ? g_text[g_cursor] : '\0';
+    if (next && closing_pair(prev) == next) {
+        memmove(g_text + g_cursor - 1, g_text + g_cursor + 1, g_length - g_cursor);
+        g_length -= 2;
+        g_cursor--;
+        g_anchor = g_cursor;
+        g_dirty = 1;
+        return;
+    }
+    size_t start = line_start_for_cursor(), width = g_cursor - start;
+    if (width >= 4 && width % 4 == 0) {
+        size_t i;
+        for (i = start; i < g_cursor; i++) if (g_text[i] != ' ') break;
+        if (i == g_cursor) {
+            g_anchor = g_cursor - 4;
+            delete_selection();
+            return;
+        }
+    }
+    g_cursor--;
+    g_anchor = g_cursor + 1;
+    delete_selection();
+}
+
 static void edit_input(void) {
     const char *typed = window_text_input_this_frame();
     if (window_key_just_pressed_undo()) { do_undo(); return; }
@@ -377,25 +502,13 @@ static void edit_input(void) {
     else if (window_key_just_pressed_backspace()) begin_edit(2);
     else if (window_key_just_pressed_delete()) begin_edit(3);
     else if (typed && typed[0]) begin_edit(1);
-    if (typed && typed[0]) {
-        insert_bytes(typed, strlen(typed));
-    }
-    if (window_key_just_pressed_enter()) {
-        size_t start = line_start_for_cursor();
-        char indent[64] = "\n";
-        size_t n = 1;
-        while (start + n - 1 < g_cursor && n < sizeof(indent) - 6 && (g_text[start + n - 1] == ' ' || g_text[start + n - 1] == '\t')) { indent[n] = g_text[start + n - 1]; n++; }
-        if (g_cursor > 0 && g_text[g_cursor - 1] == '{') { memcpy(indent + n, "    ", 4); n += 4; }
-        insert_bytes(indent, n);
-    }
+    if (typed && typed[0]) type_text(typed);
+    if (window_key_just_pressed_enter()) smart_enter();
     if (window_key_just_pressed_tab()) {
         if (g_completion_count > 0) { g_last_kind = 0; accept_completion(0); }
         else insert_bytes("    ", 4);
     }
-    if (window_key_just_pressed_backspace()) {
-        if (g_anchor != g_cursor) delete_selection();
-        else if (g_cursor > 0) { g_cursor--; delete_selection(); }
-    }
+    if (window_key_just_pressed_backspace()) smart_backspace();
     if (window_key_just_pressed_delete()) {
         if (g_anchor != g_cursor) delete_selection();
         else if (g_cursor < g_length) { g_anchor = g_cursor + 1; delete_selection(); }
@@ -537,44 +650,106 @@ static void color_bytes(unsigned char *rgb, int start, int end,
     }
 }
 
+static int word_in_list(const char *const *list, size_t count, const char *text, int start, int end) {
+    int n = end - start;
+    for (size_t i = 0; i < count; i++)
+        if ((int)strlen(list[i]) == n && memcmp(text + start, list[i], (size_t)n) == 0) return 1;
+    return 0;
+}
+
+static int is_control_keyword(const char *text, int start, int end) {
+    static const char *const list[] = {
+        "break", "case", "catch", "continue", "default", "do", "else", "for", "goto",
+        "if", "return", "switch", "throw", "try", "while", "co_await", "co_return", "co_yield"
+    };
+    return word_in_list(list, sizeof(list) / sizeof(list[0]), text, start, end);
+}
+
 static int is_cpp_keyword(const char *text, int start, int end) {
-    static const char *keywords[] = {
-        "alignas", "auto", "bool", "break", "case", "catch", "char", "class",
-        "const", "constexpr", "continue", "default", "delete", "do", "double",
-        "else", "enum", "explicit", "extern", "false", "float", "for", "friend",
-        "if", "inline", "int", "long", "namespace", "new", "noexcept", "nullptr",
-        "operator", "private", "protected", "public", "register", "return", "short",
-        "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw",
-        "true", "try", "typedef", "typename", "union", "unsigned", "using", "virtual",
-        "void", "volatile", "while", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-        "int8_t", "int16_t", "int32_t", "int64_t", "size_t", "ssize_t", "NULL"
+    static const char *const list[] = {
+        "alignas", "alignof", "asm", "auto", "bool", "char", "class", "const", "constexpr", "consteval",
+        "constinit", "const_cast", "decltype", "delete", "double", "dynamic_cast", "enum", "explicit",
+        "export", "extern", "false", "final", "float", "friend", "inline", "int", "long", "mutable",
+        "namespace", "new", "noexcept", "nullptr", "operator", "override", "private", "protected",
+        "public", "register", "reinterpret_cast", "restrict", "short", "signed", "sizeof", "static",
+        "static_assert", "static_cast", "struct", "template", "this", "thread_local", "true", "typedef",
+        "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t",
+        "concept", "requires", "_Bool", "_Atomic", "_Alignas", "_Generic", "_Noreturn", "_Static_assert"
+    };
+    return word_in_list(list, sizeof(list) / sizeof(list[0]), text, start, end);
+}
+
+static int is_known_type(const char *text, int start, int end) {
+    static const char *const list[] = {
+        "size_t", "ssize_t", "ptrdiff_t", "intptr_t", "uintptr_t", "FILE", "va_list", "wchar_t", "time_t"
     };
     int n = end - start;
-    for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++)
-        if ((int)strlen(keywords[i]) == n && memcmp(text + start, keywords[i], (size_t)n) == 0) return 1;
-    return 0;
+    if (word_in_list(list, sizeof(list) / sizeof(list[0]), text, start, end)) return 1;
+    return n > 2 && text[end - 2] == '_' && text[end - 1] == 't';
+}
+
+static int is_all_caps(const char *text, int start, int end) {
+    int letters = 0;
+    for (int i = start; i < end; i++) {
+        if (islower((unsigned char)text[i])) return 0;
+        if (isupper((unsigned char)text[i])) letters++;
+    }
+    return letters >= 2 || (letters == 1 && end - start >= 2);
+}
+
+static void color_string_parts(const char *text, int start, int end, unsigned char *rgb) {
+    for (int i = start + 1; i < end; i++) {
+        if (text[i] == '\\' && i + 1 < end) {
+            int stop = i + 2;
+            if (text[i + 1] == 'x') while (stop < end && isxdigit((unsigned char)text[stop])) stop++;
+            else if (text[i + 1] >= '0' && text[i + 1] <= '7') while (stop < end && stop < i + 4 && text[stop] >= '0' && text[stop] <= '7') stop++;
+            color_bytes(rgb, i, stop, 215, 186, 125);
+            i = stop - 1;
+        } else if (text[i] == '%') {
+            int stop = i + 1;
+            if (stop < end && text[stop] == '%') { color_bytes(rgb, i, stop + 1, 86, 200, 214); i = stop; continue; }
+            while (stop < end && strchr("-+ #0123456789.*lhzjtLqI", text[stop])) stop++;
+            if (stop < end && strchr("diouxXeEfFgGaAcspn", text[stop])) {
+                color_bytes(rgb, i, stop + 1, 86, 200, 214);
+                i = stop;
+            }
+        }
+    }
 }
 
 static void colorize_line(const char *text, int length, unsigned char *rgb,
                           int *in_block_comment) {
     color_bytes(rgb, 0, length, 212, 218, 228);
     int first = 0;
+    int after_member = 0;
     while (first < length && isspace((unsigned char)text[first])) first++;
-    if (first < length && text[first] == '#') {
-        color_bytes(rgb, first, length, 198, 134, 192);
-        return;
+    if (!*in_block_comment && first < length && text[first] == '#') {
+        int i = first + 1;
+        while (i < length && isspace((unsigned char)text[i])) i++;
+        while (i < length && isalpha((unsigned char)text[i])) i++;
+        color_bytes(rgb, first, i, 197, 134, 192);
+        while (i < length && isspace((unsigned char)text[i])) i++;
+        if (i < length && (text[i] == '<' || text[i] == '"') && first + 8 <= length && strncmp(text + first, "#include", 8) == 0) {
+            char close = text[i] == '<' ? '>' : '"';
+            int stop = i + 1;
+            while (stop < length && text[stop] != close) stop++;
+            if (stop < length) stop++;
+            color_bytes(rgb, i, stop, 206, 145, 120);
+            i = stop;
+        }
+        first = i;
     }
-    for (int i = 0; i < length;) {
+    for (int i = first; i < length;) {
         if (*in_block_comment) {
             int start = i;
             while (i + 1 < length && !(text[i] == '*' && text[i + 1] == '/')) i++;
             if (i + 1 < length) { i += 2; *in_block_comment = 0; }
             else i = length;
-            color_bytes(rgb, start, i, 106, 153, 105);
+            color_bytes(rgb, start, i, 106, 153, 85);
             continue;
         }
         if (i + 1 < length && text[i] == '/' && text[i + 1] == '/') {
-            color_bytes(rgb, i, length, 106, 153, 105);
+            color_bytes(rgb, i, length, 106, 153, 85);
             break;
         }
         if (i + 1 < length && text[i] == '/' && text[i + 1] == '*') {
@@ -583,7 +758,7 @@ static void colorize_line(const char *text, int length, unsigned char *rgb,
             while (i + 1 < length && !(text[i] == '*' && text[i + 1] == '/')) i++;
             if (i + 1 < length) i += 2;
             else { i = length; *in_block_comment = 1; }
-            color_bytes(rgb, start, i, 106, 153, 105);
+            color_bytes(rgb, start, i, 106, 153, 85);
             continue;
         }
         if (text[i] == '"' || text[i] == '\'') {
@@ -593,7 +768,9 @@ static void colorize_line(const char *text, int length, unsigned char *rgb,
                 if (text[i] == '\\' && i + 1 < length) { i += 2; continue; }
                 if (text[i++] == quote) break;
             }
-            color_bytes(rgb, start, i, 229, 168, 120);
+            color_bytes(rgb, start, i, 206, 145, 120);
+            color_string_parts(text, start, i, rgb);
+            after_member = 0;
             continue;
         }
         if (isalpha((unsigned char)text[i]) || text[i] == '_') {
@@ -601,16 +778,37 @@ static void colorize_line(const char *text, int length, unsigned char *rgb,
             while (i < length && (isalnum((unsigned char)text[i]) || text[i] == '_')) i++;
             int next = i;
             while (next < length && isspace((unsigned char)text[next])) next++;
-            if (is_cpp_keyword(text, start, i)) color_bytes(rgb, start, i, 86, 156, 214);
-            else if (next < length && text[next] == '(') color_bytes(rgb, start, i, 226, 215, 150);
+            int is_call = next < length && text[next] == '(';
+            if (after_member) {
+                if (is_call) color_bytes(rgb, start, i, 220, 220, 170);
+                else color_bytes(rgb, start, i, 156, 220, 254);
+            }
+            else if (is_control_keyword(text, start, i)) color_bytes(rgb, start, i, 197, 134, 192);
+            else if (is_cpp_keyword(text, start, i)) color_bytes(rgb, start, i, 86, 156, 214);
+            else if (is_known_type(text, start, i)) color_bytes(rgb, start, i, 78, 201, 176);
+            else if (is_call) color_bytes(rgb, start, i, 220, 220, 170);
+            else if (i - start == 4 && memcmp(text + start, "NULL", 4) == 0) color_bytes(rgb, start, i, 86, 156, 214);
+            else if (is_all_caps(text, start, i)) color_bytes(rgb, start, i, 79, 193, 255);
             else if (isupper((unsigned char)text[start])) color_bytes(rgb, start, i, 78, 201, 176);
+            after_member = 0;
             continue;
         }
-        if (isdigit((unsigned char)text[i])) {
+        if (isdigit((unsigned char)text[i]) || (text[i] == '.' && i + 1 < length && isdigit((unsigned char)text[i + 1]))) {
             int start = i++;
-            while (i < length && (isalnum((unsigned char)text[i]) || text[i] == '.' || text[i] == '_')) i++;
+            while (i < length && (isalnum((unsigned char)text[i]) || text[i] == '.' || text[i] == '_' || text[i] == '\'' ||
+                   ((text[i] == '+' || text[i] == '-') && (text[i - 1] == 'e' || text[i - 1] == 'E') && !(text[start] == '0' && start + 1 < length && (text[start + 1] == 'x' || text[start + 1] == 'X'))))) i++;
             color_bytes(rgb, start, i, 181, 206, 168);
+            after_member = 0;
             continue;
+        }
+        if (text[i] == '.' || (text[i] == '-' && i + 1 < length && text[i + 1] == '>') || (text[i] == ':' && i + 1 < length && text[i + 1] == ':')) {
+            after_member = 1;
+            i += (text[i] == '.') ? 1 : 2;
+            continue;
+        }
+        if (!isspace((unsigned char)text[i])) {
+            color_bytes(rgb, i, i + 1, 170, 180, 196);
+            after_member = 0;
         }
         i++;
     }
@@ -832,6 +1030,16 @@ void code_editor_draw(int x, int y, int w, int h) {
                 window_fill_rect(mx0, ly + 2, 1, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
                 window_fill_rect(mx0 + mw - 1, ly + 2, 1, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
             }
+        }
+        {
+            static int indent_w = 0;
+            const char *text = g_cached_line[line];
+            int spaces = 0;
+            if (indent_w == 0) indent_w = font_measure_text("    ", FONT_WEIGHT_MONO, CODE_FONT);
+            while (text[spaces] == ' ') spaces++;
+            if (text[spaces] != '\0' && indent_w > 0)
+                for (int level = 0; level * 4 < spaces; level++)
+                    window_fill_rect(x + CODE_EDITOR_GUTTER_WIDTH + 8 + level * indent_w - g_scroll_x, ly, 1, CODE_EDITOR_LINE_HEIGHT, 0x2E, 0x37, 0x44);
         }
         if (g_line_text[line]) window_draw_texture(g_line_text[line], x + CODE_EDITOR_GUTTER_WIDTH + 8 - g_scroll_x, ly + (CODE_EDITOR_LINE_HEIGHT - g_line_height[line]) / 2,
                                                     g_line_width[line], g_line_height[line]);
