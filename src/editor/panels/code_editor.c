@@ -37,6 +37,9 @@
 #define CODE_EDITOR_BUTTON_WIDTH 58
 #define CODE_EDITOR_BUTTON_GAP 5
 #define CODE_EDITOR_EXT_COUNT 12
+#define CODE_EDITOR_BUTTONS 6
+#define CODE_EDITOR_UNDO_MAX 100
+#define CODE_EDITOR_LONG_PRESS_MS 450
 
 static const char *g_code_extensions[CODE_EDITOR_EXT_COUNT] = {
     "c", "h", "cpp", "hpp", "cc", "hh", "cxx", "hxx", "c++", "h++", "ipp", "inl"
@@ -64,9 +67,20 @@ static char g_completion[8][64];
 static int g_completion_count = 0;
 static char g_completion_prefix[64];
 static int g_matching_position = -1;
+static int g_max_line_w = 0;
+static int g_popup_x, g_popup_y, g_popup_w, g_popup_h;
+static size_t g_comp_cursor = (size_t)-1, g_comp_length = (size_t)-1;
+static unsigned g_press_tick = 0;
+static int g_long_press = 0;
 
-static window_texture_t *g_button_text[4];
-static int g_button_w[4], g_button_h[4];
+typedef struct { char *text; size_t length, cursor; } undo_state_t;
+static undo_state_t g_undo[CODE_EDITOR_UNDO_MAX], g_redo[CODE_EDITOR_UNDO_MAX];
+static int g_undo_count = 0, g_redo_count = 0;
+static int g_last_kind = 0;
+static unsigned g_last_edit_tick = 0;
+
+static window_texture_t *g_button_text[CODE_EDITOR_BUTTONS];
+static int g_button_w[CODE_EDITOR_BUTTONS], g_button_h[CODE_EDITOR_BUTTONS];
 static window_texture_t *g_tab_text = NULL;
 static int g_tab_w = 0, g_tab_h = 0;
 
@@ -144,6 +158,67 @@ static size_t line_end(size_t start) {
     return start;
 }
 
+static int snapshot_state(undo_state_t *state) {
+    state->text = (char *)malloc(g_length + 1);
+    if (!state->text) return 0;
+    memcpy(state->text, g_text, g_length + 1);
+    state->length = g_length;
+    state->cursor = g_cursor;
+    return 1;
+}
+
+static void free_states(undo_state_t *list, int *count) {
+    for (int i = 0; i < *count; i++) { free(list[i].text); list[i].text = NULL; }
+    *count = 0;
+}
+
+static void push_state(undo_state_t *list, int *count) {
+    undo_state_t state;
+    if (!snapshot_state(&state)) return;
+    if (*count == CODE_EDITOR_UNDO_MAX) {
+        free(list[0].text);
+        memmove(list, list + 1, sizeof(list[0]) * (CODE_EDITOR_UNDO_MAX - 1));
+        (*count)--;
+    }
+    list[(*count)++] = state;
+}
+
+static void begin_edit(int kind) {
+    unsigned now = window_ticks();
+    if (kind == 4 || kind != g_last_kind || now - g_last_edit_tick > 800) {
+        push_state(g_undo, &g_undo_count);
+        free_states(g_redo, &g_redo_count);
+    }
+    g_last_kind = kind;
+    g_last_edit_tick = now;
+}
+
+static void restore_state(const undo_state_t *state) {
+    memcpy(g_text, state->text, state->length + 1);
+    g_length = state->length;
+    g_cursor = g_anchor = state->cursor <= g_length ? state->cursor : g_length;
+    g_dirty = 1;
+    g_last_kind = 0;
+    g_follow_cursor = 1;
+    invalidate_view();
+}
+
+static void do_undo(void) {
+    if (g_undo_count == 0) return;
+    push_state(g_redo, &g_redo_count);
+    undo_state_t state = g_undo[--g_undo_count];
+    restore_state(&state);
+    free(state.text);
+}
+
+static void do_redo(void) {
+    if (g_redo_count == 0) return;
+    push_state(g_undo, &g_undo_count);
+    undo_state_t state = g_redo[--g_redo_count];
+    restore_state(&state);
+    free(state.text);
+}
+
 static void delete_selection(void) {
     if (g_anchor == g_cursor) return;
     size_t a = g_anchor < g_cursor ? g_anchor : g_cursor;
@@ -169,27 +244,69 @@ static void insert_bytes(const char *bytes, size_t count) {
     g_dirty = 1;
 }
 
+static int is_word_char(char c) { return isalnum((unsigned char)c) || c == '_'; }
+
+static void add_candidate(const char *word) {
+    if (g_completion_count >= 8) return;
+    size_t prefix = strlen(g_completion_prefix);
+    if (strlen(word) <= prefix || strlen(word) >= sizeof(g_completion[0])) return;
+    if (strncmp(word, g_completion_prefix, prefix) != 0) return;
+    for (int i = 0; i < g_completion_count; i++) if (strcmp(g_completion[i], word) == 0) return;
+    snprintf(g_completion[g_completion_count++], sizeof(g_completion[0]), "%s", word);
+}
+
 static void update_completion(void) {
-    static const char *const words[] = {"auto", "bool", "class", "const", "else", "for", "if", "int", "return", "struct", "void", "while", "rebax_game_start", "rebax_game_update", "rebax_game_stop", "rebax_log", "rebax_input_is_down", "rebax_scene_spawn"};
+    static const char *const words[] = {
+        "rebax_log", "rebax_delta_time", "rebax_key_down", "rebax_key_pressed", "rebax_find_node",
+        "rebax_node_get_transform2d", "rebax_node_set_transform2d", "rebax_node_set_visible",
+        "rebax_node_is_visible", "rebax_image_load", "rebax_image_free", "rebax_image_draw",
+        "rebax_quit", "rebax_game_start", "rebax_game_update", "rebax_game_stop",
+        "rebax_vec2_t", "rebax_transform2d_t", "rebax_image_t",
+        "auto", "bool", "break", "case", "char", "class", "const", "continue", "double", "else",
+        "enum", "float", "for", "if", "int", "namespace", "return", "sizeof", "static", "struct",
+        "switch", "typedef", "unsigned", "void", "while"
+    };
+    if (g_cursor == g_comp_cursor && g_length == g_comp_length) return;
+    g_comp_cursor = g_cursor;
+    g_comp_length = g_length;
     size_t start = g_cursor;
-    int i;
-    while (start > 0 && (isalnum((unsigned char)g_text[start - 1]) || g_text[start - 1] == '_')) start--;
-    if (g_cursor - start >= sizeof(g_completion_prefix)) { g_completion_count = 0; return; }
+    while (start > 0 && is_word_char(g_text[start - 1])) start--;
+    g_completion_count = 0;
+    if (g_cursor - start == 0 || g_cursor - start >= sizeof(g_completion_prefix)) { g_completion_prefix[0] = '\0'; return; }
     memcpy(g_completion_prefix, g_text + start, g_cursor - start);
     g_completion_prefix[g_cursor - start] = '\0';
-    g_completion_count = 0;
-    if (!g_completion_prefix[0]) return;
-    for (i = 0; i < (int)(sizeof(words) / sizeof(words[0])) && g_completion_count < 8; i++)
-        if (strncmp(words[i], g_completion_prefix, strlen(g_completion_prefix)) == 0 && strcmp(words[i], g_completion_prefix) != 0)
-            snprintf(g_completion[g_completion_count++], sizeof(g_completion[0]), "%s", words[i]);
+    for (size_t i = 0; i < sizeof(words) / sizeof(words[0]); i++) add_candidate(words[i]);
+    for (size_t i = 0; i < g_length && g_completion_count < 8;) {
+        if (!is_word_char(g_text[i]) || isdigit((unsigned char)g_text[i])) { i++; continue; }
+        size_t j = i;
+        while (j < g_length && is_word_char(g_text[j])) j++;
+        if (i != start && j - i < sizeof(g_completion[0]) && j - i >= 3) {
+            char word[64];
+            memcpy(word, g_text + i, j - i);
+            word[j - i] = '\0';
+            add_candidate(word);
+        }
+        i = j;
+    }
 }
-static void accept_completion(void) {
+static void accept_completion(int index) {
     size_t prefix = strlen(g_completion_prefix);
-    if (g_completion_count == 0 || g_cursor < prefix) return;
+    if (index < 0 || index >= g_completion_count || g_cursor < prefix) return;
+    char word[64];
+    snprintf(word, sizeof(word), "%s", g_completion[index]);
+    begin_edit(4);
     g_cursor -= prefix;
     g_anchor = g_cursor;
-    insert_bytes(g_completion[0], strlen(g_completion[0]));
+    {
+        size_t end = g_cursor + prefix;
+        memmove(g_text + g_cursor, g_text + end, g_length - end + 1);
+        g_length -= prefix;
+    }
+    insert_bytes(word, strlen(word));
     g_completion_count = 0;
+    g_comp_cursor = (size_t)-1;
+    g_follow_cursor = 1;
+    invalidate_view();
 }
 static void update_matching_bracket(void) {
     size_t at = g_cursor > 0 ? g_cursor - 1 : g_cursor, p;
@@ -253,6 +370,13 @@ static void normalize_view(void) {
 
 static void edit_input(void) {
     const char *typed = window_text_input_this_frame();
+    if (window_key_just_pressed_undo()) { do_undo(); return; }
+    if (window_key_just_pressed_redo()) { do_redo(); return; }
+    if (window_key_just_pressed_select_all()) { g_anchor = 0; g_cursor = g_length; return; }
+    if (window_key_just_pressed_enter() || (window_key_just_pressed_tab() && g_completion_count == 0) || window_key_just_pressed_paste() || window_key_just_pressed_cut()) begin_edit(4);
+    else if (window_key_just_pressed_backspace()) begin_edit(2);
+    else if (window_key_just_pressed_delete()) begin_edit(3);
+    else if (typed && typed[0]) begin_edit(1);
     if (typed && typed[0]) {
         insert_bytes(typed, strlen(typed));
     }
@@ -265,7 +389,7 @@ static void edit_input(void) {
         insert_bytes(indent, n);
     }
     if (window_key_just_pressed_tab()) {
-        if (g_completion_count > 0) accept_completion();
+        if (g_completion_count > 0) { g_last_kind = 0; accept_completion(0); }
         else insert_bytes("    ", 4);
     }
     if (window_key_just_pressed_backspace()) {
@@ -320,6 +444,9 @@ static void load_file(const char *path) {
     size_t n = fread(g_text, 1, CODE_EDITOR_CAPACITY - 1, f);
     fclose(f);
     g_text[n] = '\0';
+    free_states(g_undo, &g_undo_count);
+    free_states(g_redo, &g_redo_count);
+    g_comp_cursor = (size_t)-1;
     g_length = n;
     g_cursor = g_anchor = 0;
     g_scroll_line = g_scroll_x = 0;
@@ -388,6 +515,9 @@ static void save_file(void) {
 
 static void new_file(void) {
     g_text[0] = '\0';
+    free_states(g_undo, &g_undo_count);
+    free_states(g_redo, &g_redo_count);
+    g_comp_cursor = (size_t)-1;
     g_length = 0;
     g_cursor = g_anchor = 0;
     g_scroll_line = g_scroll_x = 0;
@@ -427,11 +557,11 @@ static int is_cpp_keyword(const char *text, int start, int end) {
 
 static void colorize_line(const char *text, int length, unsigned char *rgb,
                           int *in_block_comment) {
-    color_bytes(rgb, 0, length, 210, 216, 225);
+    color_bytes(rgb, 0, length, 212, 218, 228);
     int first = 0;
     while (first < length && isspace((unsigned char)text[first])) first++;
     if (first < length && text[first] == '#') {
-        color_bytes(rgb, first, length, 190, 145, 245);
+        color_bytes(rgb, first, length, 198, 134, 192);
         return;
     }
     for (int i = 0; i < length;) {
@@ -440,11 +570,11 @@ static void colorize_line(const char *text, int length, unsigned char *rgb,
             while (i + 1 < length && !(text[i] == '*' && text[i + 1] == '/')) i++;
             if (i + 1 < length) { i += 2; *in_block_comment = 0; }
             else i = length;
-            color_bytes(rgb, start, i, 120, 165, 130);
+            color_bytes(rgb, start, i, 106, 153, 105);
             continue;
         }
         if (i + 1 < length && text[i] == '/' && text[i + 1] == '/') {
-            color_bytes(rgb, i, length, 120, 165, 130);
+            color_bytes(rgb, i, length, 106, 153, 105);
             break;
         }
         if (i + 1 < length && text[i] == '/' && text[i + 1] == '*') {
@@ -453,7 +583,7 @@ static void colorize_line(const char *text, int length, unsigned char *rgb,
             while (i + 1 < length && !(text[i] == '*' && text[i + 1] == '/')) i++;
             if (i + 1 < length) i += 2;
             else { i = length; *in_block_comment = 1; }
-            color_bytes(rgb, start, i, 120, 165, 130);
+            color_bytes(rgb, start, i, 106, 153, 105);
             continue;
         }
         if (text[i] == '"' || text[i] == '\'') {
@@ -463,7 +593,7 @@ static void colorize_line(const char *text, int length, unsigned char *rgb,
                 if (text[i] == '\\' && i + 1 < length) { i += 2; continue; }
                 if (text[i++] == quote) break;
             }
-            color_bytes(rgb, start, i, 224, 171, 116);
+            color_bytes(rgb, start, i, 229, 168, 120);
             continue;
         }
         if (isalpha((unsigned char)text[i]) || text[i] == '_') {
@@ -471,15 +601,15 @@ static void colorize_line(const char *text, int length, unsigned char *rgb,
             while (i < length && (isalnum((unsigned char)text[i]) || text[i] == '_')) i++;
             int next = i;
             while (next < length && isspace((unsigned char)text[next])) next++;
-            if (is_cpp_keyword(text, start, i)) color_bytes(rgb, start, i, 195, 155, 250);
-            else if (next < length && text[next] == '(') color_bytes(rgb, start, i, 120, 190, 240);
-            else if (isupper((unsigned char)text[start])) color_bytes(rgb, start, i, 105, 195, 190);
+            if (is_cpp_keyword(text, start, i)) color_bytes(rgb, start, i, 86, 156, 214);
+            else if (next < length && text[next] == '(') color_bytes(rgb, start, i, 226, 215, 150);
+            else if (isupper((unsigned char)text[start])) color_bytes(rgb, start, i, 78, 201, 176);
             continue;
         }
         if (isdigit((unsigned char)text[i])) {
             int start = i++;
             while (i < length && (isalnum((unsigned char)text[i]) || text[i] == '.' || text[i] == '_')) i++;
-            color_bytes(rgb, start, i, 145, 190, 245);
+            color_bytes(rgb, start, i, 181, 206, 168);
             continue;
         }
         i++;
@@ -514,7 +644,22 @@ static void rebuild_line_cache(void) {
         p = end + 1;
     }
     g_cached_line_count = line;
+    g_max_line_w = 0;
+    for (int i = 0; i < line; i++) if (g_line_width[i] > g_max_line_w) g_max_line_w = g_line_width[i];
     g_cache_dirty = 0;
+}
+
+static size_t position_at(int x, int top_area, int px, int py) {
+    int line = g_scroll_line + (py - top_area) / CODE_EDITOR_LINE_HEIGHT;
+    int total = line_count();
+    if (line >= total) line = total - 1;
+    if (line < 0) line = 0;
+    size_t start = line_start(line);
+    size_t end = line_end(start);
+    int target = px - x - CODE_EDITOR_GUTTER_WIDTH - 8 + g_scroll_x;
+    size_t pos = start;
+    while (pos < end && prefix_width(start, pos + 1 - start) - 3 < target) pos++;
+    return pos;
 }
 
 static int button_hit(int index, int x, int y, int w) {
@@ -534,50 +679,77 @@ void code_editor_update(int x, int y, int w, int h) {
     if (!g_active) return;
     int mx = window_mouse_x(), my = window_mouse_y();
     g_hover_button = -1;
-    for (int i = 0; i < 4; i++) if (button_hit(i, x, y, w)) g_hover_button = i;
+    for (int i = 0; i < CODE_EDITOR_BUTTONS; i++) if (button_hit(i, x, y, w)) g_hover_button = i;
     g_view_w = w;
     g_view_h = h;
     int top_area = y + CODE_EDITOR_TOOLBAR_HEIGHT + CODE_EDITOR_TAB_HEIGHT;
     int bottom_area = y + h - CODE_EDITOR_STATUS_HEIGHT;
     int in_area = mx >= x && mx < x + w && my >= top_area && my < bottom_area;
+    int touch = window_pointer_is_touch();
+    int popup_hit = -1;
+    if (g_has_focus && g_completion_count > 0 && g_popup_w > 0 && mx >= g_popup_x && mx < g_popup_x + g_popup_w &&
+        my >= g_popup_y && my < g_popup_y + g_popup_h) {
+        popup_hit = (my - g_popup_y - 3) / 20;
+        if (popup_hit >= g_completion_count) popup_hit = g_completion_count - 1;
+        if (popup_hit < 0) popup_hit = 0;
+    }
     if (window_mouse_left_just_pressed()) {
-        if (g_hover_button == 0) new_file();
-        else if (g_hover_button == 1) open_file_dialog();
-        else if (g_hover_button == 2) save_file();
-        else if (g_hover_button == 3) file_manager_open_save(FILE_MANAGER_ROOT_SOURCE, g_title, on_save_file, NULL);
-        if (!in_area) g_has_focus = 0;
-        g_press_active = in_area;
-        g_press_x = mx;
-        g_press_y = my;
-        g_dragged = 0;
-        g_drag_accum = 0;
+        if (popup_hit >= 0) {
+            accept_completion(popup_hit);
+            g_press_active = 0;
+        } else {
+            if (g_hover_button == 0) new_file();
+            else if (g_hover_button == 1) open_file_dialog();
+            else if (g_hover_button == 2) save_file();
+            else if (g_hover_button == 3) file_manager_open_save(FILE_MANAGER_ROOT_SOURCE, g_title, on_save_file, NULL);
+            else if (g_hover_button == 4) do_undo();
+            else if (g_hover_button == 5) do_redo();
+            if (!in_area && g_hover_button < 4) g_has_focus = 0;
+            g_press_active = in_area;
+            g_press_x = mx;
+            g_press_y = my;
+            g_dragged = 0;
+            g_drag_accum = 0;
+            g_long_press = 0;
+            g_press_tick = window_ticks();
+            if (in_area && !touch) {
+                g_has_focus = 1;
+                g_cursor = g_anchor = position_at(x, top_area, mx, my);
+                g_preferred_column = 0;
+                g_long_press = 1;
+            }
+        }
     }
     if (g_press_active && window_mouse_left_down()) {
-        int moved_y = my - g_press_y, moved_x = mx - g_press_x;
-        if (!g_dragged && (moved_y > 14 || moved_y < -14 || moved_x > 14 || moved_x < -14)) g_dragged = 1;
-        if (g_dragged) {
-            g_drag_accum -= window_mouse_delta_y();
-            while (g_drag_accum >= CODE_EDITOR_LINE_HEIGHT) { g_scroll_line++; g_drag_accum -= CODE_EDITOR_LINE_HEIGHT; }
-            while (g_drag_accum <= -CODE_EDITOR_LINE_HEIGHT) { g_scroll_line--; g_drag_accum += CODE_EDITOR_LINE_HEIGHT; }
-            g_scroll_x -= window_mouse_delta_x();
-            if (g_scroll_x < 0) g_scroll_x = 0;
+        if (g_long_press) {
+            g_cursor = position_at(x, top_area, mx, my);
+        } else {
+            int moved_y = my - g_press_y, moved_x = mx - g_press_x;
+            if (!g_dragged && (moved_y > 14 || moved_y < -14 || moved_x > 14 || moved_x < -14)) g_dragged = 1;
+            if (!g_dragged && window_ticks() - g_press_tick > CODE_EDITOR_LONG_PRESS_MS) {
+                size_t pos = position_at(x, top_area, g_press_x, g_press_y);
+                size_t a = pos, b = pos;
+                while (a > 0 && is_word_char(g_text[a - 1])) a--;
+                while (b < g_length && is_word_char(g_text[b])) b++;
+                g_anchor = a;
+                g_cursor = b;
+                g_has_focus = 1;
+                g_long_press = 1;
+            }
+            if (g_dragged) {
+                g_drag_accum -= window_mouse_delta_y();
+                while (g_drag_accum >= CODE_EDITOR_LINE_HEIGHT) { g_scroll_line++; g_drag_accum -= CODE_EDITOR_LINE_HEIGHT; }
+                while (g_drag_accum <= -CODE_EDITOR_LINE_HEIGHT) { g_scroll_line--; g_drag_accum += CODE_EDITOR_LINE_HEIGHT; }
+                g_scroll_x -= window_mouse_delta_x();
+            }
         }
     }
     if (g_press_active && !window_mouse_left_down()) {
         g_press_active = 0;
-        if (!g_dragged) {
+        if (!g_dragged && !g_long_press) {
             g_has_focus = 1;
-            int clicked_line = g_scroll_line + (g_press_y - top_area) / CODE_EDITOR_LINE_HEIGHT;
-            if (clicked_line >= line_count()) clicked_line = line_count() - 1;
-            if (clicked_line >= 0) {
-                size_t start = line_start(clicked_line);
-                size_t end = line_end(start);
-                int target = g_press_x - x - CODE_EDITOR_GUTTER_WIDTH - 8 + g_scroll_x;
-                size_t pos = start;
-                while (pos < end && prefix_width(start, pos + 1 - start) - 3 < target) pos++;
-                g_cursor = g_anchor = pos;
-                g_preferred_column = 0;
-            }
+            g_cursor = g_anchor = position_at(x, top_area, g_press_x, g_press_y);
+            g_preferred_column = 0;
         }
     }
     int editor_top = y + CODE_EDITOR_TOOLBAR_HEIGHT + CODE_EDITOR_TAB_HEIGHT;
@@ -592,7 +764,12 @@ void code_editor_update(int x, int y, int w, int h) {
         if (g_scroll_line > max_line - visible + 1) g_scroll_line = max_line - visible + 1;
         if (g_scroll_line < 0) g_scroll_line = 0;
     }
-    if (g_scroll_x < 0) g_scroll_x = 0;
+    {
+        int max_x = g_max_line_w - (w - CODE_EDITOR_GUTTER_WIDTH - 16) + 40;
+        if (max_x < 0) max_x = 0;
+        if (g_scroll_x > max_x) g_scroll_x = max_x;
+        if (g_scroll_x < 0) g_scroll_x = 0;
+    }
     if (g_has_focus) {
         window_start_text_input();
         edit_input();
@@ -611,8 +788,8 @@ void code_editor_draw(int x, int y, int w, int h) {
     ui_color_t active_line = UI_COLOR_SURFACE_CONTROL;
     window_fill_rect(x, y, w, h, panel.r, panel.g, panel.b);
     window_fill_rect(x, y, w, CODE_EDITOR_TOOLBAR_HEIGHT, toolbar.r, toolbar.g, toolbar.b);
-    const char *buttons[4] = { "New", "Open", "Save", "Save As" };
-    for (int i = 0; i < 4; i++) {
+    const char *buttons[CODE_EDITOR_BUTTONS] = { "New", "Open", "Save", "Save As", "Undo", "Redo" };
+    for (int i = 0; i < CODE_EDITOR_BUTTONS; i++) {
         int bx = x + 8 + i * (CODE_EDITOR_BUTTON_WIDTH + CODE_EDITOR_BUTTON_GAP);
         ui_color_t c = (i == g_hover_button) ? UI_COLOR_BUTTON_BLUE : UI_COLOR_GRAY_MUTED;
         window_fill_rect(bx, y + 4, CODE_EDITOR_BUTTON_WIDTH, CODE_EDITOR_TOOLBAR_HEIGHT - 8, c.r, c.g, c.b);
@@ -637,10 +814,24 @@ void code_editor_draw(int x, int y, int w, int h) {
         int ly = top + row * CODE_EDITOR_LINE_HEIGHT;
         if (line == current) window_fill_rect(x + CODE_EDITOR_GUTTER_WIDTH, ly, w - CODE_EDITOR_GUTTER_WIDTH, CODE_EDITOR_LINE_HEIGHT,
                                                 active_line.r, active_line.g, active_line.b);
-        if (g_matching_position >= 0 && g_matching_position >= (int)line_start(line) && g_matching_position <= (int)line_end(line)) {
-            size_t match_start = line_start(line);
-            int match_x = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(match_start, (size_t)g_matching_position - match_start) - g_scroll_x;
-            window_fill_rect(match_x, ly + 2, 12, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+        {
+            size_t ls = line_start(line), le = line_end(ls);
+            size_t sa = g_anchor < g_cursor ? g_anchor : g_cursor, sb = g_anchor < g_cursor ? g_cursor : g_anchor;
+            if (sa != sb && sb > ls && sa <= le) {
+                size_t from = sa > ls ? sa : ls, to = sb < le ? sb : le;
+                int x1 = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(ls, from - ls) - g_scroll_x;
+                int x2 = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(ls, to - ls) - g_scroll_x;
+                if (sb > le) x2 += 6;
+                if (x2 > x1) window_fill_rect(x1, ly, x2 - x1, CODE_EDITOR_LINE_HEIGHT, 0x26, 0x4F, 0x78);
+            }
+            if (g_matching_position >= 0 && g_matching_position >= (int)ls && g_matching_position <= (int)le) {
+                int mx0 = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(ls, (size_t)g_matching_position - ls) - g_scroll_x;
+                int mw = prefix_width(ls, (size_t)g_matching_position - ls + 1) - prefix_width(ls, (size_t)g_matching_position - ls);
+                window_fill_rect(mx0, ly + 2, mw, 1, UI_RGB(UI_COLOR_CODE_CYAN));
+                window_fill_rect(mx0, ly + CODE_EDITOR_LINE_HEIGHT - 3, mw, 1, UI_RGB(UI_COLOR_CODE_CYAN));
+                window_fill_rect(mx0, ly + 2, 1, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+                window_fill_rect(mx0 + mw - 1, ly + 2, 1, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+            }
         }
         if (g_line_text[line]) window_draw_texture(g_line_text[line], x + CODE_EDITOR_GUTTER_WIDTH + 8 - g_scroll_x, ly + (CODE_EDITOR_LINE_HEIGHT - g_line_height[line]) / 2,
                                                     g_line_width[line], g_line_height[line]);
@@ -655,9 +846,15 @@ void code_editor_draw(int x, int y, int w, int h) {
     int cx = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(line_start_for_cursor(), g_cursor - line_start_for_cursor()) - g_scroll_x;
     int cy = top + (current - g_scroll_line) * CODE_EDITOR_LINE_HEIGHT;
     if (g_has_focus && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH) window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+    g_popup_w = 0;
     if (g_has_focus && g_completion_count > 0 && cy >= top && cy < bottom) {
         int popup_y = cy + CODE_EDITOR_LINE_HEIGHT;
-        window_fill_rect(cx, popup_y, 230, g_completion_count * 20 + 6, UI_RGB(UI_COLOR_SURFACE_CONTROL));
+        int popup_x = cx + 240 > x + w ? x + w - 240 : cx;
+        if (popup_x < x + CODE_EDITOR_GUTTER_WIDTH) popup_x = x + CODE_EDITOR_GUTTER_WIDTH;
+        if (popup_y + g_completion_count * 20 + 6 > bottom) popup_y = cy - g_completion_count * 20 - 6;
+        g_popup_x = popup_x; g_popup_y = popup_y; g_popup_w = 230; g_popup_h = g_completion_count * 20 + 6;
+        cx = popup_x;
+        window_fill_rect(popup_x, popup_y, 230, g_completion_count * 20 + 6, UI_RGB(UI_COLOR_SURFACE_CONTROL));
         for (int i = 0; i < g_completion_count; i++) {
             int tw = 0, th = 0;
             window_texture_t *completion = ui_make_text_texture(g_completion[i], FONT_WEIGHT_MONO, 11, &tw, &th);
@@ -675,7 +872,9 @@ void code_editor_draw(int x, int y, int w, int h) {
 
 void code_editor_shutdown(void) {
     free_line_cache();
-    for (int i = 0; i < 4; i++) if (g_button_text[i]) { window_destroy_texture(g_button_text[i]); g_button_text[i] = NULL; }
+    free_states(g_undo, &g_undo_count);
+    free_states(g_redo, &g_redo_count);
+    for (int i = 0; i < CODE_EDITOR_BUTTONS; i++) if (g_button_text[i]) { window_destroy_texture(g_button_text[i]); g_button_text[i] = NULL; }
     if (g_tab_text) { window_destroy_texture(g_tab_text); g_tab_text = NULL; }
     g_active = 0;
     window_stop_text_input();

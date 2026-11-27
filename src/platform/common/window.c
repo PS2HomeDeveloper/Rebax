@@ -183,6 +183,7 @@ static int g_key_up        = 0;
 static int g_key_down      = 0;
 static int g_key_tab       = 0;
 static int g_key_save      = 0;
+static int g_key_undo = 0, g_key_redo = 0, g_key_select_all = 0;
 static int g_key_f         = 0;
 static int g_key_escape    = 0;
 
@@ -209,7 +210,7 @@ static void android_enable_rotation_fade(void) {
             jclass attrs_class = (*env)->GetObjectClass(env, attrs);
             jfieldID field = (*env)->GetFieldID(env, attrs_class, "rotationAnimation", "I");
             if (field != NULL) {
-                (*env)->SetIntField(env, attrs, field, 2);
+                (*env)->SetIntField(env, attrs, field, 1);
                 (*env)->CallVoidMethod(env, win, set_attrs, attrs);
             }
             (*env)->DeleteLocalRef(env, attrs_class);
@@ -295,6 +296,7 @@ void window_poll_events(void) {
     g_key_backspace = g_key_delete = g_key_left = g_key_right = 0;
     g_key_home = g_key_end = g_key_copy = g_key_paste = g_key_cut = 0;
     g_key_enter = g_key_up = g_key_down = g_key_tab = g_key_save = 0;
+    g_key_undo = g_key_redo = g_key_select_all = 0;
     g_key_f = 0;
     g_key_escape = 0;
 
@@ -406,6 +408,9 @@ void window_poll_events(void) {
                 case SDLK_v: if (ctrl) g_key_paste = 1; break;
                 case SDLK_x: if (ctrl) g_key_cut   = 1; break;
                 case SDLK_s: if (ctrl) g_key_save = 1; break;
+                case SDLK_z: if (ctrl) { if (SDL_GetModState() & KMOD_SHIFT) g_key_redo = 1; else g_key_undo = 1; } break;
+                case SDLK_y: if (ctrl) g_key_redo = 1; break;
+                case SDLK_a: if (ctrl) g_key_select_all = 1; break;
                 case SDLK_f: g_key_f = 1; break;
                 case SDLK_ESCAPE: g_key_escape = 1; break;
                 default: break;
@@ -669,6 +674,9 @@ int window_key_just_pressed_up(void)         { return g_key_up; }
 int window_key_just_pressed_down(void)       { return g_key_down; }
 int window_key_just_pressed_tab(void)        { return g_key_tab; }
 int window_key_just_pressed_save(void)       { return g_key_save; }
+int window_key_just_pressed_undo(void)       { return g_key_undo; }
+int window_key_just_pressed_redo(void)       { return g_key_redo; }
+int window_key_just_pressed_select_all(void) { return g_key_select_all; }
 
 int window_key_down_w(void) { return SDL_GetKeyboardState(NULL)[SDL_SCANCODE_W]; }
 int window_key_down_a(void) { return SDL_GetKeyboardState(NULL)[SDL_SCANCODE_A]; }

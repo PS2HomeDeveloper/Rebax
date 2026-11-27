@@ -96,6 +96,9 @@ int window_key_just_pressed_up(void);
 int window_key_just_pressed_down(void);
 int window_key_just_pressed_tab(void);
 int window_key_just_pressed_save(void);
+int window_key_just_pressed_undo(void);
+int window_key_just_pressed_redo(void);
+int window_key_just_pressed_select_all(void);
 
 int window_key_down_w(void);
 int window_key_down_a(void);
