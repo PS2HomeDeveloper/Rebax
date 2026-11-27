@@ -15,7 +15,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <SDL.h>
+#include <SDL_timer.h>
 
 #include "platform/common/window.h"
 #include "editor/panels/project_center.h"
