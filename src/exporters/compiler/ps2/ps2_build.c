@@ -432,6 +432,8 @@ static int ee_toolset_init(ee_toolset_t *t, const ps2_build_config_t *cfg) {
 
     sb_init(&t->cxxflags);
     sb_puts(&t->cxxflags, t->cflags.data ? t->cflags.data : "");
+    sb_arg(&t->cxxflags, "-fno-exceptions");
+    sb_arg(&t->cxxflags, "-fno-rtti");
 
     sb_init(&t->asflags);
     sb_arg(&t->asflags, "-G0");

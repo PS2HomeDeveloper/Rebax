@@ -32,6 +32,7 @@ static const char *SCENE_RUNTIME_HEADER =
     "} node_property_value_t;\n"
     "\n"
     "typedef struct {\n"
+    "    const char *name;\n"
     "    const node_interface_t *iface;\n"
     "    const node_property_value_t *values; /* طولها iface->property_count - NULL لو صفر */\n"
     "} scene_node_entry_t;\n"

@@ -49,7 +49,7 @@ int project_type_parse(const char *id, project_type_t *out) { int v; if (!parse_
 const char *dev_system_id(dev_system_t system) { return (unsigned)system < DEV_SYSTEM_COUNT ? SYSTEM_IDS[system] : SYSTEM_IDS[0]; }
 const char *dev_system_label(dev_system_t system) { return (unsigned)system < DEV_SYSTEM_COUNT ? SYSTEM_LABELS[system] : SYSTEM_LABELS[0]; }
 int dev_system_parse(const char *id, dev_system_t *out) { int v; if (!parse_id(SYSTEM_IDS, DEV_SYSTEM_COUNT, id, &v)) return 0; *out = (dev_system_t)v; return 1; }
-int dev_system_is_available(dev_system_t system) { return system == DEV_SYSTEM_NODES; }
+int dev_system_is_available(dev_system_t system) { return system == DEV_SYSTEM_NODES || system == DEV_SYSTEM_NATIVE; }
 
 const char *export_method_id(export_method_t method) { return (unsigned)method < EXPORT_METHOD_COUNT ? METHOD_IDS[method] : METHOD_IDS[0]; }
 int export_method_parse(const char *id, export_method_t *out) { int v; if (!parse_id(METHOD_IDS, EXPORT_METHOD_COUNT, id, &v)) return 0; *out = (export_method_t)v; return 1; }

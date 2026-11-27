@@ -24,6 +24,7 @@ typedef union {
 } node_property_value_t;
 
 typedef struct {
+    const char *name;
     const node_interface_t *iface;
     const node_property_value_t *values;
 } scene_node_entry_t;

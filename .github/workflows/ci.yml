@@ -79,6 +79,14 @@ jobs:
             *) test -d "${base}-${{ matrix.arch }}" ;;
           esac
 
+      - name: Check Native sample headlessly
+        if: matrix.platform == 'linux' && matrix.arch == 'x86_64'
+        shell: bash
+        run: |
+          engine=$(find build/output -type f -perm -111 -name 'Rebax-Engine-*' | head -n 1)
+          test -n "$engine"
+          "$engine" check tests/native_sample linux
+
       - name: Upload the build
         if: matrix.platform != 'android'
         uses: actions/upload-artifact@v4

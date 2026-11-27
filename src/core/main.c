@@ -14,6 +14,8 @@
  */
 
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "platform/common/window.h"
 #include "editor/panels/project_center.h"
@@ -31,10 +33,46 @@
 #include "core/i18n.h"
 #include "editor/panels/settings_page.h"
 #include "platform/android/storage.h"
+#include "project/project_file.h"
+#include "project/current_project.h"
+#include "exporters/compiler/modern/modern_exporter.h"
+#include "exporters/compiler/ps1/ps1_exporter.h"
+#include "exporters/compiler/ps2/ps2_exporter.h"
+
+static int headless_command(int argc, char **argv) {
+    if (argc < 2 || (strcmp(argv[1], "export") != 0 && strcmp(argv[1], "check") != 0)) return -1;
+    if (argc < 4) { fprintf(stderr, "Usage: %s export <project_dir> <platform> <architecture|all> <output_dir> [release]\n", argv[0]); return 2; }
+    project_settings_t settings; char error[256];
+    if (!project_file_load(argv[2], &settings, error, sizeof(error))) { fprintf(stderr, "[rebax] check failed: %s\n", error); return 1; }
+    current_project_set(argv[2], &settings);
+    if (strcmp(argv[1], "check") == 0) { printf("Rebax project is valid: %s (%s)\n", settings.name, project_type_id(settings.type)); current_project_clear(); return 0; }
+    if (argc < 6) { fprintf(stderr, "[rebax] export requires output_dir.\n"); current_project_clear(); return 2; }
+    const char *platform = argv[3], *arch = argv[4], *out = argv[5];
+    int release = argc > 6 && strcmp(argv[6], "release") == 0;
+    int started = 0;
+    if (!strcmp(platform, "modern") || !strcmp(platform, "linux") || !strcmp(platform, "windows") || !strcmp(platform, "android") || !strcmp(platform, "macos") || !strcmp(platform, "ios")) {
+        if (strcmp(platform, "modern") == 0) platform = "linux";
+        if (!strcmp(arch, "all")) {
+            static const char *all_linux[] = {"arm64", "arm", "x86", "x86_64"};
+            static const char *all_android[] = {"arm64-v8a", "armeabi-v7a", "x86", "x86_64"};
+            const char *const *list = !strcmp(platform, "android") ? all_android : all_linux;
+            int count = !strcmp(platform, "android") ? 4 : 4;
+            started = modern_export_start_multi(settings.name, release, out, platform, list, count);
+        } else started = modern_export_start(settings.name, release, out, platform, arch);
+        while (modern_export_get_status() == MODERN_EXPORT_RUNNING) { modern_export_update(); usleep(10000); }
+        int ok = modern_export_get_status() == MODERN_EXPORT_SUCCESS; current_project_clear(); return started && ok ? 0 : 1;
+    }
+    if (!strcmp(platform, "ps1")) started = ps1_export_start(settings.name, release, out);
+    else if (!strcmp(platform, "ps2")) started = ps2_export_start(settings.name, release, out);
+    else { fprintf(stderr, "[rebax] unsupported platform: %s\n", platform); current_project_clear(); return 2; }
+    while (started && ((platform[2] == '1' && ps1_export_get_status() == PS1_EXPORT_STATUS_RUNNING) || (platform[2] == '2' && ps2_export_get_status() == PS2_EXPORT_STATUS_RUNNING))) { if (platform[2] == '1') ps1_export_update(); else ps2_export_update(); usleep(10000); }
+    int ok = (platform[2] == '1' ? ps1_export_get_status() == PS1_EXPORT_STATUS_SUCCESS : ps2_export_get_status() == PS2_EXPORT_STATUS_SUCCESS);
+    current_project_clear(); return started && ok ? 0 : 1;
+}
 
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
+    int headless = headless_command(argc, argv);
+    if (headless >= 0) return headless;
     if (!window_init("Rebax Engine", 900, 560)) {
         return 1;
     }

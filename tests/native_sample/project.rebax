@@ -1,0 +1,9 @@
+project_format=1
+name=NativeSample
+engine_version=v0.1.0
+project_type=modern
+dev_system=native
+export_method=compiler
+platforms=linux,windows,android,macos,ios
+display_width=640
+display_height=448

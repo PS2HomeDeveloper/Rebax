@@ -12,6 +12,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#define _POSIX_C_SOURCE 200809L
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +29,10 @@ static char *g_command;
 
 static int source_file(const char *name) {
     size_t n = strlen(name);
-    return n > 2 && strcmp(name + n - 2, ".c") == 0;
+    return (n > 2 && strcmp(name + n - 2, ".c") == 0) ||
+           (n > 4 && strcmp(name + n - 4, ".cpp") == 0) ||
+           (n > 3 && strcmp(name + n - 3, ".cc") == 0) ||
+           (n > 4 && strcmp(name + n - 4, ".cxx") == 0);
 }
 
 static void append(char *out, size_t cap, const char *text) {
@@ -36,22 +40,26 @@ static void append(char *out, size_t cap, const char *text) {
     if (have + add + 1 < cap) memcpy(out + have, text, add + 1);
 }
 
-static void append_sources(const char *root, char *out, size_t cap) {
+static int append_sources(const char *root, char *out, size_t cap) {
     DIR *dir = opendir(root);
     struct dirent *entry;
-    if (dir == NULL) return;
+    if (dir == NULL) return 0;
+    int has_cpp = 0;
     while ((entry = readdir(dir)) != NULL) {
         char path[PS1_PATH];
         struct stat st;
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
         snprintf(path, sizeof(path), "%s/%s", root, entry->d_name);
         if (stat(path, &st) != 0) continue;
-        if (S_ISDIR(st.st_mode)) append_sources(path, out, cap);
+        if (S_ISDIR(st.st_mode)) has_cpp |= append_sources(path, out, cap);
         else if (S_ISREG(st.st_mode) && source_file(entry->d_name)) {
+            size_t n = strlen(entry->d_name);
+            if ((n > 4 && strcmp(entry->d_name + n - 4, ".cpp") == 0) || (n > 3 && strcmp(entry->d_name + n - 3, ".cc") == 0) || (n > 4 && strcmp(entry->d_name + n - 4, ".cxx") == 0)) has_cpp = 1;
             append(out, cap, " \""); append(out, cap, path); append(out, cap, "\"");
         }
     }
     closedir(dir);
+    return has_cpp;
 }
 
 static void quote_arg(char *out, size_t cap, const char *value) {
@@ -71,7 +79,8 @@ int ps1_build_start(const ps1_build_config_t *config) {
     snprintf(include, sizeof(include), " -I%s/include/libpsn00b", config->sdk_standard_root); append(command, sizeof(command), include);
     snprintf(include, sizeof(include), " -I%s/include/libpsn00b", config->sdk_graphics_root); append(command, sizeof(command), include);
     for (int i = 0; i < config->inc_count; i++) { append(command, sizeof(command), " "); append(command, sizeof(command), config->incs[i]); }
-    append_sources(config->work_dir, command, sizeof(command));
+    int has_cpp = append_sources(config->work_dir, command, sizeof(command));
+    if (has_cpp) append(command, sizeof(command), " -fno-exceptions -fno-rtti");
     snprintf(include, sizeof(include), " -T%s/lib/libpsn00b/ldscripts/exe.ld -L%s/lib/libpsn00b/release -L%s/lib/libpsn00b/release", config->sdk_standard_root, config->sdk_standard_root, config->sdk_graphics_root);
     append(command, sizeof(command), include);
     append(command, sizeof(command), " -static -Wl,--gc-sections -o "); quote_arg(command, sizeof(command), config->output);

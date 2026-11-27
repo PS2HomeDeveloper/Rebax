@@ -42,6 +42,7 @@
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 
 #include "exporters/common/export_internal.h"
+#include "exporters/common/native_discovery.h"
 
 export_state_t g_state = EXPORT_STATE_IDLE;
 static int g_build_started;
@@ -232,6 +233,11 @@ void ps2_export_update(void) {
             }
             export_trace("trace: copying project sources");
             if (!export_project_copy_sources(project_root, src_dir)) {
+                g_state = EXPORT_STATE_FAILED;
+                return;
+            }
+            if (!export_native_finish(src_dir)) {
+                log_push("[exporter] FAILED: could not write the project hook file.");
                 g_state = EXPORT_STATE_FAILED;
                 return;
             }

@@ -31,6 +31,7 @@
 
 #include "exporters/common/export_internal.h"
 #include "exporters/common/node_source.h"
+#include "exporters/common/native_discovery.h"
 #include "filesystem/rebax_fs.h"
 #include "filesystem/storage_paths.h"
 #include "project/current_project.h"
@@ -259,7 +260,9 @@ static int sdk_index_for_source(const char *path) {
 static void build_compile_command(modern_compile_job_t *job) {
     job->command[0] = '\0';
     append_quoted(job->command, sizeof(job->command), g_modern_compiler);
-    modern_appendf(job->command, sizeof(job->command), " %s -c ", g_modern_compile_flags);
+    int is_cpp = strstr(job->source, ".cpp") != NULL || strstr(job->source, ".cc") != NULL || strstr(job->source, ".cxx") != NULL;
+    modern_appendf(job->command, sizeof(job->command), " %s %s -c ", g_modern_compile_flags,
+                   is_cpp ? "-x c++ -std=c++17 -fno-exceptions -fno-rtti" : "");
     append_quoted(job->command, sizeof(job->command), job->source);
     modern_appendf(job->command, sizeof(job->command), " -o ");
     append_quoted(job->command, sizeof(job->command), job->object);
@@ -284,12 +287,11 @@ static int add_compile_job(const char *source, const char *object, int sdk_index
 static void collect_source(const char *path, void *user_data) {
     (void)user_data;
     size_t length = strlen(path);
-    if (length >= 4 && strcmp(path + length - 4, ".cpp") == 0) {
-        log_pushf("[modern] FAILED: C++ source files are not supported by this C-only exporter: %s", path);
-        g_modern_status = MODERN_EXPORT_FAILED;
-        return;
-    }
-    if (length < 3 || strcmp(path + length - 2, ".c") != 0 || g_modern_status == MODERN_EXPORT_FAILED) return;
+    int is_c = length >= 2 && strcmp(path + length - 2, ".c") == 0;
+    int is_cpp = (length >= 4 && strcmp(path + length - 4, ".cpp") == 0) ||
+                 (length >= 3 && strcmp(path + length - 3, ".cc") == 0) ||
+                 (length >= 4 && strcmp(path + length - 4, ".cxx") == 0);
+    if ((!is_c && !is_cpp) || g_modern_status == MODERN_EXPORT_FAILED) return;
     int sdk_index = sdk_index_for_source(path);
     if (sdk_index >= 0) g_sdk_seen[sdk_index] = 1;
     if (sdk_index >= 0 && g_cache_ready) return;
@@ -477,6 +479,12 @@ static void prepare_export(void) {
         return;
     }
     if (!export_project_copy_sources(project_root, g_modern_source_dir)) {
+        g_modern_status = MODERN_EXPORT_FAILED;
+        return;
+    }
+    export_native_discover(g_modern_source_dir, g_modern_sdk_root);
+    if (!export_native_finish(g_modern_source_dir)) {
+        log_push("[modern] FAILED: could not write the project hook file.");
         g_modern_status = MODERN_EXPORT_FAILED;
         return;
     }

@@ -22,6 +22,9 @@
 
 #define MAX_ACTIVE_NODES 4096
 
+int rebax_runtime_register(const char *name, const node_interface_t *iface, void *instance);
+int rebax_runtime_visible(int node);
+
 __attribute__((weak)) int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
@@ -41,6 +44,7 @@ __attribute__((weak)) int main(int argc, char **argv) {
             if (instance != NULL) {
                 instances[active_count] = instance;
                 interfaces[active_count] = entry->iface;
+                rebax_runtime_register(entry->name, entry->iface, instance);
                 active_count++;
             }
         }
@@ -68,7 +72,7 @@ __attribute__((weak)) int main(int argc, char **argv) {
         if (renderer == NULL) { running = 0; break; }
         if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) != 0 || SDL_RenderClear(renderer) != 0) { running = 0; break; }
         for (int i = 0; i < active_count; i++) {
-            if (interfaces[i]->draw != NULL) interfaces[i]->draw(instances[i]);
+            if (interfaces[i]->draw != NULL && rebax_runtime_visible(i)) interfaces[i]->draw(instances[i]);
         }
         SDL_RenderPresent(renderer);
     }

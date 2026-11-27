@@ -1,0 +1,8 @@
+scene_version=1
+node_count=1
+
+[node 0]
+type=NativeScript
+name=MainScript
+prop:Source File=source/main.cpp
+prop:Script ID=main

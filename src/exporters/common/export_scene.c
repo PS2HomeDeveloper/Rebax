@@ -363,9 +363,9 @@ void export_scene_generate_from_file(const char *path) {
         char symbol[75];
         interface_symbol_name(node->type, symbol, sizeof(symbol));
         if (entry->property_count > 0) {
-            fprintf(g_codegen_main, "    { &%s, %s_%d_props },\n", symbol, scene_name, i);
+            fprintf(g_codegen_main, "    { \"%s\", &%s, %s_%d_props },\n", node->name, symbol, scene_name, i);
         } else {
-            fprintf(g_codegen_main, "    { &%s, NULL },\n", symbol);
+            fprintf(g_codegen_main, "    { \"%s\", &%s, NULL },\n", node->name, symbol);
         }
     }
     fprintf(g_codegen_main, "};\n\n");

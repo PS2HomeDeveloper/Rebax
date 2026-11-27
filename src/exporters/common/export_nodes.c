@@ -209,6 +209,20 @@ int export_nodes_copy_matched(const char *dest_src_dir) {
         if (!node_source_copy("rebax_sdk.h", sdk_dst)) return 0;
     }
 
+    {
+        static const char *REBAX_API_FILES[] = { "rebax.h", "rebax.hpp", "rebax.c" };
+        for (size_t i = 0; i < sizeof(REBAX_API_FILES) / sizeof(REBAX_API_FILES[0]); i++) {
+            char dst[1600];
+            snprintf(dst, sizeof(dst), "%s/%s", dest_src_dir, REBAX_API_FILES[i]);
+            if (!node_source_copy(REBAX_API_FILES[i], dst)) {
+                if (i == 1) continue;
+                log_pushf("[exporter] FAILED: the SDK package is missing %s; reinstall the SDK package.", REBAX_API_FILES[i]);
+                return 0;
+            }
+            scan_node_source_for_export_flags(REBAX_API_FILES[i]);
+        }
+    }
+
     if (node_source_is_modern()) {
         static const char *MODERN_RUNTIME_FILES[] = {
             "scene_runtime.h", "scene_runtime.c", "scene_loader_main.c",
