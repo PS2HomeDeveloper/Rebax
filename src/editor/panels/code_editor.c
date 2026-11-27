@@ -60,6 +60,10 @@ static int g_hover_button = -1;
 static int g_has_focus = 0;
 static int g_status_ticks = 0;
 static char g_status[160] = "Ready";
+static char g_completion[8][64];
+static int g_completion_count = 0;
+static char g_completion_prefix[64];
+static int g_matching_position = -1;
 
 static window_texture_t *g_button_text[4];
 static int g_button_w[4], g_button_h[4];
@@ -165,6 +169,50 @@ static void insert_bytes(const char *bytes, size_t count) {
     g_dirty = 1;
 }
 
+static void update_completion(void) {
+    static const char *const words[] = {"auto", "bool", "class", "const", "else", "for", "if", "int", "return", "struct", "void", "while", "rebax_game_start", "rebax_game_update", "rebax_game_stop", "rebax_log", "rebax_input_is_down", "rebax_scene_spawn"};
+    size_t start = g_cursor;
+    int i;
+    while (start > 0 && (isalnum((unsigned char)g_text[start - 1]) || g_text[start - 1] == '_')) start--;
+    if (g_cursor - start >= sizeof(g_completion_prefix)) { g_completion_count = 0; return; }
+    memcpy(g_completion_prefix, g_text + start, g_cursor - start);
+    g_completion_prefix[g_cursor - start] = '\0';
+    g_completion_count = 0;
+    if (!g_completion_prefix[0]) return;
+    for (i = 0; i < (int)(sizeof(words) / sizeof(words[0])) && g_completion_count < 8; i++)
+        if (strncmp(words[i], g_completion_prefix, strlen(g_completion_prefix)) == 0 && strcmp(words[i], g_completion_prefix) != 0)
+            snprintf(g_completion[g_completion_count++], sizeof(g_completion[0]), "%s", words[i]);
+}
+static void accept_completion(void) {
+    size_t prefix = strlen(g_completion_prefix);
+    if (g_completion_count == 0 || g_cursor < prefix) return;
+    g_cursor -= prefix;
+    g_anchor = g_cursor;
+    insert_bytes(g_completion[0], strlen(g_completion[0]));
+    g_completion_count = 0;
+}
+static void update_matching_bracket(void) {
+    size_t at = g_cursor > 0 ? g_cursor - 1 : g_cursor, p;
+    char open, close;
+    int direction, depth = 0;
+    g_matching_position = -1;
+    if (at >= g_length) return;
+    open = g_text[at];
+    if (open == '(') { close = ')'; direction = 1; }
+    else if (open == '[') { close = ']'; direction = 1; }
+    else if (open == '{') { close = '}'; direction = 1; }
+    else if (open == ')') { close = '('; direction = -1; }
+    else if (open == ']') { close = '['; direction = -1; }
+    else if (open == '}') { close = '{'; direction = -1; }
+    else return;
+    p = at;
+    while (direction > 0 ? p + 1 < g_length : p > 0) {
+        p = direction > 0 ? p + 1 : p - 1;
+        if (g_text[p] == open) depth++;
+        else if (g_text[p] == close) { if (depth == 0) { g_matching_position = (int)p; return; } depth--; }
+    }
+}
+
 static void move_vertical(int direction) {
     int current = cursor_line();
     if (g_preferred_column <= 0) g_preferred_column = cursor_column();
@@ -216,7 +264,10 @@ static void edit_input(void) {
         if (g_cursor > 0 && g_text[g_cursor - 1] == '{') { memcpy(indent + n, "    ", 4); n += 4; }
         insert_bytes(indent, n);
     }
-    if (window_key_just_pressed_tab()) insert_bytes("    ", 4);
+    if (window_key_just_pressed_tab()) {
+        if (g_completion_count > 0) accept_completion();
+        else insert_bytes("    ", 4);
+    }
     if (window_key_just_pressed_backspace()) {
         if (g_anchor != g_cursor) delete_selection();
         else if (g_cursor > 0) { g_cursor--; delete_selection(); }
@@ -258,6 +309,8 @@ static void edit_input(void) {
         window_key_just_pressed_left() || window_key_just_pressed_right() || window_key_just_pressed_up() || window_key_just_pressed_down() ||
         window_key_just_pressed_home() || window_key_just_pressed_end() || window_key_just_pressed_paste()) g_follow_cursor = 1;
     normalize_view();
+    update_completion();
+    update_matching_bracket();
     if (g_dirty) invalidate_view();
 }
 
@@ -584,6 +637,11 @@ void code_editor_draw(int x, int y, int w, int h) {
         int ly = top + row * CODE_EDITOR_LINE_HEIGHT;
         if (line == current) window_fill_rect(x + CODE_EDITOR_GUTTER_WIDTH, ly, w - CODE_EDITOR_GUTTER_WIDTH, CODE_EDITOR_LINE_HEIGHT,
                                                 active_line.r, active_line.g, active_line.b);
+        if (g_matching_position >= 0 && g_matching_position >= (int)line_start(line) && g_matching_position <= (int)line_end(line)) {
+            size_t match_start = line_start(line);
+            int match_x = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(match_start, (size_t)g_matching_position - match_start) - g_scroll_x;
+            window_fill_rect(match_x, ly + 2, 12, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+        }
         if (g_line_text[line]) window_draw_texture(g_line_text[line], x + CODE_EDITOR_GUTTER_WIDTH + 8 - g_scroll_x, ly + (CODE_EDITOR_LINE_HEIGHT - g_line_height[line]) / 2,
                                                     g_line_width[line], g_line_height[line]);
     }
@@ -597,6 +655,15 @@ void code_editor_draw(int x, int y, int w, int h) {
     int cx = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(line_start_for_cursor(), g_cursor - line_start_for_cursor()) - g_scroll_x;
     int cy = top + (current - g_scroll_line) * CODE_EDITOR_LINE_HEIGHT;
     if (g_has_focus && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH) window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+    if (g_has_focus && g_completion_count > 0 && cy >= top && cy < bottom) {
+        int popup_y = cy + CODE_EDITOR_LINE_HEIGHT;
+        window_fill_rect(cx, popup_y, 230, g_completion_count * 20 + 6, UI_RGB(UI_COLOR_SURFACE_CONTROL));
+        for (int i = 0; i < g_completion_count; i++) {
+            int tw = 0, th = 0;
+            window_texture_t *completion = ui_make_text_texture(g_completion[i], FONT_WEIGHT_MONO, 11, &tw, &th);
+            if (completion) { window_draw_texture(completion, cx + 6, popup_y + 3 + i * 20, tw, th); window_destroy_texture(completion); }
+        }
+    }
     window_fill_rect(x, bottom, w, CODE_EDITOR_STATUS_HEIGHT, toolbar.r, toolbar.g, toolbar.b);
     char status[256];
     snprintf(status, sizeof(status), tr("%s  |  Ln %d, Col %d  |  %s"), g_status, current + 1, cursor_column() + 1,

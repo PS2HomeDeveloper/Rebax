@@ -85,7 +85,7 @@ jobs:
         run: |
           engine=$(find build/output -type f -perm -111 -name 'Rebax-Engine-*' | head -n 1)
           test -n "$engine"
-          "$engine" check tests/native_sample linux
+          "$engine" check tests/native_sample linux x86_64
 
       - name: Upload the build
         if: matrix.platform != 'android'

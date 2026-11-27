@@ -38,14 +38,38 @@
 #include "exporters/compiler/modern/modern_exporter.h"
 #include "exporters/compiler/ps1/ps1_exporter.h"
 #include "exporters/compiler/ps2/ps2_exporter.h"
+#include "exporters/common/native_discovery.h"
 
 static int headless_command(int argc, char **argv) {
     if (argc < 2 || (strcmp(argv[1], "export") != 0 && strcmp(argv[1], "check") != 0)) return -1;
-    if (argc < 4) { fprintf(stderr, "Usage: %s export <project_dir> <platform> <architecture|all> <output_dir> [release]\n", argv[0]); return 2; }
+    if ((strcmp(argv[1], "check") == 0 && argc < 5) || (strcmp(argv[1], "export") == 0 && argc < 6)) {
+        fprintf(stderr, "Usage: %s check <project_dir> <platform> <architecture> | export <project_dir> <platform> <architecture|all> <output_dir> [release]\n", argv[0]);
+        return 2;
+    }
     project_settings_t settings; char error[256];
     if (!project_file_load(argv[2], &settings, error, sizeof(error))) { fprintf(stderr, "[rebax] check failed: %s\n", error); return 1; }
     current_project_set(argv[2], &settings);
-    if (strcmp(argv[1], "check") == 0) { printf("Rebax project is valid: %s (%s)\n", settings.name, project_type_id(settings.type)); current_project_clear(); return 0; }
+    if (strcmp(argv[1], "check") == 0) {
+        char sdk_root[1536];
+        const char *platform = argv[3];
+        if (strcmp(platform, "ps1") == 0 || strcmp(platform, "ps2") == 0)
+            snprintf(sdk_root, sizeof(sdk_root), "%s/%s", rebax_sdks_dir(), platform);
+        else {
+            if (strcmp(platform, "modern") == 0) platform = "linux";
+            snprintf(sdk_root, sizeof(sdk_root), "%s/%s-%s", rebax_sdks_dir(), platform, argv[4]);
+        }
+        if (!export_native_discover(argv[2], sdk_root) && export_native_section_count() > 0) {
+            int i;
+            fprintf(stderr, "[rebax] check failed: unresolved native headers\n");
+            for (i = 0; i < export_native_unresolved_count(); i++)
+                fprintf(stderr, "[rebax] unresolved header: %s\n", export_native_unresolved_at(i));
+            current_project_clear();
+            return 1;
+        }
+        printf("Rebax project is valid: %s (%s), native headers resolved\n", settings.name, project_type_id(settings.type));
+        current_project_clear();
+        return 0;
+    }
     if (argc < 6) { fprintf(stderr, "[rebax] export requires output_dir.\n"); current_project_clear(); return 2; }
     const char *platform = argv[3], *arch = argv[4], *out = argv[5];
     int release = argc > 6 && strcmp(argv[6], "release") == 0;

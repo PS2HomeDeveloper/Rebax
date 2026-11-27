@@ -236,6 +236,11 @@ void ps2_export_update(void) {
                 g_state = EXPORT_STATE_FAILED;
                 return;
             }
+            {
+                char sdk_root[1536];
+                snprintf(sdk_root, sizeof(sdk_root), "%s/..", g_sdk_standard_root);
+                export_native_discover(src_dir, sdk_root);
+            }
             if (!export_native_finish(src_dir)) {
                 log_push("[exporter] FAILED: could not write the project hook file.");
                 g_state = EXPORT_STATE_FAILED;
