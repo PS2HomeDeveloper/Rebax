@@ -15,7 +15,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
+#include <SDL2/SDL.h>
 
 #include "platform/common/window.h"
 #include "editor/panels/project_center.h"
@@ -59,13 +59,13 @@ static int headless_command(int argc, char **argv) {
             int count = !strcmp(platform, "android") ? 4 : 4;
             started = modern_export_start_multi(settings.name, release, out, platform, list, count);
         } else started = modern_export_start(settings.name, release, out, platform, arch);
-        while (modern_export_get_status() == MODERN_EXPORT_RUNNING) { modern_export_update(); usleep(10000); }
+        while (modern_export_get_status() == MODERN_EXPORT_RUNNING) { modern_export_update(); SDL_Delay(10); }
         int ok = modern_export_get_status() == MODERN_EXPORT_SUCCESS; current_project_clear(); return started && ok ? 0 : 1;
     }
     if (!strcmp(platform, "ps1")) started = ps1_export_start(settings.name, release, out);
     else if (!strcmp(platform, "ps2")) started = ps2_export_start(settings.name, release, out);
     else { fprintf(stderr, "[rebax] unsupported platform: %s\n", platform); current_project_clear(); return 2; }
-    while (started && ((platform[2] == '1' && ps1_export_get_status() == PS1_EXPORT_STATUS_RUNNING) || (platform[2] == '2' && ps2_export_get_status() == PS2_EXPORT_STATUS_RUNNING))) { if (platform[2] == '1') ps1_export_update(); else ps2_export_update(); usleep(10000); }
+    while (started && ((platform[2] == '1' && ps1_export_get_status() == PS1_EXPORT_STATUS_RUNNING) || (platform[2] == '2' && ps2_export_get_status() == PS2_EXPORT_STATUS_RUNNING))) { if (platform[2] == '1') ps1_export_update(); else ps2_export_update(); SDL_Delay(10); }
     int ok = (platform[2] == '1' ? ps1_export_get_status() == PS1_EXPORT_STATUS_SUCCESS : ps2_export_get_status() == PS2_EXPORT_STATUS_SUCCESS);
     current_project_clear(); return started && ok ? 0 : 1;
 }
