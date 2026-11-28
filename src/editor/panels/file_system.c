@@ -45,6 +45,7 @@
 #include "editor/core/workspace.h"
 #include "editor/viewport/2d.h"
 #include "editor/dialogs/context_menu.h"
+#include "editor/ui/base.h"
 #include "editor/dialogs/prompt.h"
 #include "editor/dialogs/image_viewer.h"
 #include "filesystem/rebax_fs.h"
@@ -86,6 +87,8 @@ static int g_expanded_count = 0;
 static text_field_t g_search_field;
 static int g_ready = 0;
 static int g_needs_rebuild = 1;
+static int g_searching = 0;
+static char g_last_search[TEXT_FIELD_MAX_LEN];
 static float g_refresh_timer = 0.0f;
 static unsigned long long g_assets_signature = 0;
 #define ASSETS_REFRESH_INTERVAL 2.0f
@@ -200,9 +203,12 @@ static void open_file_resource(const fs_row_t *row) {
 
 enum {
     MENU_OPEN = 1, MENU_PREVIEW, MENU_TOGGLE, MENU_NEW_FOLDER, MENU_NEW_SCRIPT,
-    MENU_RENAME, MENU_DUPLICATE, MENU_DELETE, MENU_COPY_PATH
+    MENU_RENAME, MENU_DUPLICATE, MENU_DELETE, MENU_COPY_PATH,
+    MENU_REFRESH, MENU_EXPAND_ALL, MENU_COLLAPSE_ALL, MENU_CLEAR_SEARCH
 };
 
+static const char *const k_root_dirs_menu[2] = { "assets", "source" };
+static void expand_all(const char *dir_path, int depth);
 static char g_target_path[600];
 static int g_target_is_dir;
 static int is_expanded(const char *path);
@@ -289,6 +295,23 @@ static void on_menu_choice(int id, void *user_data) {
     const char *name;
     (void)row;
     split_path(g_target_path, dir, sizeof(dir), &name);
+    if (id >= MENU_REFRESH) {
+        const char *project = current_project_get_path();
+        if (project == NULL) return;
+        if (id == MENU_EXPAND_ALL || id == MENU_COLLAPSE_ALL) {
+            g_expanded_count = 0;
+            for (int r = 0; r < 2; r++) {
+                snprintf(target, sizeof(target), "%s/%s", project, k_root_dirs_menu[r]);
+                toggle_expanded(target);
+                if (id == MENU_EXPAND_ALL) expand_all(target, 0);
+            }
+        } else if (id == MENU_CLEAR_SEARCH) {
+            g_search_field.text[0] = '\0';
+            g_search_field.cursor_pos = 0;
+        }
+        g_needs_rebuild = 1;
+        return;
+    }
     switch (id) {
         case MENU_OPEN:
         case MENU_PREVIEW: {
@@ -310,7 +333,16 @@ static void on_menu_choice(int id, void *user_data) {
             g_needs_rebuild = 1;
             break;
         case MENU_DELETE: prompt_confirm_open("Delete", "This item will be deleted permanently.", "Delete", 1, on_delete, NULL); break;
-        case MENU_COPY_PATH: window_set_clipboard_text(g_target_path); break;
+        case MENU_COPY_PATH: {
+            const char *project = current_project_get_path();
+            size_t n = project ? strlen(project) : 0;
+            const char *relative = g_target_path;
+            if (n > 0 && strncmp(g_target_path, project, n) == 0 && is_separator(g_target_path[n])) relative = g_target_path + n + 1;
+            snprintf(target, sizeof(target), "%s", relative);
+            for (char *p = target; *p; p++) if (*p == '\\') *p = '/';
+            window_set_clipboard_text(target);
+            break;
+        }
         default: break;
     }
 }
@@ -523,8 +555,8 @@ static void sync_tree_items(void) {
         g_tree_items[i].icon_id = g_rows[i].is_dir ? ICON_folder : file_icons_for_name(g_rows[i].display_name);
         g_tree_items[i].thumbnail_tex = NULL;
         g_tree_items[i].depth = g_rows[i].depth;
-        g_tree_items[i].has_children = g_rows[i].is_dir;
-        g_tree_items[i].expanded = g_rows[i].is_dir && is_expanded(g_rows[i].path);
+        g_tree_items[i].has_children = g_rows[i].is_dir && !g_searching;
+        g_tree_items[i].expanded = g_rows[i].is_dir && !g_searching && is_expanded(g_rows[i].path);
         if (g_selected_path[0] != '\0' && strcmp(g_selected_path, g_rows[i].path) == 0) selected = i;
     }
     ui_tree_set_items(&g_tree, g_tree_items, g_row_count);
@@ -577,15 +609,64 @@ static unsigned long long assets_signature(void) {
     return hash;
 }
 
+static void add_search_results(const char *dir_path, const char *base, const char *query, int depth) {
+    DIR *dir = opendir(dir_path);
+    struct dirent *entry;
+    if (dir == NULL) return;
+    while ((entry = readdir(dir)) != NULL && g_row_count < MAX_ROWS) {
+        char full_path[600];
+        struct stat status;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+        if (stat(full_path, &status) != 0) continue;
+        int is_dir = S_ISDIR(status.st_mode) ? 1 : 0;
+        if (ui_text_contains_ci(entry->d_name, query)) {
+            fs_row_t *row = &g_rows[g_row_count++];
+            memset(row, 0, sizeof(*row));
+            strncpy(row->path, full_path, sizeof(row->path) - 1);
+            strncpy(row->display_name, full_path + strlen(base) + 1, sizeof(row->display_name) - 1);
+            row->depth = 0;
+            row->is_dir = is_dir;
+            row->modified = (long long)status.st_mtime;
+        }
+        if (is_dir && depth < 12) add_search_results(full_path, base, query, depth + 1);
+    }
+    closedir(dir);
+}
+
+static void expand_all(const char *dir_path, int depth) {
+    DIR *dir = opendir(dir_path);
+    struct dirent *entry;
+    if (dir == NULL) return;
+    while ((entry = readdir(dir)) != NULL) {
+        char full_path[600];
+        struct stat status;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+        if (stat(full_path, &status) != 0 || !S_ISDIR(status.st_mode)) continue;
+        if (!is_expanded(full_path)) toggle_expanded(full_path);
+        if (depth < 12) expand_all(full_path, depth + 1);
+    }
+    closedir(dir);
+}
+
 static void rebuild_rows(void) {
     free_rows();
     const char *project_path = current_project_get_path();
     if (project_path == NULL) { g_needs_rebuild = 0; sync_tree_items(); return; }
+    g_searching = g_search_field.text[0] != '\0';
+    snprintf(g_last_search, sizeof(g_last_search), "%s", g_search_field.text);
     for (int r = 0; r < 2; r++) {
         char root_path[600];
         snprintf(root_path, sizeof(root_path), "%s/%s", project_path, k_root_dirs[r]);
         struct stat status;
         if (stat(root_path, &status) != 0) REBAX_MKDIR(root_path, 0755);
+        if (g_searching) {
+            char base[600];
+            snprintf(base, sizeof(base), "%s/%s", project_path, k_root_dirs[r]);
+            add_search_results(root_path, base, g_search_field.text, 0);
+            continue;
+        }
         if (g_row_count >= MAX_ROWS) break;
         fs_row_t *root = &g_rows[g_row_count++];
         memset(root, 0, sizeof(*root));
@@ -642,6 +723,18 @@ void file_system_panel_update(int x, int y, int w, int h) {
     int search_field_w = more_x - UI_TREE_ROW_PAD - search_field_x;
     int search_field_y = y + (TOOLBAR_HEIGHT - SEARCH_HEIGHT) / 2;
     text_field_update(&g_search_field, search_field_x, search_field_y, search_field_w, SEARCH_HEIGHT, search_field_w);
+    if (g_search_field.focused) window_start_text_input();
+    if (strcmp(g_last_search, g_search_field.text) != 0) g_needs_rebuild = 1;
+    if (window_mouse_left_just_pressed() &&
+        ui_point_in_rect(window_mouse_x(), window_mouse_y(), more_x - 6, y, UI_TREE_ICON_SIZE + 12, TOOLBAR_HEIGHT)) {
+        context_menu_item_t items[4] = {
+            { "Refresh", MENU_REFRESH, 1, 0 },
+            { "Expand All", MENU_EXPAND_ALL, 1, 1 },
+            { "Collapse All", MENU_COLLAPSE_ALL, 1, 0 },
+            { "Clear Search", MENU_CLEAR_SEARCH, g_search_field.text[0] != '\0', 1 }
+        };
+        context_menu_open(more_x - 150, y + TOOLBAR_HEIGHT, items, 4, on_menu_choice, NULL);
+    }
     (void)toolbar_icon_y;
 
     int list_y = y + TOOLBAR_HEIGHT + 4;

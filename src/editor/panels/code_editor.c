@@ -259,7 +259,7 @@ static void update_completion(void) {
     static const char *const words[] = {
         "rebax_log", "rebax_delta_time", "rebax_key_down", "rebax_key_pressed", "rebax_find_node",
         "rebax_node_get_transform2d", "rebax_node_set_transform2d", "rebax_node_set_visible",
-        "rebax_node_is_visible", "rebax_image_load", "rebax_image_free", "rebax_image_draw",
+        "rebax_node_is_visible", "rebax_node_get_float", "rebax_node_set_float", "rebax_node_get_int", "rebax_node_set_int", "rebax_image_load", "rebax_image_free", "rebax_image_draw",
         "rebax_quit", "rebax_game_start", "rebax_game_update", "rebax_game_stop",
         "rebax_vec2_t", "rebax_transform2d_t", "rebax_image_t",
         "auto", "bool", "break", "case", "char", "class", "const", "continue", "double", "else",
@@ -1053,7 +1053,19 @@ void code_editor_draw(int x, int y, int w, int h) {
     }
     int cx = x + CODE_EDITOR_GUTTER_WIDTH + 8 + prefix_width(line_start_for_cursor(), g_cursor - line_start_for_cursor()) - g_scroll_x;
     int cy = top + (current - g_scroll_line) * CODE_EDITOR_LINE_HEIGHT;
-    if (g_has_focus && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH) window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+    {
+        static size_t last_cursor = (size_t)-1, last_length = (size_t)-1;
+        static unsigned blink_base = 0;
+        unsigned now = window_ticks();
+        if (g_cursor != last_cursor || g_length != last_length || g_anchor != g_cursor) {
+            last_cursor = g_cursor;
+            last_length = g_length;
+            blink_base = now;
+        }
+        int blink_on = ((now - blink_base) / 530) % 2 == 0;
+        if (g_has_focus && blink_on && cy >= top && cy < bottom && cx >= x + CODE_EDITOR_GUTTER_WIDTH)
+            window_fill_rect(cx, cy + 2, 2, CODE_EDITOR_LINE_HEIGHT - 4, UI_RGB(UI_COLOR_CODE_CYAN));
+    }
     g_popup_w = 0;
     if (g_has_focus && g_completion_count > 0 && cy >= top && cy < bottom) {
         int popup_y = cy + CODE_EDITOR_LINE_HEIGHT;

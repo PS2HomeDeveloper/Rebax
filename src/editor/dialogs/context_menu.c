@@ -19,6 +19,7 @@
 #include "core/i18n.h"
 #include "editor/dialogs/context_menu.h"
 #include "editor/ui/base.h"
+#include "editor/ui/scrollbar.h"
 #include "editor/ui/theme.h"
 #include "editor/ui/windows.h"
 #include "platform/common/window.h"
@@ -78,6 +79,7 @@ void context_menu_open(int x, int y, const context_menu_item_t *items, int count
     g_callback = callback;
     g_user = user_data;
     g_hover = -1;
+    ui_scrollbar_cancel_touch();
     g_open = 1;
     ui_windows_show(&g_win);
 }

@@ -20,7 +20,9 @@
 #include "platform/common/window.h"
 
 #define SCROLLBAR_MIN_THUMB  18
-#define SCROLLBAR_GRAB_PAD    3
+#define SCROLLBAR_GRAB_PAD    6
+#define SCROLLBAR_EDGE_GAP    4
+#define TOUCH_STALE_MS      120
 #define TOUCH_SCROLL_THRESHOLD 10
 #define TOUCH_FLING_DECAY 0.93f
 #define TOUCH_FLING_MIN 0.6f
@@ -34,6 +36,7 @@ typedef struct {
     float velocity;
     int *fling_owner;
     float fling_velocity;
+    unsigned last_tick;
 } touch_scroll_t;
 
 static touch_scroll_t g_touch;
@@ -50,6 +53,12 @@ static void touch_scroll_update(int *scroll_offset, int *dragging, int x, int w,
     int my = window_mouse_y();
     int inside = mx >= x && mx < x + w - UI_SCROLLBAR_WIDTH - SCROLLBAR_GRAB_PAD &&
                  my >= viewport_y && my < viewport_y + viewport_h;
+    if ((g_touch.owner == scroll_offset || g_touch.fling_owner == scroll_offset) &&
+        window_ticks() - g_touch.last_tick > TOUCH_STALE_MS) {
+        if (g_touch.owner == scroll_offset) { g_touch.owner = NULL; g_touch.phase = 0; }
+        if (g_touch.fling_owner == scroll_offset) g_touch.fling_owner = NULL;
+    }
+    g_touch.last_tick = window_ticks();
     if (g_touch.fling_owner == scroll_offset) {
         *scroll_offset = clamp_offset(*scroll_offset + (int)g_touch.fling_velocity, max_scroll);
         g_touch.fling_velocity *= TOUCH_FLING_DECAY;
@@ -87,6 +96,13 @@ static void touch_scroll_update(int *scroll_offset, int *dragging, int x, int w,
         *scroll_offset = next;
         *dragging = 2;
     }
+}
+
+void ui_scrollbar_cancel_touch(void) {
+    g_touch.owner = NULL;
+    g_touch.phase = 0;
+    g_touch.fling_owner = NULL;
+    g_touch.fling_velocity = 0.0f;
 }
 
 int ui_scrollbar_touch_active(const int *dragging) {
@@ -140,6 +156,7 @@ void ui_scrollbar_draw(int scroll_offset, int x, int w,
     if (max_scroll < 0) max_scroll = 0;
     int thumb_y, thumb_h;
     compute_thumb(scroll_offset, viewport_y, viewport_h, content_h, max_scroll, &thumb_y, &thumb_h);
-    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, viewport_y, UI_SCROLLBAR_WIDTH, viewport_h, UI_RGB(UI_COLOR_SURFACE_CONTROL));
-    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, thumb_y, UI_SCROLLBAR_WIDTH, thumb_h, UI_RGB(UI_COLOR_SCROLL_THUMB));
+    int lane = UI_SCROLLBAR_WIDTH - SCROLLBAR_EDGE_GAP;
+    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, viewport_y, lane, viewport_h, UI_RGB(UI_COLOR_SURFACE_CONTROL));
+    window_fill_rect(x + w - UI_SCROLLBAR_WIDTH, thumb_y, lane, thumb_h, UI_RGB(UI_COLOR_SCROLL_THUMB));
 }

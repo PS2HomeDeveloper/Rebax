@@ -23,6 +23,7 @@
 #include "editor/dialogs/image_viewer.h"
 #include "editor/ui/base.h"
 #include "editor/ui/dialog.h"
+#include "editor/ui/scrollbar.h"
 #include "editor/ui/theme.h"
 #include "editor/ui/windows.h"
 #include "filesystem/rebax_fs.h"
@@ -98,6 +99,7 @@ int image_viewer_open(const char *path) {
     g_pan_x = g_pan_y = 0.0f;
     g_dragging = 0;
     ui_dialog_drag_reset(&g_drag);
+    ui_scrollbar_cancel_touch();
     g_open = 1;
     ui_windows_show(&g_win);
     return 1;
@@ -127,9 +129,9 @@ void image_viewer_update(int window_w, int window_h) {
     area_rect(dx, dy, &ax, &ay, &aw, &ah);
     if (g_fit_pending) { fit(aw, ah); g_fit_pending = 0; }
     int mx = window_mouse_x(), my = window_mouse_y();
-    if (window_key_just_pressed_escape()) { g_open = 0; return; }
+    if (window_key_just_pressed_escape()) { g_open = 0; ui_scrollbar_cancel_touch(); return; }
     if (window_mouse_left_just_pressed() &&
-        ui_dialog_close_button_hit(mx, my, dx + g_dw - 16 - CLOSE_BTN_SIZE, dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2, CLOSE_BTN_SIZE)) { g_open = 0; return; }
+        ui_dialog_close_button_hit(mx, my, dx + g_dw - 16 - CLOSE_BTN_SIZE, dy + (TITLEBAR_HEIGHT - CLOSE_BTN_SIZE) / 2, CLOSE_BTN_SIZE)) { g_open = 0; ui_scrollbar_cancel_touch(); return; }
     int inside = ui_point_in_rect(mx, my, ax, ay, aw, ah);
     if (window_touch_count() == 2) {
         int x1, y1, x2, y2;

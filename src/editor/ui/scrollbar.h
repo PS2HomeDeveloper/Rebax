@@ -16,13 +16,14 @@
 #ifndef UI_SCROLLBAR_H
 #define UI_SCROLLBAR_H
 
-#define UI_SCROLLBAR_WIDTH 8
+#define UI_SCROLLBAR_WIDTH 12
 
 void ui_scrollbar_update(int *scroll_offset, int *dragging,
                           int x, int w, int viewport_y, int viewport_h,
                           int content_h, int wheel_step);
 
 int ui_scrollbar_touch_active(const int *dragging);
+void ui_scrollbar_cancel_touch(void);
 
 void ui_scrollbar_draw(int scroll_offset, int x, int w,
                         int viewport_y, int viewport_h, int content_h);

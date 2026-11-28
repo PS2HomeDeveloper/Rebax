@@ -32,15 +32,21 @@ int rebax_runtime_register(const char *name, const node_interface_t *iface, void
 }
 int rebax_runtime_visible(int node) { return node < 0 || node >= g_node_count || g_nodes[node].visible; }
 
-static float *float_property(int node, const char *name) {
-    if (node < 0 || node >= g_node_count) return NULL;
+static void *typed_property(int node, const char *name, int type) {
+    if (node < 0 || node >= g_node_count || !name) return NULL;
     const node_interface_t *iface = g_nodes[node].iface;
     for (int i = 0; i < iface->property_count; i++) {
-        if (iface->properties[i].type == NODE_PROPERTY_TYPE_FLOAT && strcmp(iface->properties[i].name, name) == 0)
-            return (float *)((char *)g_nodes[node].instance + iface->property_offsets[i]);
+        if (iface->properties[i].type == type && strcmp(iface->properties[i].name, name) == 0)
+            return ((char *)g_nodes[node].instance + iface->property_offsets[i]);
     }
     return NULL;
 }
+static float *float_property(int node, const char *name) { return (float *)typed_property(node, name, NODE_PROPERTY_TYPE_FLOAT); }
+static int *int_property(int node, const char *name) { return (int *)typed_property(node, name, NODE_PROPERTY_TYPE_INT); }
+int rebax_node_get_float(int node, const char *property, float *out_value) { float *p = float_property(node, property); if (!p || !out_value) return 0; *out_value = *p; return 1; }
+int rebax_node_set_float(int node, const char *property, float value) { float *p = float_property(node, property); if (!p) return 0; *p = value; return 1; }
+int rebax_node_get_int(int node, const char *property, int *out_value) { int *p = int_property(node, property); if (!p || !out_value) return 0; *out_value = *p; return 1; }
+int rebax_node_set_int(int node, const char *property, int value) { int *p = int_property(node, property); if (!p) return 0; *p = value; return 1; }
 int rebax_find_node(const char *name) {
     if (!name) return -1;
     for (int i = 0; i < g_node_count; i++) {

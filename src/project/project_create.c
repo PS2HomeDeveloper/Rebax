@@ -22,6 +22,7 @@
 #include "project/project_file.h"
 
 #define DEFAULT_SCENE "scene_version=1\nnode_count=0\n\n"
+#define NATIVE_SCENE "scene_version=1\nnode_count=1\n\n[node 0]\ntype=NativeScript\nname=NativeScript\nparent=-1\n\n"
 #define DEFAULT_SCENE_FILE "main.rscene"
 #define DEFAULT_NATIVE_SOURCE "#include <rebax.h>\n\nvoid rebax_game_start(void) { rebax_log(\"Native script started\"); }\nvoid rebax_game_update(float dt) { (void)dt; }\nvoid rebax_game_stop(void) { }\n"
 
@@ -44,7 +45,8 @@ project_create_result_t project_create(const project_create_options_t *o) {
     if (!rebax_fs_mkdir_p(path)) return PROJECT_CREATE_ERROR_MKDIR;
 
     snprintf(path, sizeof(path), "%s/%s/%s", root, PROJECT_ASSETS_DIR, DEFAULT_SCENE_FILE);
-    if (!rebax_fs_exists(path) && !rebax_fs_write_atomic(path, DEFAULT_SCENE, strlen(DEFAULT_SCENE)))
+    const char *scene_text = o->dev_system == DEV_SYSTEM_NATIVE ? NATIVE_SCENE : DEFAULT_SCENE;
+    if (!rebax_fs_exists(path) && !rebax_fs_write_atomic(path, scene_text, strlen(scene_text)))
         return PROJECT_CREATE_ERROR_FILE;
 
     if (o->dev_system == DEV_SYSTEM_NATIVE) {

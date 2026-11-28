@@ -22,6 +22,7 @@
 #include "editor/ui/dialog.h"
 #include "editor/ui/labeled_button.h"
 #include "editor/ui/text_field.h"
+#include "editor/ui/scrollbar.h"
 #include "editor/ui/theme.h"
 #include "editor/ui/windows.h"
 #include "platform/common/window.h"
@@ -77,6 +78,7 @@ static void begin(const char *title, const char *ok_label, int danger, prompt_ca
     g_dh = g_input_mode ? 170 : 150;
     make_visuals(tr(title), tr(ok_label), danger);
     ui_dialog_drag_reset(&g_drag);
+    ui_scrollbar_cancel_touch();
     g_open = 1;
     ui_windows_show(&g_win);
 }

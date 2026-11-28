@@ -264,3 +264,7 @@ Colour: RGBA, 8 bits per channel (32 bits per pixel)=>الألوان: RGBA، 8 �
 Colour: RGB, 8 bits per channel (24 bits per pixel)=>الألوان: RGB، 8 بت لكل قناة (24 بت لكل بكسل)
 File: %s, %s=>الملف: %s، %s
 Memory when loaded: %.2f MB=>الذاكرة عند التحميل: %.2f ميغابايت
+Refresh=>تحديث
+Expand All=>توسيع الكل
+Collapse All=>طي الكل
+Clear Search=>مسح البحث

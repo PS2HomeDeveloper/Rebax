@@ -12,6 +12,10 @@ int rebax_node_get_transform2d(int node, rebax_transform2d_t *out) { (void)node;
 int rebax_node_set_transform2d(int node, const rebax_transform2d_t *value) { (void)node; return value != NULL; }
 int rebax_node_set_visible(int node, int visible) { (void)node; (void)visible; return 1; }
 int rebax_node_is_visible(int node) { (void)node; return 1; }
+int rebax_node_get_float(int node, const char *property, float *out_value) { (void)node; (void)property; (void)out_value; return 0; }
+int rebax_node_set_float(int node, const char *property, float value) { (void)node; (void)property; (void)value; return 0; }
+int rebax_node_get_int(int node, const char *property, int *out_value) { (void)node; (void)property; (void)out_value; return 0; }
+int rebax_node_set_int(int node, const char *property, int value) { (void)node; (void)property; (void)value; return 0; }
 rebax_image_t *rebax_image_load(const char *path) { (void)path; return NULL; }
 void rebax_image_free(rebax_image_t *image) { free(image); }
 int rebax_image_draw(rebax_image_t *image,float x,float y,float w,float h) { (void)image;(void)x;(void)y;(void)w;(void)h; return 0; }

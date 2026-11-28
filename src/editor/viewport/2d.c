@@ -49,7 +49,7 @@
 #define VIEW_EDGE_GAP 12
 #define VIEW_SCROLLBAR_MIN_THUMB 24
 #define INITIAL_WORLD_HALF_RANGE 1024.0f
-#define WORLD_RANGE_MARGIN_VIEWS 2.0f
+#define WORLD_RANGE_MARGIN 10.0f
 
 typedef enum { DRAG_NONE, DRAG_MOVE, DRAG_AXIS_X, DRAG_AXIS_Y, DRAG_MARQUEE } drag_mode_t;
 typedef struct {
@@ -94,33 +94,33 @@ static int is_visible_2d_node(int index, const node_registry_entry_t **out_schem
 }
 
 static void expand_world_range(int view_w, int view_h) {
-    float visible_w = (float)view_w / g_zoom;
-    float visible_h = (float)view_h / g_zoom;
-    float margin_x = fmaxf(visible_w * WORLD_RANGE_MARGIN_VIEWS, 256.0f);
-    float margin_y = fmaxf(visible_h * WORLD_RANGE_MARGIN_VIEWS, 256.0f);
-    float cx = camera_world_x(), cy = camera_world_y();
-    if (cx < g_world_min_x + visible_w * 0.25f) g_world_min_x = cx - margin_x;
-    if (cx > g_world_max_x - visible_w * 0.25f) g_world_max_x = cx + margin_x;
-    if (cy < g_world_min_y + visible_h * 0.25f) g_world_min_y = cy - margin_y;
-    if (cy > g_world_max_y - visible_h * 0.25f) g_world_max_y = cy + margin_y;
-
+    (void)view_w; (void)view_h;
+    const float margin = WORLD_RANGE_MARGIN;
+    float min_x = FLT_MAX, max_x = -FLT_MAX, min_y = FLT_MAX, max_y = -FLT_MAX;
     for (int i = 0; i < scene_data_get_node_count(); i++) {
         const node_registry_entry_t *schema;
         node_property_value_t *values;
         if (!is_visible_2d_node(i, &schema, &values)) continue;
-        float px = values[0].f, py = values[1].f;
-        float node_margin_x = margin_x, node_margin_y = margin_y;
+        float half_w = 0.0f, half_h = 0.0f;
         if (scene_data_get_type(i) == NODE_TYPE_SPRITE_2D && schema->property_count >= 9) {
-            float half_w = (values[6].i > 0 ? values[6].i : 32) * fabsf(values[3].f) * 0.5f;
-            float half_h = (values[7].i > 0 ? values[7].i : 32) * fabsf(values[4].f) * 0.5f;
-            node_margin_x = fmaxf(node_margin_x, half_w + visible_w);
-            node_margin_y = fmaxf(node_margin_y, half_h + visible_h);
+            half_w = (values[6].i > 0 ? values[6].i : 32) * fabsf(values[3].f) * 0.5f;
+            half_h = (values[7].i > 0 ? values[7].i : 32) * fabsf(values[4].f) * 0.5f;
         }
-        if (px < g_world_min_x) g_world_min_x = px - node_margin_x;
-        if (px > g_world_max_x) g_world_max_x = px + node_margin_x;
-        if (py < g_world_min_y) g_world_min_y = py - node_margin_y;
-        if (py > g_world_max_y) g_world_max_y = py + node_margin_y;
+        if (values[0].f - half_w < min_x) min_x = values[0].f - half_w;
+        if (values[0].f + half_w > max_x) max_x = values[0].f + half_w;
+        if (values[1].f - half_h < min_y) min_y = values[1].f - half_h;
+        if (values[1].f + half_h > max_y) max_y = values[1].f + half_h;
     }
+    if (min_x == FLT_MAX) { min_x = max_x = min_y = max_y = 0.0f; }
+    float cx = camera_world_x(), cy = camera_world_y();
+    if (cx < min_x) min_x = cx;
+    if (cx > max_x) max_x = cx;
+    if (cy < min_y) min_y = cy;
+    if (cy > max_y) max_y = cy;
+    g_world_min_x = min_x - margin;
+    g_world_max_x = max_x + margin;
+    g_world_min_y = min_y - margin;
+    g_world_max_y = max_y + margin;
 }
 
 static void move_selected(float dx, float dy) {
