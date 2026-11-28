@@ -31,6 +31,7 @@ typedef struct {
     int depth;
     int has_children;
     int expanded;
+    int plain_icon;
 } ui_tree_item_t;
 
 typedef struct {

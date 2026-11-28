@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -164,12 +165,15 @@ static void parse_rscene_content(char *content) {
                 cur->type[0] = '\0';
                 cur->name[0] = '\0';
                 cur->prop_count = 0;
+                cur->parent = -1;
             } else {
                 cur = NULL;
             }
         } else if (cur != NULL) {
             if (strncmp(line, "type=", 5) == 0) {
                 strncpy(cur->type, line + 5, sizeof(cur->type) - 1);
+            } else if (strncmp(line, "parent=", 7) == 0) {
+                cur->parent = atoi(line + 7);
             } else if (strncmp(line, "name=", 5) == 0) {
                 strncpy(cur->name, line + 5, sizeof(cur->name) - 1);
             } else if (strncmp(line, "prop:", 5) == 0) {
@@ -194,6 +198,47 @@ static const rscene_kv_t *find_prop(const rscene_node_t *node, const char *key) 
         if (strcmp(node->props[i].key, key) == 0) return &node->props[i];
     }
     return NULL;
+}
+
+static float local_value(const rscene_node_t *node, const char *key, float fallback) {
+    const rscene_kv_t *kv = find_prop(node, key);
+    return kv != NULL ? (float)atof(kv->value) : fallback;
+}
+
+static int has_transform(const rscene_node_t *node) {
+    const node_registry_entry_t *entry = NULL;
+    for (int i = 0; i < node_registry_count(); i++) {
+        const node_registry_entry_t *e = node_registry_get_by_index(i);
+        if (e != NULL && strcmp(e->name, node->type) == 0) { entry = e; break; }
+    }
+    if (entry == NULL) return 0;
+    for (int p = 0; p < entry->property_count; p++)
+        if (strcmp(entry->properties[p].name, "Position X") == 0) return 1;
+    return 0;
+}
+
+static void world_transform(int index, float *x, float *y, float *rot, float *sx, float *sy) {
+    const rscene_node_t *node = &g_parsed_nodes[index];
+    *x = local_value(node, "Position X", 0.0f);
+    *y = local_value(node, "Position Y", 0.0f);
+    *rot = local_value(node, "Rotation", 0.0f);
+    *sx = local_value(node, "Scale X", 1.0f);
+    *sy = local_value(node, "Scale Y", 1.0f);
+    int guard = 0, parent = node->parent;
+    while (parent >= 0 && parent < g_parsed_node_count && guard++ < 64) {
+        const rscene_node_t *up = &g_parsed_nodes[parent];
+        if (has_transform(up)) {
+            float c = cosf(local_value(up, "Rotation", 0.0f)), s = sinf(local_value(up, "Rotation", 0.0f));
+            float usx = local_value(up, "Scale X", 1.0f), usy = local_value(up, "Scale Y", 1.0f);
+            float px = *x * usx, py = *y * usy;
+            *x = local_value(up, "Position X", 0.0f) + px * c - py * s;
+            *y = local_value(up, "Position Y", 0.0f) + px * s + py * c;
+            *rot += local_value(up, "Rotation", 0.0f);
+            *sx *= usx;
+            *sy *= usy;
+        }
+        parent = up->parent;
+    }
 }
 
 static const node_registry_entry_t *find_registry_entry_by_name(const char *name) {
@@ -329,8 +374,22 @@ void export_scene_generate_from_file(const char *path) {
             for (int p = 0; p < entry->property_count; p++) {
                 const node_property_t *prop = &entry->properties[p];
                 const rscene_kv_t *kv = find_prop(node, prop->name);
+                char baked[64];
+                const char *literal = kv != NULL ? kv->value : NULL;
+                if (prop->type == NODE_PROPERTY_TYPE_FLOAT && node->parent >= 0 && has_transform(node)) {
+                    float wx, wy, wr, wsx, wsy, wv = 0.0f;
+                    int is_transform = 1;
+                    world_transform(i, &wx, &wy, &wr, &wsx, &wsy);
+                    if (strcmp(prop->name, "Position X") == 0) wv = wx;
+                    else if (strcmp(prop->name, "Position Y") == 0) wv = wy;
+                    else if (strcmp(prop->name, "Rotation") == 0) wv = wr;
+                    else if (strcmp(prop->name, "Scale X") == 0) wv = wsx;
+                    else if (strcmp(prop->name, "Scale Y") == 0) wv = wsy;
+                    else is_transform = 0;
+                    if (is_transform) { snprintf(baked, sizeof(baked), "%.6f", (double)wv); literal = baked; }
+                }
                 fprintf(g_codegen_main, "    ");
-                write_c_literal(g_codegen_main, prop->type, kv != NULL ? kv->value : NULL, prop, prop->name);
+                write_c_literal(g_codegen_main, prop->type, literal, prop, prop->name);
                 fprintf(g_codegen_main, ", /* %s */\n", prop->name);
 
                 if (prop->is_asset_path && kv != NULL && kv->value[0] != '\0') {

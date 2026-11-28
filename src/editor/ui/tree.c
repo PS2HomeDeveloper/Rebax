@@ -298,7 +298,7 @@ void ui_tree_draw(const ui_tree_t *tree, int x, int y, int w, int h) {
         if (item->thumbnail_tex != NULL) {
             window_draw_texture(item->thumbnail_tex, icon_x, icon_y,
                                 tree->style.icon_size, tree->style.icon_size);
-        } else if (item->icon_id == ICON_folder) {
+        } else if (item->icon_id == ICON_folder && !item->plain_icon) {
             icon_atlas_draw_tinted(item->icon_id, icon_x, icon_y,
                                    tree->style.icon_size, UI_RGB(UI_COLOR_WARNING));
         } else {

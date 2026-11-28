@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
+#include <string.h>
 
 #include "editor/viewport/2d.h"
 #include "platform/common/window.h"
@@ -93,6 +94,22 @@ static int is_visible_2d_node(int index, const node_registry_entry_t **out_schem
     return 1;
 }
 
+#define WORLD_VALUES_MAX 16
+static const node_property_value_t *world_values(int i, node_property_value_t *out, int count) {
+    node_property_value_t *values = scene_data_get_values(i);
+    if (values == NULL || count > WORLD_VALUES_MAX) return values;
+    memcpy(out, values, (size_t)count * sizeof(*out));
+    float x, y, r, sx, sy;
+    scene_data_world_transform(i, &x, &y, &r, &sx, &sy);
+    out[0].f = x; out[1].f = y; out[2].f = r; out[3].f = sx; out[4].f = sy;
+    return out;
+}
+
+static void world_xy(int i, float *x, float *y) {
+    float r, sx, sy;
+    scene_data_world_transform(i, x, y, &r, &sx, &sy);
+}
+
 static void expand_world_range(int view_w, int view_h) {
     (void)view_w; (void)view_h;
     const float margin = WORLD_RANGE_MARGIN;
@@ -101,15 +118,16 @@ static void expand_world_range(int view_w, int view_h) {
         const node_registry_entry_t *schema;
         node_property_value_t *values;
         if (!is_visible_2d_node(i, &schema, &values)) continue;
-        float half_w = 0.0f, half_h = 0.0f;
+        float half_w = 0.0f, half_h = 0.0f, wx, wy;
+        world_xy(i, &wx, &wy);
         if (scene_data_get_type(i) == NODE_TYPE_SPRITE_2D && schema->property_count >= 9) {
             half_w = (values[6].i > 0 ? values[6].i : 32) * fabsf(values[3].f) * 0.5f;
             half_h = (values[7].i > 0 ? values[7].i : 32) * fabsf(values[4].f) * 0.5f;
         }
-        if (values[0].f - half_w < min_x) min_x = values[0].f - half_w;
-        if (values[0].f + half_w > max_x) max_x = values[0].f + half_w;
-        if (values[1].f - half_h < min_y) min_y = values[1].f - half_h;
-        if (values[1].f + half_h > max_y) max_y = values[1].f + half_h;
+        if (wx - half_w < min_x) min_x = wx - half_w;
+        if (wx + half_w > max_x) max_x = wx + half_w;
+        if (wy - half_h < min_y) min_y = wy - half_h;
+        if (wy + half_h > max_y) max_y = wy + half_h;
     }
     if (min_x == FLT_MAX) { min_x = max_x = min_y = max_y = 0.0f; }
     float cx = camera_world_x(), cy = camera_world_y();
@@ -123,12 +141,21 @@ static void expand_world_range(int view_w, int view_h) {
     g_world_max_y = max_y + margin;
 }
 
+static int ancestor_selected(int i) {
+    int p = scene_data_get_parent(i), guard = 0;
+    while (p >= 0 && guard++ < 128) {
+        if (scene_data_is_selected(p)) return 1;
+        p = scene_data_get_parent(p);
+    }
+    return 0;
+}
+
 static void move_selected(float dx, float dy) {
     for (int i = 0; i < scene_data_get_node_count(); i++) {
-        if (!scene_data_is_selected(i) || !is_visible_2d_node(i, NULL, NULL)) continue;
-        node_property_value_t *values = scene_data_get_values(i);
-        scene_data_set_float_property(i, 0, values[0].f + dx);
-        scene_data_set_float_property(i, 1, values[1].f + dy);
+        if (!scene_data_is_selected(i) || !is_visible_2d_node(i, NULL, NULL) || ancestor_selected(i)) continue;
+        float wx, wy;
+        world_xy(i, &wx, &wy);
+        scene_data_set_world_position(i, wx + dx, wy + dy);
     }
 }
 
@@ -142,9 +169,11 @@ static int hit_node(int mx, int my, int x, int y, int w, int h) {
         node_property_value_t *values;
         if (!is_visible_2d_node(i, &schema, &values)) continue;
         int sx, sy;
-        viewport_2d_project(values[0].f, values[1].f, x, y, w, h, &sx, &sy);
+        node_property_value_t wv[WORLD_VALUES_MAX];
+        const node_property_value_t *world = world_values(i, wv, schema->property_count);
+        viewport_2d_project(world[0].f, world[1].f, x, y, w, h, &sx, &sy);
         if (scene_data_get_type(i) == NODE_TYPE_SPRITE_2D &&
-            sprite2d_editor_hit_test(values, schema->property_count, mx, my, sx, sy, g_zoom)) return i;
+            sprite2d_editor_hit_test(world, schema->property_count, mx, my, sx, sy, g_zoom)) return i;
         if (point_near(mx, my, sx, sy, 12)) return i;
     }
     return -1;
@@ -160,9 +189,10 @@ static void finish_marquee(int x, int y, int w, int h) {
     int last = -1;
     for (int i = 0; i < scene_data_get_node_count(); i++) {
         if (!is_visible_2d_node(i, NULL, NULL)) continue;
-        node_property_value_t *values = scene_data_get_values(i);
+        float wx, wy;
         int sx, sy;
-        viewport_2d_project(values[0].f, values[1].f, x, y, w, h, &sx, &sy);
+        world_xy(i, &wx, &wy);
+        viewport_2d_project(wx, wy, x, y, w, h, &sx, &sy);
         if (sx >= left && sx <= right && sy >= top && sy <= bottom) {
             scene_data_add_to_selection(i);
             last = i;
@@ -263,11 +293,12 @@ void viewport_2d_update(int x, int y, int w, int h) {
         float min_x = FLT_MAX, min_y = FLT_MAX, max_x = -FLT_MAX, max_y = -FLT_MAX;
         for (int i = 0; i < scene_data_get_node_count(); i++) {
             if (!is_visible_2d_node(i, NULL, NULL)) continue;
-            node_property_value_t *values = scene_data_get_values(i);
-            if (values[0].f < min_x) min_x = values[0].f;
-            if (values[0].f > max_x) max_x = values[0].f;
-            if (values[1].f < min_y) min_y = values[1].f;
-            if (values[1].f > max_y) max_y = values[1].f;
+            float wx, wy;
+            world_xy(i, &wx, &wy);
+            if (wx < min_x) min_x = wx;
+            if (wx > max_x) max_x = wx;
+            if (wy < min_y) min_y = wy;
+            if (wy > max_y) max_y = wy;
         }
         if (min_x != FLT_MAX) {
             g_pan_offset_x = -((min_x + max_x) * 0.5f) * g_zoom;
@@ -340,8 +371,9 @@ void viewport_2d_update(int x, int y, int w, int h) {
         int selected = scene_data_get_selected_index();
         int sx = 0, sy = 0;
         if (selected >= 0 && scene_data_is_selected(selected) && is_visible_2d_node(selected, NULL, NULL)) {
-            node_property_value_t *v = scene_data_get_values(selected);
-            viewport_2d_project(v[0].f, v[1].f, x, y, view_w, view_h, &sx, &sy);
+            float wx, wy;
+            world_xy(selected, &wx, &wy);
+            viewport_2d_project(wx, wy, x, y, view_w, view_h, &sx, &sy);
         }
         if (selected >= 0 && point_near(mx, my, sx + GIZMO_LENGTH, sy, 9)) {
             g_drag_mode = DRAG_AXIS_X;
@@ -468,13 +500,15 @@ void viewport_2d_draw(int x, int y, int w, int h) {
         const node_registry_entry_t *schema = node_registry_get(type);
         node_property_value_t *values = scene_data_get_values(i);
         if (!schema || !values) continue;
-        ed->draw_2d(values, schema->property_count, x, y, view_w, view_h, scene_data_is_selected(i));
+        node_property_value_t wv[WORLD_VALUES_MAX];
+        ed->draw_2d(world_values(i, wv, schema->property_count), schema->property_count, x, y, view_w, view_h, scene_data_is_selected(i));
     }
     int selected = scene_data_get_selected_index();
     if (selected >= 0 && scene_data_is_selected(selected) && is_visible_2d_node(selected, NULL, NULL)) {
-        node_property_value_t *v = scene_data_get_values(selected);
+        float wx, wy;
         int sx, sy;
-        viewport_2d_project(v[0].f, v[1].f, x, y, view_w, view_h, &sx, &sy);
+        world_xy(selected, &wx, &wy);
+        viewport_2d_project(wx, wy, x, y, view_w, view_h, &sx, &sy);
         draw_gizmo(sx, sy);
     }
     if (g_drag_mode == DRAG_MARQUEE && window_mouse_left_down()) draw_marquee();

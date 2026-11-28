@@ -44,6 +44,7 @@ typedef struct {
     char name[128];
     export_rscene_kv_t props[EXPORT_MAX_PROPS_PER_NODE];
     int prop_count;
+    int parent;
 } export_rscene_node_t;
 
 typedef struct {

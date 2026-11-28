@@ -162,6 +162,200 @@ void scene_data_set_float_property(int index, int property_index, float value) {
     current_scene_mark_dirty();
 }
 
+#include <math.h>
+
+int scene_data_has_transform(int index) {
+    if (index < 0 || index >= g_node_count) return 0;
+    const node_registry_entry_t *entry = node_registry_get(g_nodes[index].type);
+    return entry != NULL && entry->property_count >= 5 && g_nodes[index].values != NULL &&
+           entry->properties[0].type == NODE_PROPERTY_TYPE_FLOAT && entry->properties[1].type == NODE_PROPERTY_TYPE_FLOAT &&
+           strcmp(entry->properties[0].name, "Position X") == 0;
+}
+
+void scene_data_world_transform(int index, float *x, float *y, float *rotation, float *scale_x, float *scale_y) {
+    float px = 0.0f, py = 0.0f, rot = 0.0f, sx = 1.0f, sy = 1.0f;
+    if (scene_data_has_transform(index)) {
+        const node_property_value_t *v = g_nodes[index].values;
+        px = v[0].f; py = v[1].f; rot = v[2].f; sx = v[3].f; sy = v[4].f;
+        int parent = g_nodes[index].parent_index, guard = 0;
+        while (parent >= 0 && parent < g_node_count && guard++ < SCENE_DATA_MAX_NODES) {
+            if (scene_data_has_transform(parent)) {
+                const node_property_value_t *u = g_nodes[parent].values;
+                float c = cosf(u[2].f), s = sinf(u[2].f);
+                float ax = px * u[3].f, ay = py * u[4].f;
+                px = u[0].f + ax * c - ay * s;
+                py = u[1].f + ax * s + ay * c;
+                rot += u[2].f; sx *= u[3].f; sy *= u[4].f;
+            }
+            parent = g_nodes[parent].parent_index;
+        }
+    }
+    if (x) *x = px;
+    if (y) *y = py;
+    if (rotation) *rotation = rot;
+    if (scale_x) *scale_x = sx;
+    if (scale_y) *scale_y = sy;
+}
+
+void scene_data_set_world_position(int index, float x, float y) {
+    if (!scene_data_has_transform(index)) return;
+    float lx = x, ly = y;
+    int parent = g_nodes[index].parent_index;
+    while (parent >= 0 && parent < g_node_count && !scene_data_has_transform(parent)) parent = g_nodes[parent].parent_index;
+    if (parent >= 0 && parent < g_node_count) {
+        float wx, wy, wr, wsx, wsy;
+        scene_data_world_transform(parent, &wx, &wy, &wr, &wsx, &wsy);
+        float dx = x - wx, dy = y - wy;
+        float c = cosf(-wr), s = sinf(-wr);
+        float rx = dx * c - dy * s, ry = dx * s + dy * c;
+        lx = fabsf(wsx) > 0.0001f ? rx / wsx : rx;
+        ly = fabsf(wsy) > 0.0001f ? ry / wsy : ry;
+    }
+    scene_data_set_float_property(index, 0, lx);
+    scene_data_set_float_property(index, 1, ly);
+}
+
+void scene_data_rename(int index, const char *name) {
+    if (index < 0 || index >= g_node_count || name == NULL || name[0] == '\0') return;
+    char unique[SCENE_NAME_MAX];
+    snprintf(unique, sizeof(unique), "%s", name);
+    for (int n = 2; n < 1000; n++) {
+        int clash = 0;
+        for (int i = 0; i < g_node_count; i++)
+            if (i != index && g_nodes[i].parent_index == g_nodes[index].parent_index && strcmp(g_nodes[i].name, unique) == 0) clash = 1;
+        if (!clash) break;
+        char suffix[12];
+        snprintf(suffix, sizeof(suffix), "%d", n);
+        snprintf(unique, sizeof(unique), "%.*s%s", (int)(SCENE_NAME_MAX - 1 - strlen(suffix)), name, suffix);
+    }
+    snprintf(g_nodes[index].name, sizeof(g_nodes[index].name), "%s", unique);
+    current_scene_mark_dirty();
+}
+
+void scene_data_get_path(int index, char *out, int out_size) {
+    if (out == NULL || out_size <= 0) return;
+    out[0] = '\0';
+    int chain[SCENE_DATA_MAX_NODES], depth = 0;
+    while (index >= 0 && index < g_node_count && depth < SCENE_DATA_MAX_NODES) { chain[depth++] = index; index = g_nodes[index].parent_index; }
+    for (int i = depth - 1; i >= 0; i--) {
+        size_t used = strlen(out);
+        snprintf(out + used, (size_t)out_size - used, "%s%s", i == depth - 1 ? "" : "/", g_nodes[chain[i]].name);
+    }
+}
+
+static int collect_subtree(int root, int *list) {
+    int count = 0;
+    list[count++] = root;
+    for (int i = 0; i < count; i++)
+        for (int n = 0; n < g_node_count && count < SCENE_DATA_MAX_NODES; n++)
+            if (g_nodes[n].parent_index == list[i] && n != list[i]) list[count++] = n;
+    return count;
+}
+
+void scene_data_delete(int index) {
+    if (index < 0 || index >= g_node_count) return;
+    int list[SCENE_DATA_MAX_NODES];
+    int count = collect_subtree(index, list);
+    int remap[SCENE_DATA_MAX_NODES], doomed[SCENE_DATA_MAX_NODES] = {0};
+    for (int i = 0; i < count; i++) doomed[list[i]] = 1;
+    scene_node_t kept[SCENE_DATA_MAX_NODES];
+    unsigned char kept_selected[SCENE_DATA_MAX_NODES];
+    int kept_count = 0;
+    for (int i = 0; i < g_node_count; i++) {
+        if (doomed[i]) { scene_data_free_node(&g_nodes[i]); remap[i] = -1; continue; }
+        remap[i] = kept_count;
+        kept_selected[kept_count] = g_selected_nodes[i];
+        kept[kept_count++] = g_nodes[i];
+    }
+    for (int i = 0; i < kept_count; i++)
+        if (kept[i].parent_index >= 0) kept[i].parent_index = kept[i].parent_index < g_node_count ? remap[kept[i].parent_index] : -1;
+    memset(g_nodes, 0, sizeof(g_nodes));
+    memset(g_selected_nodes, 0, sizeof(g_selected_nodes));
+    for (int i = 0; i < kept_count; i++) { g_nodes[i] = kept[i]; g_selected_nodes[i] = kept_selected[i]; }
+    g_node_count = kept_count;
+    g_selected_index = -1;
+    current_scene_mark_dirty();
+}
+
+typedef struct { node_type_t type; char name[SCENE_NAME_MAX]; int parent; node_property_value_t *values; int count; } clip_node_t;
+static clip_node_t g_clip[SCENE_DATA_MAX_NODES];
+static int g_clip_count = 0;
+
+static void clip_clear(void) {
+    for (int i = 0; i < g_clip_count; i++) {
+        const node_registry_entry_t *entry = node_registry_get(g_clip[i].type);
+        if (g_clip[i].values != NULL) {
+            for (int p = 0; p < g_clip[i].count; p++)
+                if (entry != NULL && entry->properties[p].type == NODE_PROPERTY_TYPE_STRING) free(g_clip[i].values[p].s);
+            free(g_clip[i].values);
+        }
+    }
+    memset(g_clip, 0, sizeof(g_clip));
+    g_clip_count = 0;
+}
+
+int scene_data_clipboard_has(void) { return g_clip_count > 0; }
+
+int scene_data_copy(int index) {
+    if (index < 0 || index >= g_node_count) return 0;
+    int list[SCENE_DATA_MAX_NODES];
+    int count = collect_subtree(index, list);
+    clip_clear();
+    for (int i = 0; i < count; i++) {
+        const scene_node_t *src = &g_nodes[list[i]];
+        const node_registry_entry_t *entry = node_registry_get(src->type);
+        clip_node_t *dst = &g_clip[g_clip_count++];
+        dst->type = src->type;
+        snprintf(dst->name, sizeof(dst->name), "%s", src->name);
+        dst->parent = -1;
+        for (int k = 0; k < i; k++) if (list[k] == src->parent_index) dst->parent = k;
+        dst->count = src->value_count;
+        if (src->value_count > 0) {
+            dst->values = calloc((size_t)src->value_count, sizeof(*dst->values));
+            if (dst->values == NULL) { dst->count = 0; continue; }
+            for (int p = 0; p < src->value_count; p++) {
+                dst->values[p] = src->values[p];
+                if (entry != NULL && entry->properties[p].type == NODE_PROPERTY_TYPE_STRING)
+                    dst->values[p].s = strdup(src->values[p].s ? src->values[p].s : "");
+            }
+        }
+    }
+    return 1;
+}
+
+int scene_data_cut(int index) {
+    if (!scene_data_copy(index)) return 0;
+    scene_data_delete(index);
+    return 1;
+}
+
+int scene_data_paste(int parent_index) {
+    if (g_clip_count == 0 || g_node_count + g_clip_count > SCENE_DATA_MAX_NODES) return 0;
+    if (parent_index < 0 || parent_index >= g_node_count) parent_index = g_node_count > 0 ? 0 : -1;
+    int first = g_node_count;
+    for (int i = 0; i < g_clip_count; i++) {
+        int parent = g_clip[i].parent >= 0 ? first + g_clip[i].parent : parent_index;
+        scene_node_t *node = scene_data_create_raw(g_clip[i].type, g_clip[i].name, parent);
+        if (node == NULL) return 0;
+        const node_registry_entry_t *entry = node_registry_get(node->type);
+        for (int p = 0; p < node->value_count && p < g_clip[i].count; p++) {
+            if (entry != NULL && entry->properties[p].type == NODE_PROPERTY_TYPE_STRING) {
+                free(node->values[p].s);
+                node->values[p].s = strdup(g_clip[i].values[p].s ? g_clip[i].values[p].s : "");
+            } else node->values[p] = g_clip[i].values[p];
+        }
+    }
+    scene_data_rename(first, g_nodes[first].name);
+    scene_data_select_index(first);
+    current_scene_mark_dirty();
+    return 1;
+}
+
+int scene_data_duplicate(int index) {
+    if (index < 0 || index >= g_node_count || !scene_data_copy(index)) return 0;
+    return scene_data_paste(g_nodes[index].parent_index);
+}
+
 static const node_registry_entry_t *scene_data_find_type(const char *name) {
     for (int i = 0; i < node_registry_count(); i++) {
         const node_registry_entry_t *entry = node_registry_get_by_index(i);
